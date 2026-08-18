@@ -6,11 +6,14 @@ Urządzenie + PWA do pomiaru i analizy prędkości narciarza (rekordy prędkośc
 
 | Ścieżka     | Zawartość |
 |-------------|-----------|
-| `docs/`     | Dokumentacja: koncepcja, wymagania aplikacji |
+| `docs/`     | Dokumentacja: koncepcja, wymagania PWA, wymagania ESP, Supabase |
 | `web/`      | PWA (React + TS + Vite) — prezentacja i analiza |
 | `firmware/` | Kod urządzenia (ESP32-S3, PlatformIO/Arduino) |
+| `supabase/` | Migracje bazy i Edge Functions (wdrażane przez integrację z GitHubem) |
 
 ## Dokumentacja
 
 - `docs/koncepcja.md` — wizja, zakres, szczegóły implementacyjne, architektura, BOM, otwarte punkty.
-- `docs/wymagania-aplikacji.md` — wymagania PWA (analiza i prezentacja).
+- `docs/wymagania-PWA.md` — wymagania PWA (analiza i prezentacja).
+- `docs/wymagania-ESP.md` — wymagania urządzenia (ESP32).
+- `docs/supabase.md` — integracja z Supabase (auth, baza, Edge Functions).

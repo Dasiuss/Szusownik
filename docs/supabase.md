@@ -34,6 +34,14 @@ supabase/
 └── seed.sql             # dane startowe (opcjonalnie)
 ```
 
+## Auth i użytkownicy (RLS)
+
+- **Supabase Auth** dostarcza użytkowników (email + hasło).
+- **2 użytkowników**; każdy widzi **tylko swoje** dane.
+- **RLS (Row Level Security)** na tabelach: wiersze mają `user_id`, polityka
+  `user_id = auth.uid()` — filtrowanie po stronie bazy (nie w kodzie PWA).
+- PWA: ekran logowania; zapytania przez `supabase-js` są automatycznie filtrowane przez RLS.
+
 ## Klucze i sekrety
 
 - **Publishable key** — bezpieczny, trafia do PWA (`@supabase/supabase-js`).
