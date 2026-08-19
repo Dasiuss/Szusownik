@@ -1,7 +1,7 @@
 # GpsSpeedTracker — dokument koncepcyjny
 
 > Status: **WIP (draft)** — dokument żywy, aktualizowany w trakcie dyskusji.
-> Data ostatniej aktualizacji: 2026-08-18
+> Data ostatniej aktualizacji: 2026-08-19
 
 ## 1. Wizja i cel
 
@@ -30,7 +30,8 @@ Dwa główne elementy:
 - Kompresja danych przy transferze BLE.
 - RTK z lokalną bazą w ośrodku (na samym końcu).
 - Analiza: score tras — wskazywanie tras z potencjałem na rekord.
-- Dopracowanie progów dźwiękowych i score tras.
+- Wykres prędkości na przekroju stoku na OLED — widać, gdzie wypadł max, żeby wiedzieć, gdzie „przycisnąć".
+- Dopracowanie score tras.
 
 ## 3. Szczegóły implementacyjne
 
@@ -39,6 +40,8 @@ Dwa główne elementy:
 - **Moduł GNSS (u-blox, ≥10 Hz)** po UART — źródło pozycji i prędkości.
 - **Zapis surowego CSV na microSD** (SPI) w czasie rzeczywistym.
 - **Feedback dźwiękowy** przez **pasywny buzzer piezo** (tony generowane PWM).
+- **Wyświetlacz OLED 0,96" (SSD1306, I2C)** pokazuje podstawowe dane: **max prędkość
+  ostatniego zjazdu** i **max prędkość dnia** (od włączenia urządzenia).
 - **Zasilanie 5 V przez USB-C z power banka** (min. 5000 mAh, tryb low-current);
   szyna 3,3 V zasila peryferia (GNSS, SD, buzzer).
 - **Montaż**: cała elektronika w jednej obudowie na kasku; zasilanie kablem USB-C
@@ -63,16 +66,29 @@ Dwa główne elementy:
   Przykład: 1 Hz → 3 Hz przy 53 km/h, 3 Hz → 1 Hz przy 47 km/h.
 
 ### Sygnały dźwiękowe
-- Sygnał co **1 s** (konfigurowalny), mapa prędkość → liczba bipnięć:
+- Sygnał co **1 s** (konfigurowalny), punkt odniesienia **100 km/h**.
+- Piknięcie = 10 km/h poniżej 100; dźwięk ciągły (200 ms) = powyżej 100.
+- Poniżej **60 km/h** — cisza.
 
-| Prędkość [km/h] | Sygnał            |
-|-----------------|-------------------|
-| < 50            | 1 bipnięcie       |
-| 50–70           | 2 bipnięcia       |
-| 70–80           | 3 bipnięcia       |
-| 80–90           | 4 bipnięcia       |
-| 90–100          | 5 bipnięć         |
-| pobity rekord   | 1 s dźwięku ciągłego |
+| Prędkość [km/h] | Sygnał |
+|-----------------|--------|
+| < 60            | brak |
+| 60–70           | 4 piknięcia |
+| 70–80           | 3 piknięcia |
+| 80–90           | 2 piknięcia |
+| 90–100          | 1 piknięcie |
+| 100–110         | ciągły |
+| 110–120         | ciągły + 1 piknięcie |
+| 120–130         | ciągły + 2 piknięcia |
+| 130–140         | ciągły + 3 piknięcia |
+| 140–150         | ciągły + 4 piknięcia |
+| 150–160         | 2 × ciągły |
+| 160–170         | 2 × ciągły + 1 piknięcie |
+| …               | … |
+
+- Reguła: poniżej 100 — piknięcia = `(100 − prędkość) / 10`; powyżej 100 — kolejny
+  dźwięk ciągły co **50 km/h** (100 → 1, 150 → 2, 200 → 3…), a piknięcia liczą
+  dziesiątki ponad aktualny próg.
 
 ### Dane i transfer
 - Pola CSV: timestamp (UTC z GPS), lat/lon, prędkość, wysokość, heading.
@@ -103,6 +119,7 @@ Dwa główne elementy:
 [GNSS u-blox] ──► [ESP32-S3] ──► [buzzer piezo]
                      │
                      ├─► microSD (surowe CSV)
+                     ├─► OLED 0,96" (I2C)
                      └─► BLE ──► PWA (GitHub Pages, IndexedDB)
                                     ├─► generowanie FIT
                                     └─► Supabase Edge Function ──► Strava
@@ -111,27 +128,7 @@ Dwa główne elementy:
 - Moduł pomiarowy (GPS) wydzielony w kodzie — interfejs stabilny.
 - FIT generowane w PWA z surowego CSV.
 
-## 5. BOM — lista podzespołów (MVP)
-
-Bez konkretnych marek/modeli (poza wskazanymi wymaganiami).
-
-| Lp. | Podzespół | Wymagania / uwagi |
-|----|-----------|-------------------|
-| 1 | **MCU ESP32-S3** (np. ESP32-S3-Zero) | dual-core 240 MHz, **z PSRAM** (min. 2 MB), WiFi + BLE 5, USB-C |
-| 2 | **Moduł GNSS** (u-blox) | **≥10 Hz**, multi-GNSS, konfigurowalny rate, prędkość z Dopplera, UART; antena ceramiczna/patch z widokiem nieba |
-| 3 | **Czytnik microSD** (SPI) | z regulatorem 3,3 V |
-| 4 | **Karta microSD** | np. 8–32 GB |
-| 5 | **Buzzer piezo (pasywny)** | mały, sterowany PWM |
-| 6 | **Power bank** | min. **5000 mAh**, **tryb low-current**, USB-C |
-| 7 | **Kabel USB-C** | power bank → MCU; odporny na zimno, odpowiednia długość |
-| 8 | **Płytka prototypowa (perfboard) lub PCB** | do montażu i lutowania |
-| 9 | **Przewody/złącza** | połączenia UART/SPI, koszulki termokurczliwe |
-| 10 | **Obudowa na kask** | pudełko (druk 3D lub gotowe) + bezpieczne/łamliwe mocowanie |
-| 11 | **Materiały montażowe** | rzepy, taśmy |
-
-**Roadmapa (nie MVP):** IMU (MPU-6xxx / ICM-xxx).
-
-## 6. Otwarte punkty i kolejne kroki
+## 5. Otwarte punkty i kolejne kroki
 
 Punkty wymagające decyzji/projektu przed lub w trakcie budowy MVP. Każdy rozpisany
 na konkretne zadania.
