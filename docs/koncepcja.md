@@ -26,10 +26,11 @@ Dwa główne elementy:
 - Baza w chmurze: Supabase.
 
 ### Roadmapa
-- IMU + fuzja (EKF), pomiar nachylenia i „bumpiness".
+- IMU + baro + fuzja (EKF), pomiar nachylenia i „bumpiness".
 - Kompresja danych przy transferze BLE.
 - RTK z lokalną bazą w ośrodku (na samym końcu).
 - Analiza: score tras — wskazywanie tras z potencjałem na rekord.
+- Wyliczanie współczynnika złożenia, ślizgu oraz teoretycznej prędkości maksymalnej.
 - Wykres prędkości na przekroju stoku na OLED — widać, gdzie wypadł max, żeby wiedzieć, gdzie „przycisnąć".
 - Dopracowanie score tras.
 
@@ -108,10 +109,6 @@ Dwa główne elementy:
 - **Supabase**: baza + **Edge Function** jako proxy do Strava
   (Edge Function = funkcja serverless hostowana w chmurze; trzyma `client_secret`,
   robi OAuth + upload, omija CORS).
-
-### Analiza (roadmapa)
-- Wyliczanie **nachylenia**, **długości stoku**, **bumpiness** (IMU).
-- **Score tras** wskazujący trasy z potencjałem na rekord.
 
 ## 4. Wstępna architektura
 
