@@ -33,6 +33,7 @@ Dwa główne elementy:
 - Wyliczanie współczynnika złożenia, ślizgu oraz teoretycznej prędkości maksymalnej.
 - Wykres prędkości na przekroju stoku na OLED — widać, gdzie wypadł max, żeby wiedzieć, gdzie „przycisnąć".
 - Dopracowanie score tras.
+- Wyliczanie kosztu zakrętu na podstawie zmiany trajektorii i zmiany prędkości.
 
 ## 3. Szczegóły implementacyjne
 
