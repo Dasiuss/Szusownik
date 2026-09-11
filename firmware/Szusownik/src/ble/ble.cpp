@@ -1,6 +1,7 @@
 #include "ble.h"
 #include "crc32.h"
 #include "../storage/storage.h"
+#include "../audio/audio.h"
 #include "../config/config.h"
 #include "../config/log.h"
 #include <NimBLEDevice.h>
@@ -53,8 +54,26 @@ void BleFiles::refreshInfo() {
   String arr = storage_ ? storage_->listJsonArray() : String("[]");
   String j = "{\"proto\":\"" SZ_WIRE_PROTO "\",\"fw\":\"" SZ_FW_VERSION "\",\"files\":";
   j += arr;
+  if (beeper_) {
+    j += ",\"volLow\":";
+    j += String(beeper_->volLow());
+    j += ",\"volHigh\":";
+    j += String(beeper_->volHigh());
+  }
   j += "}";
   chrInfo->setValue(j.c_str());
+}
+
+void BleFiles::reportVolume() {
+  if (!beeper_) {
+    setStatus("err:no-beeper");
+    return;
+  }
+  char msg[48];
+  snprintf(msg, sizeof(msg), "vol low=%u high=%u", beeper_->volLow(), beeper_->volHigh());
+  refreshInfo();  // INFO niesie volLow/volHigh dla PWA
+  setStatus(String(msg));
+  szLogf("BLE: %s", msg);
 }
 
 void BleFiles::setStatus(const String& s) {
@@ -90,6 +109,22 @@ void BleFiles::handleCommand(const String& cmd) {
     onAck((uint32_t)cmd.substring(4).toInt());
   } else if (cmd.startsWith("NACK:")) {
     onNack((uint32_t)cmd.substring(5).toInt());
+  } else if (cmd.startsWith("GETVOL")) {
+    reportVolume();
+  } else if (cmd.startsWith("SETVOL:LOW:")) {
+    if (beeper_) {
+      beeper_->setVolLow(cmd.substring(12).toInt());  // feedback: sygnał 60
+      reportVolume();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("SETVOL:HIGH:")) {
+    if (beeper_) {
+      beeper_->setVolHigh(cmd.substring(13).toInt());  // feedback: sygnał 120
+      reportVolume();
+    } else {
+      setStatus("err:no-beeper");
+    }
   }
 }
 

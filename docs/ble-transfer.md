@@ -236,7 +236,14 @@ START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
 STOP                  — przerwij transfer
 ACK:<next>            — skumulowane potwierdzenie (mam 0..next-1)
 NACK:<expected>       — retransmisja od pierwszej brakującej
+GETVOL                — STATUS "vol low=.. high=.."
+SETVOL:LOW:<0-100>    — głośność przy 60 km/h (NVS) + feedback: sygnał 60
+SETVOL:HIGH:<0-100>   — głośność przy 120 km/h (NVS) + feedback: sygnał 120
 ```
+
+INFO niesie też `volLow/volHigh` (firmware 1.1+), żeby PWA ustawiła suwaki
+bez dodatkowego odpytywania. Transport ramek (244/240/128/ACK32/pacing 4 ms)
+bez zmian — profil zamrożony.
 
 Decyzje względem pierwotnej granicy funkcjonalnej:
 

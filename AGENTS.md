@@ -43,6 +43,37 @@ wypracowanych w trzech projektach testowych:
 8. Po zmianie decyzji technicznej aktualizuj dokument referencyjny oraz ten
    plik, jeśli zmiana wpływa na zasady pracy kolejnych sesji.
 
+## Procedura wgrywania firmware (obowiązkowa)
+
+Port: `COM7`. FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
+Monitor szeregowy blokuje port, więc kolejność jest sztywna:
+
+1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie).
+2. Wgraj: `arduino-cli upload -p COM7 --fqbn "<FQBN>" firmware/Szusownik`
+   (z katalogu repo; biblioteki: TinyGPSPlus, NimBLE, SSD1306, miniz vendored).
+3. Od razu po wgraniu podepnij podgląd logów, żeby widać było start urządzenia.
+
+Podgląd ręczny (interaktywny terminal): `monitor_COM7.cmd` w katalogu repo.
+
+Podgląd z agenta (nieinteraktywny): `arduino-cli monitor` NIE działa bez TTY
+(wychodzi natychmiast, log pusty) — zamiast tego jednorazowy zrzut przez
+.NET SerialPort, wszystko w JEDNYM wywołaniu:
+
+```powershell
+$p = New-Object System.IO.Ports.SerialPort("COM7", 115200)
+$p.ReadTimeout = 1000
+$p.Open()
+$t0 = Get-Date
+while (((Get-Date) - $t0).TotalSeconds -lt 15) { try { $p.ReadLine() } catch { } }
+$p.Close()
+```
+
+Uwagi: otwarcie portu zwykle resetuje ESP32-S3 (USB CDC), więc zrzut pokazuje
+logi od bootu; każda komenda `bash` to osobny runspace — joby/processy w tle
+(`Start-Job`, `Start-Process` z monitorem) nie przetrwają do kolejnego wywołania.
+
+Nie odwracać kolejności (monitor → upload kończy się błędem zajętego portu).
+
 ## Aktualne ograniczenia odziedziczone z testów
 
 - `BleTest` nie ma jeszcze pełnego testu wszystkich MTU ani kontrolowanej utraty

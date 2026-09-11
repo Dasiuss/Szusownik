@@ -30,6 +30,10 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
 - **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie.
 - Klik w zjazd → ekran szczegółów.
+- Sekcja **„Głośność pikania"**: dwa suwaki 0..100 — „Wolno (60 km/h)"
+  i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
+  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`),
+  wysyłka `SETVOL` z debounce; każde ustawienie gra feedback na urządzeniu.
 
 ## 5. Ekran szczegółów zjazdu
 

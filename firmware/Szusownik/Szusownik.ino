@@ -54,11 +54,8 @@ void setup() {
     szLog("OLED: blad init");
   }
   beeper.begin();
-  // Test buzzera: 3 krótkie piknięcia na starcie.
-  for (int i = 0; i < 3; i++) {
-    tone(PIN_BUZZER, SZ_BEEP_FREQ_HZ, 120);
-    delay(300);
-  }
+  beeper.playBoot();  // sygnał 120 (1 długi + 2 krótkie) przy głośności 60
+  ble.setBeeper(&beeper);
   ble.begin(&storage);
   szLog("boot ok");
 }

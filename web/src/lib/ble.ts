@@ -26,6 +26,13 @@ interface InfoJson {
   proto: string;
   fw: string;
   files: FileMeta[];
+  volLow?: number;
+  volHigh?: number;
+}
+
+export interface Volume {
+  low: number;
+  high: number;
 }
 
 export interface SyncProgress {
@@ -114,6 +121,28 @@ export class SzusownikBle {
   private async readStatus(): Promise<string> {
     const v = await this.stat!.readValue();
     return new TextDecoder().decode(dvBytes(v));
+  }
+
+  private static parseVolume(status: string): Volume {
+    const m = /vol low=(\d+) high=(\d+)/.exec(status);
+    if (!m) throw new Error(`Zła odpowiedź głośności: ${status}`);
+    return { low: Number(m[1]), high: Number(m[2]) };
+  }
+
+  /**
+   * Głośność buzzera (firmware 1.1+): kotwice 60 km/h (low) i 120 km/h (high),
+   * 0..100, pomiędzy liniowo. Każde SETVOL gra feedback na urządzeniu
+   * (low → sygnał 60, high → sygnał 120).
+   */
+  async getVolume(): Promise<Volume> {
+    await this.writeCtrl("GETVOL");
+    return SzusownikBle.parseVolume(await this.readStatus());
+  }
+
+  async setVolume(which: "low" | "high", value: number): Promise<Volume> {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    await this.writeCtrl(which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`);
+    return SzusownikBle.parseVolume(await this.readStatus());
   }
 
   /**

@@ -28,13 +28,25 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 ## 4. Obliczanie prędkości (beeper)
 
 - Prędkość z **Dopplera** (nie z Δ pozycji).
-- Mapowanie prędkość → bipnięcia (tabela w `docs/koncepcja.md`), sygnał co **1 s**,
-  rekord = **1 s dźwięku ciągłego**.
+- Mapowanie prędkość → piknięcia (im szybciej, tym więcej): <60 cisza;
+  60–69: 1× krótki, 70–79: 2×, 80–89: 3×, 90–99: 4×; ≥100: długie + krótkie
+  (1 długi na każde 50 km/h, reszta dziesiątek krótkimi — np. 120 = 1 długi
+  + 2 krótkie, max 3 długie). Sygnał co **1 s**, nieblokujący scheduler.
+- Czasy: krótki 56 ms, długi 140 ms, przerwa 60 ms. Częstotliwości: krótki
+  2000 Hz, długi 2500 Hz (długi zawsze wyżej). Stałe `SZ_BEEP_*` w `config.h`.
 
 ## 5. Sterowanie dźwiękiem
 
-- **Pasywny buzzer piezo**, tony generowane PWM przez GPIO.
-- Interwał sygnału konfigurowalny (domyślnie 1 s).
+- **Pasywny buzzer piezo**, GPIO10, sterowanie LEDC 8-bit
+  (duty = vol·128/100, max 50%).
+- **Głośność adaptacyjna**: kotwice volLow @60 km/h i volHigh @120 km/h
+  (0..100, domyślnie 40/90), pomiędzy liniowo, powyżej 120 wartość ze 120.
+- Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`, też `GETVOL`; odpowiedź
+  STATUS `vol low=.. high=..`), trzymane w NVS (`szusownik/volLow/volHigh`).
+  INFO niesie `volLow/volHigh` dla PWA. Każde SETVOL gra feedback
+  (LOW → sygnał 60, HIGH → sygnał 120).
+- Sygnał startowy (setup): identyczny do 120 (1 długi + 2 krótkie),
+  ale przy głośności 60.
 
 ## 6. Zapis CSV + rotacja plików
 

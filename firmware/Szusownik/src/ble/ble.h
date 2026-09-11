@@ -3,6 +3,7 @@
 #include "../miniz/miniz_tdef.h"
 
 class Storage;
+class Beeper;
 
 // BLE v1 Szusownika (NimBLE): lista plików + transfer do PWA.
 // Transport z docs/ble-transfer.md: zlib/DEFLATE (miniz, strumieniowo z SD),
@@ -12,12 +13,14 @@ class Storage;
 class BleFiles {
  public:
   void begin(Storage* storage);
+  void setBeeper(Beeper* b) { beeper_ = b; }
   void poll();
   bool busy() const { return transferring_; }
   String lastError() const { return lastError_; }
 
  private:
   Storage* storage_ = nullptr;
+  Beeper* beeper_ = nullptr;
   bool transferring_ = false;
   String activeFile_;
   String lastCtrl_;
@@ -49,6 +52,7 @@ class BleFiles {
   bool allocStreamMem();
   void handleCommand(const String& cmd);
   void refreshInfo();
+  void reportVolume();
   void setStatus(const String& s);
   bool startStream(const String& name);
   void abortStream(const String& reason);

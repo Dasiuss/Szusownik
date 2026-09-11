@@ -7,7 +7,7 @@ Moduły (`firmware/Szusownik/src/`):
 - `config/` — piny, stałe, UUID BLE v1, logowanie z timestampem.
 - `gnss/` — pomiar (NEO-M8N, NMEA, autokonfiguracja UBX, adaptacyjne próbkowanie).
 - `storage/` — zapis surowego CSV na microSD, rotacja, FIFO, odczyt do BLE.
-- `audio/` — buzzer piezo (sygnały prędkości/rekordu, `tone()`).
+- `audio/` — buzzer piezo (LEDC, głośność adaptacyjna 60→120 km/h, NVS, SETVOL z PWA).
 - `hud/` — OLED (SPD/MAX/TOTAL, bez REM/mapy/animacji w MVP1).
 - `ble/` — transfer BLE v1 (INFO/CTRL/DATA/STATUS) + CRC32.
 - `miniz/` — vendored kompresor DEFLATE (public domain, patch `TDEFL_LESS_MEMORY=1`).
@@ -69,7 +69,7 @@ ESP32-S3-Zero (Waveshare). Uwagi do pinów: **GPIO21** = dioda RGB (nie używać
   UBX (rate wg tabelki, 115200, zapis do flash) — patrz `src/gnss/`.
 - Baro NIE lutujemy (decyzja MVP1); linie SDA/SCL współdzieli sam OLED.
 - Moduł SD ma pin **CLK** (= SCK). Gdyby karta się nie inicjalizowała, zamień miejscami MOSI/MISO (GPIO3 ↔ GPIO2).
-- Buzzer na GPIO10 sterowany `tone()` (3 piknięcia testowe na starcie).
+- Buzzer na GPIO10 sterowany LEDC (sygnał startowy = wzór 120 przy głośności 60).
 
 Kod w `Szusownik/` (MVP1: GPS+UBX, CSV, buzzer, OLED, BLE streaming — patrz moduły).
 
