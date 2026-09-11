@@ -6,7 +6,8 @@
 ## 1. Cel
 
 Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja działa offline
-(IndexedDB). Docelowo dane z urządzenia przez BLE, na start — dane mockowane.
+(IndexedDB). Dane z urządzenia przez BLE; do developmentu i testów PWA służy
+**rzeczywiste nagranie z urządzenia** (plik CSV z karty SD wpięty jako fixture).
 
 ## 2. Zasady UI
 
@@ -21,7 +22,9 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 ## 4. Ekran główny (aktywność / dzień)
 
-- Przycisk **„Pobierz dane"** — na razie ładuje mockowe dane z pliku CSV.
+- Przycisk **„Pobierz dane"** — pobiera nowe pliki z urządzenia przez BLE
+  (patrz „Transfer"); w trybie deweloperskim ładuje rzeczywiste nagranie-fixture
+  z pliku CSV.
 - Po kliknięciu: PWA pobiera nowe pliki z urządzenia (patrz „Transfer"), przetwarza CSV
   (wycina zjazdy) i pokazuje **bieżącą aktywność (dzień)**.
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
@@ -55,8 +58,8 @@ Przyjęte wartości domyślne (konfigurowalne):
   średnią ruchomą (okno ~3 próbek).
 - **Prędkość:** średnia ruchoma, okno ~3 próbek (redukuje pojedyncze skoki, zachowując max).
 
-Dostrojenie parametrów nastąpi po nagraniu prawdziwej jazdy (roadmapa) — na mocku
-(syntetyczne, gładkie dane) defaulty wystarczą.
+Dostrojenie parametrów nastąpi po nagraniu prawdziwej jazdy na stoku (roadmapa) —
+na nagraniach z auta defaulty wystarczą.
 
 ## 7. Transfer z urządzenia (BLE)
 
@@ -66,11 +69,13 @@ Dostrojenie parametrów nastąpi po nagraniu prawdziwej jazdy (roadmapa) — na 
 - Sync po nazwie pliku (nie po zakresie timestampów): całe pliki, idempotentne, bez problemu
   dryfu zegara.
 
-## 8. Dane mockowane
+## 8. Dane testowe (rzeczywiste nagranie, nie mock)
 
-- Plik **CSV** reprezentujący **10 min**: 3 min zjazd, 2 min wyciąg (góra), 4 min zjazd,
-  1 min góra → dają **2 zjazdy**.
-- Pola zgodne z formatem urządzenia: `timestamp, lat, lon, speed, altitude, heading`.
+- Plik **CSV nagrany urządzeniem** (np. przejazd autem) wpięty jako fixture
+  do developmentu PWA — **nie generujemy syntetycznego mocka**.
+- Format pól zgodny z urządzeniem: `timestamp, lat, lon, speed, altitude, heading`.
+- Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
+  rozdzielający).
 
 ## 9. Stack technologiczny (propozycja do potwierdzenia)
 

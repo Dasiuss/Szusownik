@@ -1,4 +1,4 @@
-# GpsSpeedTracker — dokument koncepcyjny
+# Szusownik — dokument koncepcyjny
 
 > Status: **WIP (draft)** — dokument żywy, aktualizowany w trakcie dyskusji.
 > Data ostatniej aktualizacji: 2026-08-19
@@ -38,7 +38,7 @@ Dwa główne elementy:
 ## 3. Szczegóły implementacyjne
 
 ### Urządzenie
-- **MCU ESP32-S3** z PSRAM (min. 2 MB), programowany w **C/C++ (Arduino/PlatformIO)**.
+- **MCU ESP32-S3** z PSRAM (min. 2 MB), programowany w **C/C++ (Arduino/arduino-cli)**.
 - **Moduł GNSS (u-blox, ≥10 Hz)** po UART — źródło pozycji i prędkości.
 - **Zapis surowego CSV na microSD** (SPI) w czasie rzeczywistym.
 - **Feedback dźwiękowy** przez **pasywny buzzer piezo** (tony generowane PWM).
@@ -144,8 +144,9 @@ na konkretne zadania.
   metryki (średnia, przyrost, porównanie przejazdów).
 - **Do zrobienia:** szkic widoków i metryk → statyczny prototyp UI przed podpięciem danych.
 
-### Kolejność prac
-1. **PWA + warstwa prezentacji na danych mockowanych** (punkt 2) — zanim dojadą komponenty.
-2. **Firmware urządzenia** — pomiar (adaptacyjne próbkowanie), logowanie CSV, buzzer.
+### Kolejność prac (aktualizacja 2026-09-11: komponenty dojechały, mock niepotrzebny)
+1. **PWA + warstwa prezentacji na rzeczywistym nagraniu z urządzenia** (punkt 2).
+2. **Firmware urządzenia** — DONE MVP1: pomiar (adaptacyjne próbkowanie), logowanie CSV,
+   buzzer, OLED, autokonfiguracja UBX; pozostał streaming BLE (etap 2).
 3. **Integracja** urządzenie → PWA (BLE) → Supabase.
 4. **Flow Strava** (punkt 1) — na samym końcu.

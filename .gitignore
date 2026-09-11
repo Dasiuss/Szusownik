@@ -1,0 +1,15 @@
+# Node / PWA
+web/node_modules/
+web/dist/
+
+# Arduino CLI build cache (poza repo, ale na wszelki wypadek)
+*.hex
+*.elf
+*.bin
+
+# System / edytory
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
