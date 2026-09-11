@@ -48,29 +48,20 @@ wypracowanych w trzech projektach testowych:
 Port: `COM7`. FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
 Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 
-1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie).
+1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie):
+   `taskkill /F /IM arduino-cli.exe`.
 2. Wgraj: `arduino-cli upload -p COM7 --fqbn "<FQBN>" firmware/Szusownik`
    (z katalogu repo; biblioteki: TinyGPSPlus, NimBLE, SSD1306, miniz vendored).
-3. Od razu po wgraniu podepnij podgląd logów, żeby widać było start urządzenia.
+3. Od razu po wgraniu odpal monitor w osobnym oknie przez `monitor_COM7.cmd`
+   z katalogu repo (nie blokuje wywołania):
+   `Start-Process -FilePath "<repo>\monitor_COM7.cmd"`
+   żeby widać było logi od startu urządzenia.
 
-Podgląd ręczny (interaktywny terminal): `monitor_COM7.cmd` w katalogu repo.
-
-Podgląd z agenta (nieinteraktywny): `arduino-cli monitor` NIE działa bez TTY
-(wychodzi natychmiast, log pusty) — zamiast tego jednorazowy zrzut przez
-.NET SerialPort, wszystko w JEDNYM wywołaniu:
-
-```powershell
-$p = New-Object System.IO.Ports.SerialPort("COM7", 115200)
-$p.ReadTimeout = 1000
-$p.Open()
-$t0 = Get-Date
-while (((Get-Date) - $t0).TotalSeconds -lt 15) { try { $p.ReadLine() } catch { } }
-$p.Close()
-```
-
-Uwagi: otwarcie portu zwykle resetuje ESP32-S3 (USB CDC), więc zrzut pokazuje
-logi od bootu; każda komenda `bash` to osobny runspace — joby/processy w tle
-(`Start-Job`, `Start-Process` z monitorem) nie przetrwają do kolejnego wywołania.
+Uwagi: `arduino-cli monitor` odpalone przez agenta w tle (bez TTY) wychodzi
+natychmiast z pustym logiem — dlatego używamy `monitor_COM7.cmd`, który działa
+poprawnie. Joby/processy w tle (`Start-Job`, `Start-Process` z samym monitorem)
+nie przetrwają do kolejnego wywołania `bash` — ale okno konsoli z `.cmd`
+zostaje (osobny proces systemowy), więc logi są widoczne dla użytkownika.
 
 Nie odwracać kolejności (monitor → upload kończy się błędem zajętego portu).
 
