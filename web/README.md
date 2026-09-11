@@ -27,3 +27,7 @@ npm run dev      # development, otwórz http://localhost:5173
 npm run build    # tsc + build produkcyjny (PWA, service worker)
 npm run preview
 ```
+
+Deploy: GitHub Pages (https://dasiuss.github.io/Szusownik/) przez
+`.github/workflows/deploy.yml` — buduje `web/` na każdy push do `main`
+zawierający zmiany w `web/`. W ustawieniach repo: Pages → Source: GitHub Actions.

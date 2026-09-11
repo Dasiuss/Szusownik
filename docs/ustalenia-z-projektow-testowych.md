@@ -203,9 +203,10 @@ produkcyjnego. W finalnej wersji trzeba dodać co najmniej:
 - retry albo jawny status zastosowania danych.
 
 UUID-y z projektów testowych są identyfikatorami testowymi. Dla Szusownika
-należy zdefiniować jeden spójny service GATT i opisać go w jednym miejscu po
-obu stronach. Nie należy mieszać charakterystyki `DisplayTest` z transportem
-plików `BleTest` bez formalnego kontraktu.
+zdefiniowano GATT v1 (2026-09-11, `3f9a…`, jeden service + INFO/CTRL/DATA/STATUS)
+opisany w `docs/ble-transfer.md` §10 i zaimplementowany po obu stronach.
+Nie mieszać charakterystyki `DisplayTest` z transportem plików bez formalnego
+kontraktu (małe pakiety HUD — roadmapa).
 
 ## 6. Wersjonowanie i cache
 

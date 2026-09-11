@@ -77,16 +77,18 @@ na nagraniach z auta defaulty wystarczą.
 - Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
   rozdzielający).
 
-## 9. Stack technologiczny (propozycja do potwierdzenia)
+## 9. Stack technologiczny (potwierdzony 2026-09-11, `web/package.json`)
 
-- **React + TypeScript + Vite**.
-- **vite-plugin-pwa** — manifest + service worker + offline.
-- **@supabase/supabase-js** — auth + baza.
-- **Dexie.js** — IndexedDB.
-- **papaparse** — parsowanie CSV.
-- **Recharts** — wykresy (ComposedChart, dual-axis, `ReferenceArea` dla czerwonego pasma).
-- **react-router** — lista → szczegóły.
-- **Tailwind CSS** — styling.
+- **React 19 + TypeScript (strict) + Vite 6**.
+- **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
+- **Dexie.js 4** — IndexedDB, schemat v1.
+- **papaparse 5** — parsowanie + walidacja schematu CSV.
+- **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
+- **react-router-dom 7 (HashRouter)** — lista → szczegóły; działa z GitHub Pages.
+- **Tailwind CSS v4** — styling.
+- Deploy: GitHub Pages przez `.github/workflows/deploy.yml` (build `web/`,
+  `base: /Szusownik/`).
+- `@supabase/supabase-js` — DOPIERO faza D (nie instalować przedwcześnie).
 
 ## 10. Otwarte pytania
 

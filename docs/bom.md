@@ -4,7 +4,7 @@ Bez konkretnych marek/modeli (poza wskazanymi wymaganiami).
 
 | Lp. | Podzespół | Wymagania / uwagi |
 |----|-----------|-------------------|
-| 1 | **MCU ESP32-S3** (np. ESP32-S3-Zero) | dual-core 240 MHz, **z PSRAM** (min. 2 MB), WiFi + BLE 5, USB-C |
+| 1 | **MCU ESP32-S3** (np. ESP32-S3-Zero) | dual-core 240 MHz, **z PSRAM** (min. 2 MB), WiFi + BLE 5, USB-C; potwierdzone na sztuce: flash 4 MB, PSRAM 2 MB Quad |
 | 2 | **Moduł GNSS** (u-blox) | **≥10 Hz**, multi-GNSS, konfigurowalny rate, prędkość z Dopplera, UART; antena ceramiczna/patch z widokiem nieba |
 | 3 | **Czytnik microSD** (SPI) | |
 | 4 | **Karta microSD** | np. 8–32 GB |

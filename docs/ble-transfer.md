@@ -210,44 +210,64 @@ W Szusowniku należy dodatkowo walidować schemat CSV, nazwę pliku, wersję
 formatu, zakresy liczbowe, nagłówek oraz zgodność `compressed_bytes` z liczbą
 otrzymanych danych.
 
-## 10. Adaptacja do plików microSD
+## 10. Protokół plików Szusownika v1 (zaprojektowany i zaimplementowany 2026-09-11)
 
-Testowe `route info` opisuje jeden logiczny plik z powtórzeniami. W finalnym
-protokole potrzebne są operacje:
+> Stan: zaimplementowane w `firmware/Szusownik/src/ble/` i `web/src/lib/ble.ts`.
+> Test e2e z telefonem — przed nami.
+
+GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
 
 ```text
-LIST_FILES
-FILE_INFO:<file_name>
-START_FILE:<file_name>
-STOP
+Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: "Szusownik")
+INFO:    3f9a0002-...  READ    — JSON {proto, fw, files:[{name, size}]}
+CTRL:    3f9a0003-...  WRITE   — komendy tekstowe (patrz niżej)
+DATA:    3f9a0004-...  NOTIFY  — ramki 244 B (seq LE32 + do 240 B payload)
+STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów ("ok", "streaming",
+                          "done raw=.. comp=.. frames=.. crc=..", "err:..")
 ```
 
-Nie jest to gotowy wire format, tylko granica funkcjonalna do zaprojektowania.
-Lista powinna zawierać co najmniej:
+Komendy CTRL:
 
-- bezpieczną nazwę FAT32;
-- rozmiar bajtów surowych;
-- czas rozpoczęcia;
-- wersję formatu;
-- CRC32, jeśli znane lub możliwe do policzenia przy zamykaniu pliku.
+```text
+LIST_FILES            — odśwież INFO (bez efektów ubocznych)
+ROTATE                — zamknij bieżący plik na SD + odśwież INFO
+DRYRUN:<nazwa>        — lokalny test SD+miniz+CRC bez radia (wynik w STATUS/logu)
+START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
+STOP                  — przerwij transfer
+ACK:<next>            — skumulowane potwierdzenie (mam 0..next-1)
+NACK:<expected>       — retransmisja od pierwszej brakującej
+```
+
+Decyzje względem pierwotnej granicy funkcjonalnej:
+
+- `FILE_INFO:<nazwa>` niepotrzebne — INFO zwraca od razu pełną listę z rozmiarami.
+- Lista zawiera nazwę FAT32 i rozmiar surowy; **bez wersji formatu** (decyzja:
+  schemat CSV zamrożony, `timestamp,lat,lon,speed,altitude,heading`).
+- CRC32 liczone w locie podczas streamingu (nie przy zamykaniu pliku);
+  wynik w STATUS `done`; PWA porównuje z własnym CRC po dekompresji.
+- Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.
+- Błędy mają jawne kody (`err:open`, `err:deflate`, `err:ack-timeout`,
+  `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
 
 PWA porównuje nazwy plików z IndexedDB i pobiera tylko nowe. Dane pozostają na
-karcie jako backup. Żądanie synchronizacji powinno najpierw zamknąć aktualny
-plik, aby transfer nie czytał pliku, który nadal jest zapisywany.
+karcie jako backup. Żądanie synchronizacji zamyka najpierw aktualny plik
+(`ROTATE`), aby transfer nie czytał pliku, który nadal jest zapisywany.
 
-## 11. Znane problemy z testu do poprawy
+## 11. Znane problemy z testu — status po implementacji v1 (2026-09-11)
 
-1. Możliwa utrata ACK end markera: duplikat end markera może nie wywołać ACK,
-   jeżeli sekwencja nie wypada na granicy bloku 32.
-2. Firmware nie ma osobnego kanału błędów; PWA może czekać do własnego timeoutu.
-3. Po błędzie PWA nie zawsze wysyła `STOP`.
-4. Metadane nie są walidowane pełnym schematem.
-5. Brak testu kontrolowanej utraty ramek i wszystkich MTU.
-6. `route_data.h` i generator testowy miały różne domyślne timestampy oraz
-   niespójność README `600` kontra implementacja `700` punktów.
+1. Utrata ACK end markera — ZŁAGODZONO z obu stron: firmware retransmituje
+   end marker po timeoutcie (jest w oknie), PWA ACK-uje także duplikat
+   end markera. Formalny test utraty ACK end markera — przed nami (§12).
+2. Brak kanału błędów — ROZWIĄZANE: charakterystyka STATUS z kodami `err:..`.
+3. PWA nie zawsze wysyła `STOP` — ROZWIĄZANE: `STOP` w `finally` transferu.
+4. Metadane — CZĘŚCIOWO: PWA waliduje protokół, listę, rozmiar, CRC32
+   i nagłówek CSV; pełny schemat metadanych (czas startu, wersja) — roadmapa.
+5. Brak testu kontrolowanej utraty ramek i wszystkich MTU — NADAL OTWARTE (§12).
+6. Niespójności `route_data.h`/generatora BleTest — NIE DOTYCZY Szusownika
+   (osobne dane, osobny schemat CSV).
 
-W wersji finalnej te problemy trzeba rozwiązać przed oznaczeniem protokołu jako
-produkcyjny, a nie tylko opisać w dokumentacji.
+Problemy 1 (test) i 5 trzeba zamknąć testami z §12 przed oznaczeniem protokołu
+jako produkcyjny, a nie tylko opisem w dokumentacji.
 
 ## 12. Testy akceptacyjne BLE
 

@@ -53,6 +53,12 @@ y=0..63    pełna wysokość mapy
 
 Aktualny layout referencyjny firmware:
 
+> Stan MVP1 (2026-09-11, `firmware/Szusownik/src/hud/`): zaimplementowane
+> `SPD` / prędkość / `MAX` / max / `TOTAL` / total / separator.
+> NIE zaimplementowane: `REM` + remaining, strzałka, panel mapy 40 px
+> (prawa strona pusta). Wartości >999 clampowane do 999. Mapa, strzałka
+> i REM — roadmapa. Pozycje zaimplementowanych elementów jak w tabeli.
+
 | Element | Pozycja | Rozmiar | Uwagi |
 | --- | --- | --- | --- |
 | `SPD` | `(1, 0)` | 1 | etykieta prędkości |
@@ -88,7 +94,7 @@ Mapa i trasa są niezależne:
 | chunk BLE | 16 B |
 | liczba chunków | 20 |
 
-Kolejność renderowania:
+Kolejność renderowania (docelowa, z mapą i animacją):
 
 1. wyczyść framebuffer;
 2. narysuj telemetrię;
@@ -98,6 +104,8 @@ Kolejność renderowania:
 6. narysuj trasę;
 7. narysuj czarne przerwy animacji trasy;
 8. wykonaj pełne `display.display()`.
+
+MVP1 renderuje tylko kroki 1–2 (SPD/MAX/TOTAL), 4 i 8.
 
 Mapa i trasa są białe na fizycznym monochromatycznym OLED. PWA używa różnych
 kolorów wyłącznie w celu ułatwienia edycji.
@@ -159,7 +167,13 @@ PWA musi używać tej samej kolejności, progów, długości przerwy i wzoru. W
 więc faza PWA i OLED mogła się różnić. W Szusowniku trzeba albo zaakceptować
 podgląd niezależny, albo dodać synchronizację fazy.
 
-## 6. Protokół z DisplayTest
+## 6. Protokół z DisplayTest (historyczny — NIE używać w Szusowniku)
+
+> Decyzja 2026-09-11: Szusownik używa GATT v1 z `docs/ble-transfer.md` §10
+> (UUID `3f9a…`, charakterystyki INFO/CTRL/DATA/STATUS). UUID `5f8a…`
+> i pakiety poniżej to materiał referencyjny z testu. Zdalny podgląd/sterowanie
+> HUD przez BLE — roadmapa (protokół małych pakietów do zaprojektowania
+> wg `docs/ustalenia-z-projektow-testowych.md` §5).
 
 Service:
 

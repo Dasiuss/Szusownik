@@ -2,12 +2,15 @@
 
 Firmware dla ESP32-S3 (arduino-cli / Arduino, C++).
 
-Moduły:
+Moduły (`firmware/Szusownik/src/`):
 
-- `gnss/` — pomiar (u-blox, adaptacyjne próbkowanie, prędkość z Dopplera).
-- `storage/` — zapis surowego CSV na microSD.
-- `audio/` — buzzer piezo (sygnały prędkości/rekordu).
-- `ble/` — transfer BLE do PWA.
+- `config/` — piny, stałe, UUID BLE v1, logowanie z timestampem.
+- `gnss/` — pomiar (NEO-M8N, NMEA, autokonfiguracja UBX, adaptacyjne próbkowanie).
+- `storage/` — zapis surowego CSV na microSD, rotacja, FIFO, odczyt do BLE.
+- `audio/` — buzzer piezo (sygnały prędkości/rekordu, `tone()`).
+- `hud/` — OLED (SPD/MAX/TOTAL, bez REM/mapy/animacji w MVP1).
+- `ble/` — transfer BLE v1 (INFO/CTRL/DATA/STATUS) + CRC32.
+- `miniz/` — vendored kompresor DEFLATE (public domain, patch `TDEFL_LESS_MEMORY=1`).
 
 ## Połączenia (pinout)
 
@@ -61,12 +64,14 @@ ESP32-S3-Zero (Waveshare). Uwagi do pinów: **GPIO21** = dioda RGB (nie używać
 
 ### Uwagi do firmware
 
-- GNSS po UART0 (`Serial0`), default **9600 baud**; pod 10 Hz podbij do 115200/230400.
-- OLED + baro na wspólnej I2C; adres baro **0x76** lub **0x77**.
+- Potwierdzone na sprzęcie: flash **4 MB**, PSRAM **2 MB Quad** (FQBN jw.).
+- GNSS po UART0 (`Serial0`), default **9600 baud**; firmware samo konfiguruje
+  UBX (rate wg tabelki, 115200, zapis do flash) — patrz `src/gnss/`.
+- Baro NIE lutujemy (decyzja MVP1); linie SDA/SCL współdzieli sam OLED.
 - Moduł SD ma pin **CLK** (= SCK). Gdyby karta się nie inicjalizowała, zamień miejscami MOSI/MISO (GPIO3 ↔ GPIO2).
-- Buzzer sterowany PWM (LEDC) na GPIO10.
+- Buzzer na GPIO10 sterowany `tone()` (3 piknięcia testowe na starcie).
 
-Tutaj powstaje projekt arduino-cli (scaffold w `Szusownik/`).
+Kod w `Szusownik/` (MVP1: GPS+UBX, CSV, buzzer, OLED, BLE streaming — patrz moduły).
 
 ## Budowanie (arduino-cli, bez VS Code / PlatformIO)
 

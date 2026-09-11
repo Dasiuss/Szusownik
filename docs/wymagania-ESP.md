@@ -1,6 +1,8 @@
 # Wymagania ESP32 (urządzenie)
 
-> Status: **WIP (draft)** — dokument żywy.
+> Status: **MVP1 zaimplementowane i przetestowane sprzętowo 2026-09-11**
+> (`firmware/Szusownik/`, arduino-cli). Dokument żywy — niżej co jest,
+> a co w roadmapie.
 > Data: 2026-08-18
 
 ## 1. Cel
