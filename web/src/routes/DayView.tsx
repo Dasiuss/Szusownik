@@ -1,24 +1,57 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { SzusownikBle } from "../lib/ble.ts";
 import { parseDeviceCsv } from "../lib/csv.ts";
 import { db } from "../lib/db.ts";
-import { analyzeDay } from "../lib/runs.ts";
+import { analyzeDay, type DayStats } from "../lib/runs.ts";
 import { fmtClock, fmtDurSec, fmtKm, setDay } from "../lib/store.ts";
 
 type LoadState =
   | { kind: "empty" }
-  | { kind: "loading" }
+  | { kind: "loading"; note: string }
   | { kind: "ready"; fileName: string; samples: number }
   | { kind: "error"; message: string };
 
 export default function DayView() {
   const [state, setState] = useState<LoadState>({ kind: "empty" });
-  const [day, setDayState] = useState(() => null as ReturnType<typeof analyzeDay> | null);
+  const [day, setDayState] = useState<DayStats | null>(null);
 
-  async function loadFixture() {
-    setState({ kind: "loading" });
+  function showDay(raw: string, label: string) {
+    const samples = parseDeviceCsv(raw);
+    const d = analyzeDay(samples);
+    setDay(d);
+    setDayState(d);
+    setState({ kind: "ready", fileName: label, samples: samples.length });
+  }
+
+  // Ścieżka produkcyjna: BLE → tylko nowe pliki → IndexedDB → analiza.
+  async function syncBle() {
+    setState({ kind: "loading", note: "Łączenie z urządzeniem…" });
     try {
-      // Faza B: rzeczywiste nagranie-fixture. Faza C: podmiana na transfer BLE.
+      const ble = new SzusownikBle();
+      const done = await ble.syncNewFiles((p) =>
+        setState({
+          kind: "loading",
+          note: `${p.file} — ramek: ${p.receivedFrames} (${p.fileIndex}/${p.fileCount})`,
+        }),
+      );
+      if (done.length === 0) {
+        setState({ kind: "error", message: "Brak nowych plików na urządzeniu." });
+        return;
+      }
+      const latest = done[done.length - 1];
+      const stored = await db.files.get(latest.name);
+      if (!stored) throw new Error("Zapis do IndexedDB nie powiódł się");
+      showDay(stored.raw, `${latest.name} (BLE, ${done.length} nowych)`);
+    } catch (e) {
+      setState({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  // Ścieżka dev: rzeczywiste nagranie-fixture z karty SD (bez radia).
+  async function loadFixture() {
+    setState({ kind: "loading", note: "Wczytywanie fixture…" });
+    try {
       const res = await fetch("fixtures/ride.csv");
       if (!res.ok) {
         throw new Error(
@@ -26,7 +59,6 @@ export default function DayView() {
         );
       }
       const raw = await res.text();
-      const samples = parseDeviceCsv(raw);
       await db.files.put({
         name: "fixture-ride.csv",
         size: raw.length,
@@ -34,10 +66,7 @@ export default function DayView() {
         userId: "local",
         raw,
       });
-      const d = analyzeDay(samples);
-      setDay(d);
-      setDayState(d);
-      setState({ kind: "ready", fileName: "ride.csv", samples: samples.length });
+      showDay(raw, "ride.csv (fixture)");
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : String(e) });
     }
@@ -46,13 +75,16 @@ export default function DayView() {
   return (
     <div className="flex flex-col gap-4">
       <button
-        onClick={loadFixture}
+        onClick={syncBle}
         className="rounded-xl bg-sky-500 px-4 py-3 text-lg font-semibold text-white active:bg-sky-600"
       >
         Pobierz dane
       </button>
+      <button onClick={loadFixture} className="text-sm text-slate-500 underline">
+        wczytaj fixture (dev, bez BLE)
+      </button>
 
-      {state.kind === "loading" && <p className="text-slate-300">Wczytywanie…</p>}
+      {state.kind === "loading" && <p className="text-slate-300">{state.note}</p>}
       {state.kind === "error" && <p className="text-red-400">{state.message}</p>}
       {state.kind === "ready" && (
         <p className="text-sm text-slate-400">
@@ -75,8 +107,7 @@ export default function DayView() {
 
           <div className="flex flex-col gap-2">
             {day.runs.map((r, i) => {
-              const dur =
-                (Date.parse(r.endT) - Date.parse(r.startT)) / 1000;
+              const dur = (Date.parse(r.endT) - Date.parse(r.startT)) / 1000;
               return (
                 <Link
                   key={r.id}
