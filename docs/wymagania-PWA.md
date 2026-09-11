@@ -30,10 +30,6 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
 - **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie.
 - Klik w zjazd → ekran szczegółów.
-- Sekcja **„Głośność pikania"**: dwa suwaki 0..100 — „Wolno (60 km/h)"
-  i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
-  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`),
-  wysyłka `SETVOL` z debounce; każde ustawienie gra feedback na urządzeniu.
 
 ## 5. Ekran szczegółów zjazdu
 
@@ -88,12 +84,21 @@ na nagraniach z auta defaulty wystarczą.
 - **Dexie.js 4** — IndexedDB, schemat v1.
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
-- **react-router-dom 7 (HashRouter)** — lista → szczegóły; działa z GitHub Pages.
+- **react-router-dom 7 (HashRouter)** — dzień → zjazd → ustawienia; działa
+  z GitHub Pages.
 - **Tailwind CSS v4** — styling.
 - Deploy: GitHub Pages przez `.github/workflows/deploy.yml` (build `web/`,
   `base: /Szusownik/`).
 - `@supabase/supabase-js` — DOPIERO faza D (nie instalować przedwcześnie).
 
-## 10. Otwarte pytania
+## 10. Ekran ustawień (`#/ustawienia`, niezależny od dnia)
+
+- Sekcja **„Głośność pikania"**: dwa suwaki 0..100 — „Wolno (60 km/h)"
+  i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
+  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`),
+  wysyłka `SETVOL` z debounce; każde ustawienie gra feedback na urządzeniu.
+- Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
+
+## 11. Otwarte pytania
 
 1. **Dostrojenie wygładzania** — po nagraniu prawdziwych danych (roadmapa).

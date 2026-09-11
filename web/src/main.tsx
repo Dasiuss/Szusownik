@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App.tsx";
 import DayView from "./routes/DayView.tsx";
 import RunView from "./routes/RunView.tsx";
+import SettingsView from "./routes/SettingsView.tsx";
 
 // HashRouter: działa z GitHub Pages i z pliku bez serwera SPA-fallback.
 const router = createHashRouter([
@@ -14,6 +15,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <DayView /> },
       { path: "zjazd/:runId", element: <RunView /> },
+      { path: "ustawienia", element: <SettingsView /> },
     ],
   },
 ]);
