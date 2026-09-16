@@ -1,112 +1,141 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { SzusownikBle } from "../lib/ble.ts";
+import { Icon } from "../components/Icon.tsx";
+import { SZ_FREQ_MAX_HZ, SZ_FREQ_MIN_HZ, SZ_FREQ_STEP_HZ } from "../lib/ble.ts";
+import { useDevice } from "../lib/device.tsx";
+import type { Freq, Volume } from "../lib/ble.ts";
 
-// Ustawienia urządzenia — niezależne od dnia/aktywności.
-// Docelowo tu trafią kolejne opcje (progi, interwały, tryb stokowy).
 export default function SettingsView() {
-  const [vol, setVol] = useState<{ low: number; high: number } | null>(null);
-  const [volBusy, setVolBusy] = useState(false);
-  const [volErr, setVolErr] = useState<string | null>(null);
-  const bleVolRef = useRef<SzusownikBle | null>(null);
-  const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const device = useDevice();
+  const [volume, setVolume] = useState<Volume | null>(null);
+  const [frequency, setFrequency] = useState<Freq | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Głośność buzzera: połączenie BLE (osobne od sync), suwaki 0..100,
-  // wysyłka z debounce 600 ms. Każde SETVOL gra feedback na urządzeniu.
-  async function connectVolume() {
-    setVolBusy(true);
-    setVolErr(null);
-    try {
-      const ble = new SzusownikBle();
-      const info = await ble.connect();
-      bleVolRef.current = ble;
-      if (typeof info.volLow === "number" && typeof info.volHigh === "number") {
-        setVol({ low: info.volLow, high: info.volHigh });
-      } else {
-        setVol(await ble.getVolume());
-      }
-    } catch (e) {
-      setVolErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setVolBusy(false);
+  useEffect(() => {
+    if (device.state !== "connected") {
+      setVolume(null);
+      setFrequency(null);
+      return;
     }
-  }
-
-  function disconnectVolume() {
-    if (volTimer.current) clearTimeout(volTimer.current);
-    bleVolRef.current?.disconnect();
-    bleVolRef.current = null;
-    setVol(null);
-  }
+    let active = true;
+    setSettingsBusy(true);
+    setSettingsError(null);
+    async function loadSettings() {
+      const nextVolume = await device.getVolume();
+      let nextFrequency: Freq | null = null;
+      try {
+        nextFrequency = await device.getFrequency();
+      } catch {
+        nextFrequency = null;
+      }
+      return { nextVolume, nextFrequency };
+    }
+    loadSettings()
+      .then(({ nextVolume, nextFrequency }) => {
+        if (!active) return;
+        setVolume(nextVolume);
+        setFrequency(nextFrequency);
+      })
+      .catch((caught) => {
+        if (active) setSettingsError(caught instanceof Error ? caught.message : String(caught));
+      })
+      .finally(() => {
+        if (active) setSettingsBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [device.state, device.info]);
 
   function changeVolume(which: "low" | "high", value: number) {
-    setVol((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, [which]: value };
-      if (volTimer.current) clearTimeout(volTimer.current);
-      volTimer.current = setTimeout(async () => {
-        try {
-          const v = await bleVolRef.current?.setVolume(which, value);
-          if (v) setVol(v);
-        } catch (e) {
-          setVolErr(e instanceof Error ? e.message : String(e));
-        }
-      }, 600);
-      return next;
-    });
+    setVolume((current) => current ? { ...current, [which]: value } : current);
+    if (volumeTimer.current) clearTimeout(volumeTimer.current);
+    volumeTimer.current = setTimeout(() => {
+      void device.setVolume(which, value)
+        .then(setVolume)
+        .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+    }, 600);
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      <Link to="/" className="text-sky-400">
-        ← Dzień
-      </Link>
+  function changeFrequency(which: "short" | "long", value: number) {
+    setFrequency((current) => current ? { ...current, [which]: value } : current);
+    if (frequencyTimer.current) clearTimeout(frequencyTimer.current);
+    frequencyTimer.current = setTimeout(() => {
+      void device.setFrequency(which, value)
+        .then(setFrequency)
+        .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+    }, 600);
+  }
 
-      <div className="rounded-xl bg-slate-800 p-3">
-        <div className="mb-2 text-sm font-semibold text-slate-200">Głośność pikania</div>
-        {!vol ? (
-          <button
-            onClick={connectVolume}
-            disabled={volBusy}
-            className="rounded-lg bg-slate-600 px-3 py-2 text-sm font-semibold text-white active:bg-slate-500 disabled:opacity-50"
-          >
-            {volBusy ? "Łączenie…" : "Połącz i ustaw głośność"}
-          </button>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {(
-              [
-                { key: "low", label: "Wolno (60 km/h)", hint: "feedback: 1× krótki" },
-                { key: "high", label: "Szybko (120 km/h)", hint: "feedback: 1× długi + 2× krótki" },
-              ] as const
-            ).map((s) => (
-              <label key={s.key} className="block">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-slate-300">{s.label}</span>
-                  <span className="font-bold text-white">{vol[s.key]}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={vol[s.key]}
-                  onChange={(e) => changeVolume(s.key, Number(e.target.value))}
-                  className="w-full accent-sky-500"
-                />
-                <div className="text-xs text-slate-500">{s.hint}</div>
-              </label>
-            ))}
-            <p className="text-xs text-slate-500">
-              Pomiędzy 60 a 120 km/h głośność rośnie liniowo, powyżej 120 zostaje
-              wartość ze 120.
-            </p>
-            <button onClick={disconnectVolume} className="text-sm text-slate-400 underline">
-              rozłącz
-            </button>
+  const connected = device.state === "connected" || device.state === "checking" || device.state === "downloading";
+
+  return (
+    <div className="page-stack">
+      <header className="page-header">
+        <div>
+          <span className="eyebrow">Połączenie i ustawienia</span>
+          <h1>Urządzenie</h1>
+          <p className="page-subtitle">Jedno połączenie. Wszystko pod ręką.</p>
+        </div>
+        <span className={`status-pill${connected ? " status-pill-connected" : ""}`}><span className="status-dot" /> {connected ? "Połączono" : "Offline"}</span>
+      </header>
+
+      {!connected ? (
+        <section className="device-connect-card">
+          <div className="device-illustration"><Icon name="bluetooth" size={30} /></div>
+          <div>
+            <span className="eyebrow">Szusownik</span>
+            <h2>Połącz urządzenie</h2>
+            <p>Po połączeniu sprawdzę nowe pliki i odblokuję ustawienia dźwięku.</p>
           </div>
-        )}
-        {volErr && <p className="mt-2 text-sm text-red-400">{volErr}</p>}
-      </div>
+          <button className="button button-dark" disabled={device.state === "connecting"} onClick={() => void device.connectAndCheck()}>
+            {device.state === "connecting" ? <><span className="spinner spinner-light" /> Łączę…</> : <><Icon name="bluetooth" size={18} /> Połącz</>}
+          </button>
+        </section>
+      ) : (
+        <section className="device-info-card">
+          <div className="device-info-main"><div className="connected-mark"><Icon name="check" size={18} /></div><div><strong>Szusownik</strong><span>Połączenie aktywne</span></div></div>
+          <div className="device-info-values"><span>FW <b>{device.info?.fw ?? "—"}</b></span><span>Plików <b>{device.info?.files.length ?? 0}</b></span></div>
+          <button className="button button-ghost" onClick={device.disconnect}>Rozłącz</button>
+        </section>
+      )}
+
+      {device.pendingFiles.length > 0 && (
+        <Link className="mini-sync-link" to="/"><Icon name="download" size={18} /><span><strong>{device.pendingFiles.length} nowych plików</strong><small>Przejdź do Dzisiaj, żeby je pobrać</small></span><Icon name="chevron" size={18} /></Link>
+      )}
+
+      {(settingsError || device.error) && <div className="alert-card alert-card-error"><Icon name="x" size={18} /><span>{settingsError ?? device.error}</span></div>}
+
+      <section className="settings-section">
+        <div className="section-heading"><div><span className="eyebrow">Feedback na stoku</span><h2>Dźwięk</h2></div><span className="section-status">{settingsBusy ? "Wczytuję…" : connected ? "Zapisuje się automatycznie" : "Połącz urządzenie"}</span></div>
+        <div className="settings-card">
+          <div className="settings-card-heading"><div className="settings-icon settings-icon-coral"><Icon name="gauge" size={19} /></div><div><h3>Głośność pikania</h3><p>Ustaw poziom dla wolnej i szybkiej jazdy.</p></div></div>
+          {volume ? <div className="sliders">
+            <SoundSlider label="Wolno" hint="60 km/h" value={volume.low} min={0} max={100} onChange={(value) => changeVolume("low", value)} suffix="" />
+            <SoundSlider label="Szybko" hint="120 km/h" value={volume.high} min={0} max={100} onChange={(value) => changeVolume("high", value)} suffix="" />
+          </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card-heading"><div className="settings-icon settings-icon-green"><Icon name="activity" size={19} /></div><div><h3>Częstotliwość tonu</h3><p>Dopasuj brzmienie krótkiego i długiego sygnału.</p></div></div>
+          {frequency ? <div className="sliders">
+            <SoundSlider label="Ton krótki" hint="podgląd na urządzeniu" value={frequency.short} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("short", value)} suffix=" Hz" />
+            <SoundSlider label="Ton długi" hint="podgląd na urządzeniu" value={frequency.long} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("long", value)} suffix=" Hz" />
+          </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.2+, żeby ustawiać częstotliwość." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function SoundSlider({ label, hint, value, min, max, step = 1, suffix, onChange }: { label: string; hint: string; value: number; min: number; max: number; step?: number; suffix: string; onChange: (value: number) => void }) {
+  return (
+    <label className="sound-slider">
+      <span className="slider-label"><span>{label}<small>{hint}</small></span><strong>{value}{suffix}</strong></span>
+      <input max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="range" value={value} />
+    </label>
   );
 }

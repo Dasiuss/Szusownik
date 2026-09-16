@@ -13,6 +13,8 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 - Maksymalizacja przestrzeni na ekranie; **bez nazwy aplikacji w nagłówkach**.
 - **Język PL**. Jednostki i formaty: prędkość **km/h**, dystans **km**, czas **min:sec**, zegar **24 h**.
+- UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Urządzenie**.
+- Kierunek wizualny: jasny outdoor, wysoki kontrast i szybki odczyt wyników.
 
 ## 3. Auth i użytkownicy
 
@@ -27,9 +29,13 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   z pliku CSV.
 - Po kliknięciu: PWA pobiera nowe pliki z urządzenia (patrz „Transfer"), przetwarza CSV
   (wycina zjazdy) i pokazuje **bieżącą aktywność (dzień)**.
+- Po połączeniu PWA automatycznie sprawdza listę plików. Nowe pliki są zapowiadane kartą
+  na górze widoku „Dzisiaj”; użytkownik zatwierdza pobranie wszystkich jednym kliknięciem.
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
 - **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie.
 - Klik w zjazd → ekran szczegółów.
+- Historia grupuje zjazdy według lokalnej strefy czasowej telefonu. Zjazd może mieć krótką,
+  edytowalną nazwę; użytkownik może usunąć pojedynczy zjazd.
 
 ## 5. Ekran szczegółów zjazdu
 
@@ -68,6 +74,8 @@ na nagraniach z auta defaulty wystarczą.
 - **Żądanie pobrania rotuje plik na urządzeniu** — pobierane pliki są zawsze kompletne.
 - Sync po nazwie pliku (nie po zakresie timestampów): całe pliki, idempotentne, bez problemu
   dryfu zegara.
+- IndexedDB przechowuje surowe CSV jako archiwum oraz osobno zmaterializowane zjazdy do
+  szybkiego wyświetlania i edycji. Usunięcie zjazdu nie usuwa pliku źródłowego.
 
 ## 8. Dane testowe (rzeczywiste nagranie, nie mock)
 
@@ -81,22 +89,29 @@ na nagraniach z auta defaulty wystarczą.
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
-- **Dexie.js 4** — IndexedDB, schemat v1.
+- **Dexie.js 4** — IndexedDB, schemat v2 (surowe pliki + zjazdy + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
-- **react-router-dom 7 (HashRouter)** — dzień → zjazd → ustawienia; działa
+- **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa
   z GitHub Pages.
 - **Tailwind CSS v4** — styling.
 - Deploy: GitHub Pages przez `.github/workflows/deploy.yml` (build `web/`,
   `base: /Szusownik/`).
 - `@supabase/supabase-js` — DOPIERO faza D (nie instalować przedwcześnie).
 
-## 10. Ekran ustawień (`#/ustawienia`, niezależny od dnia)
+## 10. Ekran urządzenia (`#/urzadzenie`, alias `#/ustawienia`, niezależny od dnia)
 
 - Sekcja **„Głośność pikania"**: dwa suwaki 0..100 — „Wolno (60 km/h)"
   i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
-  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`),
-  wysyłka `SETVOL` z debounce; każde ustawienie gra feedback na urządzeniu.
+  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`,
+  fallback `GETVOL`), wysyłka `SETVOL` z debounce; każde ustawienie gra feedback
+  na urządzeniu.
+- Sekcja **„Częstotliwość pikania"** (firmware 1.2+, inaczej komunikat o wymaganym
+  FW): dwa suwaki 600..1500 Hz krok 25 — „Ton krótki" i „Ton długi"
+  (niezależne, krótki może być >= długi). Wspólne połączenie BLE z głośnością,
+  wartości startowe z INFO (`freqShort/freqLong`, fallback `GETFREQ`), wysyłka
+  `SETFREQ` z debounce; każde ustawienie gra podgląd na urządzeniu
+  (1 długi + 2 krótkie nowymi częstotliwościami).
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

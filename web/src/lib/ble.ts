@@ -22,18 +22,29 @@ export interface FileMeta {
   size: number;
 }
 
-interface InfoJson {
+export interface DeviceInfo {
   proto: string;
   fw: string;
   files: FileMeta[];
   volLow?: number;
   volHigh?: number;
+  freqShort?: number;
+  freqLong?: number;
 }
 
 export interface Volume {
   low: number;
   high: number;
 }
+
+export interface Freq {
+  short: number;
+  long: number;
+}
+
+export const SZ_FREQ_MIN_HZ = 600;
+export const SZ_FREQ_MAX_HZ = 1500;
+export const SZ_FREQ_STEP_HZ = 25;
 
 export interface SyncProgress {
   file: string;
@@ -69,13 +80,14 @@ function dvBytes(v: DataView): Uint8Array {
 }
 
 export class SzusownikBle {
+  private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private ctrl: BluetoothRemoteGATTCharacteristic | null = null;
   private info: BluetoothRemoteGATTCharacteristic | null = null;
   private data: BluetoothRemoteGATTCharacteristic | null = null;
   private stat: BluetoothRemoteGATTCharacteristic | null = null;
 
-  async connect(): Promise<InfoJson> {
+  async connect(): Promise<DeviceInfo> {
     if (!navigator.bluetooth) {
       throw new Error("Brak Web Bluetooth — użyj Chrome na Androidzie (HTTPS)");
     }
@@ -83,6 +95,11 @@ export class SzusownikBle {
       filters: [{ services: [SZ_UUID_SVC] }],
       optionalServices: [SZ_UUID_SVC],
     });
+    return this.connectToDevice(device);
+  }
+
+  private async connectToDevice(device: BluetoothDevice): Promise<DeviceInfo> {
+    this.device = device;
     this.server = (await device.gatt?.connect()) ?? null;
     if (!this.server) throw new Error("Brak połączenia GATT");
     const svc = await this.server.getPrimaryService(SZ_UUID_SVC);
@@ -95,6 +112,17 @@ export class SzusownikBle {
     return this.readInfo();
   }
 
+  async reconnect(): Promise<DeviceInfo | null> {
+    if (!navigator.bluetooth) return null;
+    const bluetooth = navigator.bluetooth as Bluetooth & {
+      getDevices?: () => Promise<BluetoothDevice[]>;
+    };
+    if (!bluetooth.getDevices) return null;
+    const devices = await bluetooth.getDevices();
+    const device = devices.find((candidate) => candidate.gatt);
+    return device ? this.connectToDevice(device) : null;
+  }
+
   disconnect() {
     try {
       this.server?.disconnect();
@@ -102,15 +130,16 @@ export class SzusownikBle {
       /* ignoruj */
     }
     this.server = null;
+    this.device = null;
   }
 
   private async writeCtrl(cmd: string): Promise<void> {
     await this.ctrl!.writeValueWithResponse(new TextEncoder().encode(cmd));
   }
 
-  async readInfo(): Promise<InfoJson> {
+  async readInfo(): Promise<DeviceInfo> {
     const v = await this.info!.readValue();
-    const info = JSON.parse(new TextDecoder().decode(dvBytes(v))) as InfoJson;
+    const info = JSON.parse(new TextDecoder().decode(dvBytes(v))) as DeviceInfo;
     if (!Array.isArray(info.files)) throw new Error("Zły format INFO z urządzenia");
     if (typeof info.proto === "string" && !info.proto.startsWith("szusownik/ble-file-")) {
       throw new Error(`Niezgodny protokół urządzenia: ${info.proto}`);
@@ -143,6 +172,28 @@ export class SzusownikBle {
     const v = Math.max(0, Math.min(100, Math.round(value)));
     await this.writeCtrl(which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`);
     return SzusownikBle.parseVolume(await this.readStatus());
+  }
+
+  private static parseFreq(status: string): Freq {
+    const m = /freq short=(\d+) long=(\d+)/.exec(status);
+    if (!m) throw new Error(`Zła odpowiedź częstotliwości: ${status}`);
+    return { short: Number(m[1]), long: Number(m[2]) };
+  }
+
+  /**
+   * Częstotliwość buzzera (firmware 1.2+): niezależne tony krótki/długi,
+   * 600..1500 Hz. Każdy SETFREQ gra podgląd na urządzeniu
+   * (1× długi + 2× krótkie nowymi częstotliwościami).
+   */
+  async getFrequency(): Promise<Freq> {
+    await this.writeCtrl("GETFREQ");
+    return SzusownikBle.parseFreq(await this.readStatus());
+  }
+
+  async setFrequency(which: "short" | "long", value: number): Promise<Freq> {
+    const v = Math.max(SZ_FREQ_MIN_HZ, Math.min(SZ_FREQ_MAX_HZ, Math.round(value)));
+    await this.writeCtrl(which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`);
+    return SzusownikBle.parseFreq(await this.readStatus());
   }
 
   /**
@@ -279,36 +330,51 @@ export class SzusownikBle {
     }
   }
 
+  async checkNewFiles(): Promise<FileMeta[]> {
+    await this.writeCtrl("ROTATE");
+    const info = await this.readInfo();
+    const known = new Set((await db.files.toCollection().primaryKeys()) as string[]);
+    return info.files.filter((file) => !known.has(file.name) && !known.has(`/${file.name}`));
+  }
+
+  async downloadFiles(
+    fresh: FileMeta[],
+    onProgress: (p: SyncProgress) => void,
+  ): Promise<SyncedFile[]> {
+    const done: SyncedFile[] = [];
+    let fileIndex = 0;
+    for (const meta of fresh) {
+      fileIndex++;
+      const name = meta.name.startsWith("/") ? meta.name : `/${meta.name}`;
+      const text = await this.downloadFile(meta, (receivedFrames) =>
+        onProgress({
+          file: name,
+          receivedFrames,
+          fileIndex,
+          fileCount: fresh.length,
+        }),
+      );
+      await db.files.put({
+        name,
+        size: text.length,
+        receivedAt: new Date().toISOString(),
+        userId: "local",
+        raw: text,
+      });
+      done.push({ name, size: text.length, samples: text.split("\n").length - 1 });
+    }
+    return done;
+  }
+
   /**
    * Sync: ROTATE (domknięcie bieżącego pliku) → lista → pobierz tylko nowe
    * (porównanie po nazwie z IndexedDB) → zapis surowego CSV → IndexedDB.
    */
   async syncNewFiles(onProgress: (p: SyncProgress) => void): Promise<SyncedFile[]> {
-    const done: SyncedFile[] = [];
     try {
       await this.connect();
-      await this.writeCtrl("ROTATE");
-      const info = await this.readInfo();
-      const known = new Set((await db.files.toCollection().primaryKeys()) as string[]);
-      const fresh = info.files.filter((f) => !known.has(f.name) && !known.has(`/${f.name}`));
-      let i = 0;
-      for (const meta of fresh) {
-        i++;
-        const name = meta.name.startsWith("/") ? meta.name : `/${meta.name}`;
-        const text = await this.downloadFile(meta, (n) =>
-          onProgress({ file: name, receivedFrames: n, fileIndex: i, fileCount: fresh.length }),
-        );
-        await db.files.put({
-          name,
-          size: text.length,
-          receivedAt: new Date().toISOString(),
-          userId: "local",
-          raw: text,
-        });
-        const samples = text.split("\n").length - 1;
-        done.push({ name, size: text.length, samples });
-      }
-      return done;
+      const fresh = await this.checkNewFiles();
+      return this.downloadFiles(fresh, onProgress);
     } finally {
       this.disconnect();
     }

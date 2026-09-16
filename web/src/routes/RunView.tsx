@@ -1,4 +1,5 @@
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Area,
   CartesianGrid,
@@ -10,81 +11,150 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getDay } from "../lib/store.ts";
+import { Icon } from "../components/Icon.tsx";
+import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, renameRun } from "../lib/data.ts";
+import { db, type StoredRun } from "../lib/db.ts";
 
-// Wykresy w funkcji DYSTANSU (nie czasu), osobne jeden pod drugim,
-// wspólna oś dystansu (wymagania-PWA §5).
 export default function RunView() {
   const { runId } = useParams();
-  const day = getDay();
-  const run = day?.runs.find((r) => r.id === runId);
+  const navigate = useNavigate();
+  const [run, setRun] = useState<StoredRun | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [label, setLabel] = useState("");
+  const decodedRunId = runId ? decodeURIComponent(runId) : undefined;
+
+  useEffect(() => {
+    let active = true;
+    if (!decodedRunId) {
+      setLoading(false);
+      return;
+    }
+    db.runs.get(decodedRunId).then((stored) => {
+      if (!active) return;
+      setRun(stored ?? null);
+      setLabel(stored?.label ?? "");
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [decodedRunId]);
+
+  async function saveLabel() {
+    if (!run) return;
+    await renameRun(run.id, label);
+    setRun({ ...run, label: label.trim() ? label.trim().slice(0, 40) : undefined });
+    setEditingLabel(false);
+  }
+
+  async function removeRun() {
+    if (!run || !window.confirm("Usunąć ten zjazd z historii?")) return;
+    await deleteRun(run.id);
+    navigate(`/dzien/${run.dayKey}`, { replace: true });
+  }
+
+  const chartData = useMemo(() => {
+    if (!run || run.samples.length === 0) return [];
+    const firstDistance = run.samples[0]?.cumDistM ?? 0;
+    return run.samples.map((sample) => ({
+      d: (sample.cumDistM - firstDistance) / 1000,
+      v: Math.round(sample.speedSm * 10) / 10,
+      g: Math.round(-sample.gradeSm * 10) / 10,
+    }));
+  }, [run]);
+
+  if (loading) return <div className="loading-card"><span className="spinner" /> Wczytuję zjazd…</div>;
 
   if (!run) {
     return (
-      <div className="flex flex-col gap-3">
-        <p className="text-slate-300">Brak danych zjazdu — wróć i pobierz dane.</p>
-        <Link to="/" className="text-sky-400">
-          ← Dzień
-        </Link>
+      <div className="empty-card empty-card-large">
+        <div className="empty-icon"><Icon name="x" size={28} /></div>
+        <h3>Nie znaleziono tego zjazdu</h3>
+        <p>Być może został usunięty z lokalnej historii.</p>
+        <Link className="button button-dark" to="/"><Icon name="activity" size={18} /> Wróć do dzisiaj</Link>
       </div>
     );
   }
 
-  const d0 = run.samples[0].cumDistM;
-  const data = run.samples.map((s) => ({
-    d: (s.cumDistM - d0) / 1000, // km
-    v: Math.round(s.speedSm * 10) / 10,
-    g: Math.round(-s.gradeSm * 10) / 10, // dodatnie = w dół (przekrój stoku)
-  }));
-  const maxV = Math.ceil(run.maxSpeed / 10) * 10;
-  const yMax = maxV > 100 ? 150 : 100;
+  const yMax = run.maxSpeed > 100 ? 150 : 100;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Link to="/" className="text-sky-400">
-        ← Dzień
-      </Link>
-      <div className="text-sm text-slate-300">
-        Max {run.maxSpeed.toFixed(0)} km/h · {(run.distanceM / 1000).toFixed(2)} km ·
-        nachylenie {run.maxGradeDown.toFixed(0)}°
+    <div className="page-stack detail-page">
+      <div className="detail-back-row">
+        <Link className="back-link" to={`/dzien/${run.dayKey}`}><Icon name="chevron" size={18} /> {capitalize(formatDayLabel(run.dayKey))}</Link>
+        {run.demo && <span className="demo-badge">Demo</span>}
       </div>
 
-      <div>
-        <div className="mb-1 text-sm text-slate-400">Prędkość [km/h]</div>
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ left: -18, right: 8, top: 4, bottom: 0 }}>
-              <CartesianGrid stroke="#1e293b" />
-              <XAxis dataKey="d" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
-              <YAxis domain={[0, yMax]} tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: "#0f172a", border: "1px solid #334155" }}
-                labelFormatter={(v) => `${Number(v).toFixed(2)} km`}
-              />
-              {yMax > 100 && <ReferenceArea y1={100} y2={150} fill="#ef4444" fillOpacity={0.12} />}
-              <Line type="monotone" dataKey="v" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+      <header className="detail-header">
+        <div>
+          <span className="eyebrow">{formatClock(run.startT)} · {formatDuration(run.startT, run.endT)}</span>
+          <h1>{run.label ?? "Zjazd"}</h1>
+          <p className="page-subtitle">{formatDayLabel(run.dayKey, true)}</p>
+        </div>
+        <button aria-label="Usuń zjazd" className="icon-button icon-button-danger" onClick={() => void removeRun()}><Icon name="trash" size={19} /></button>
+      </header>
+
+      <div className="detail-actions">
+        {editingLabel ? (
+          <form className="label-form" onSubmit={(event) => { event.preventDefault(); void saveLabel(); }}>
+            <input autoFocus maxLength={40} onChange={(event) => setLabel(event.target.value)} placeholder="Np. Najlepszy stok" value={label} />
+            <button aria-label="Zapisz nazwę" className="icon-button icon-button-dark" type="submit"><Icon name="check" size={18} /></button>
+            <button aria-label="Anuluj" className="icon-button" onClick={() => setEditingLabel(false)} type="button"><Icon name="x" size={18} /></button>
+          </form>
+        ) : (
+          <button className="button button-soft" onClick={() => setEditingLabel(true)}><Icon name="edit" size={17} /> {run.label ? "Zmień nazwę" : "Nadaj nazwę"}</button>
+        )}
+      </div>
+
+      <section className="detail-metrics">
+        <div><span>Max prędkość</span><strong>{run.maxSpeed.toFixed(0)}<small> km/h</small></strong></div>
+        <div><span>Dystans</span><strong>{formatDistance(run.distanceM)}</strong></div>
+        <div><span>Max nachylenie</span><strong>{run.maxGradeDown.toFixed(0)}<small>°</small></strong></div>
+      </section>
+
+      <section className="chart-card">
+        <div className="chart-heading">
+          <div><span className="eyebrow">Profil prędkości</span><h2>Gdzie pojechałeś najszybciej?</h2></div>
+          <span className="chart-legend legend-speed"><i /> prędkość</span>
+        </div>
+        <div className="chart-wrap">
+          <ResponsiveContainer height="100%" width="100%">
+            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+              <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
+              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
+              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
+              <Tooltip contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} />
+              {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
+              <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      </div>
+        <div className="chart-axis-label">Dystans [km]</div>
+      </section>
 
-      <div>
-        <div className="mb-1 text-sm text-slate-400">Nachylenie w dół [°]</div>
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ left: -18, right: 8, top: 4, bottom: 0 }}>
-              <CartesianGrid stroke="#1e293b" />
-              <XAxis dataKey="d" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: "#0f172a", border: "1px solid #334155" }}
-                labelFormatter={(v) => `${Number(v).toFixed(2)} km`}
-              />
-              <Area type="monotone" dataKey="g" stroke="#22c55e" fill="#22c55e" fillOpacity={0.25} />
+      <section className="chart-card">
+        <div className="chart-heading">
+          <div><span className="eyebrow">Przekrój stoku</span><h2>Nachylenie na trasie</h2></div>
+          <span className="chart-legend legend-grade"><i /> nachylenie</span>
+        </div>
+        <div className="chart-wrap">
+          <ResponsiveContainer height="100%" width="100%">
+            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+              <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
+              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
+              <YAxis axisLine={false} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
+              <Tooltip contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} />
+              <Area dataKey="g" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      </div>
+        <div className="chart-axis-label">Dystans [km] · dodatnie = w dół</div>
+      </section>
     </div>
   );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

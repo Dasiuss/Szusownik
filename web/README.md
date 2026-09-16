@@ -4,20 +4,23 @@ Aplikacja web (PWA) do prezentacji i analizy przejazdów.
 
 - Stack: React 19 + TypeScript + Vite 6 (+ vite-plugin-pwa, Recharts, Dexie,
   papaparse, react-router-dom, Tailwind v4).
-- Dane: **rzeczywiste nagranie z urządzenia** jako fixture
-  (`public/fixtures/ride.csv` — skopiuj z karty SD, patrz `public/fixtures/README.md`),
-  docelowo transfer BLE z urządzenia (faza C) + Supabase (faza D). Bez mocków.
+- Dane: **rzeczywiste nagranie z urządzenia** jako demo fixture
+  (`public/fixtures/ride.csv`, skopiowane z `test data/LOG_1605.csv`),
+  docelowo transfer BLE z urządzenia (faza C) + Supabase (faza D). Bez syntetycznych mocków.
 
 Struktura `src/`:
 
 - `lib/csv.ts` — parsowanie + walidacja schematu CSV z urządzenia.
 - `lib/geo.ts` — haversine, średnie ruchome, nachylenie (defaulty z wymagań-PWA §6).
 - `lib/runs.ts` — wzbogacanie próbek, cięcie zjazdów (podjazd >30 s), statystyki dnia.
-- `lib/db.ts` — Dexie/IndexedDB, schemat v1 (surowe CSV pod kluczem nazwy pliku).
-- `lib/ble.ts` — szkielet transferu BLE (UUID v1 jak w firmware, implementacja w fazie C).
-- `lib/store.ts` — in-memory store dnia + formatowanie PL.
-- `routes/DayView.tsx` — „Pobierz dane", statystyki dnia, lista zjazdów.
-- `routes/RunView.tsx` — wykresy prędkość/nachylenie vs dystans.
+- `lib/db.ts` — Dexie/IndexedDB, schemat v2 (surowe CSV, zjazdy i metadane).
+- `lib/data.ts` — seed demo, grupowanie dni, materializacja zjazdów i lokalne operacje danych.
+- `lib/ble.ts` — transfer BLE i sprawdzanie nowych plików bez rozłączania sesji.
+- `lib/device.tsx` — wspólna sesja BLE, reconnect i limit bezczynności 10 minut.
+- `routes/DayView.tsx` — karta nowych plików, statystyki dnia i lista zjazdów.
+- `routes/HistoryView.tsx` — historia aktywności pogrupowana po lokalnych dniach.
+- `routes/RunView.tsx` — nazwa, usuwanie i wykresy prędkość/nachylenie vs dystans.
+- `routes/SettingsView.tsx` — status urządzenia oraz ustawienia dźwięku.
 
 Komendy (katalog `web/`):
 
