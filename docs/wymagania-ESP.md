@@ -32,19 +32,25 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   60–69: 1× krótki, 70–79: 2×, 80–89: 3×, 90–99: 4×; ≥100: długie + krótkie
   (1 długi na każde 50 km/h, reszta dziesiątek krótkimi — np. 120 = 1 długi
   + 2 krótkie, max 3 długie). Sygnał co **1 s**, nieblokujący scheduler.
-- Czasy: krótki 56 ms, długi 140 ms, przerwa 60 ms. Częstotliwości: krótki
-  2000 Hz, długi 2500 Hz (długi zawsze wyżej). Stałe `SZ_BEEP_*` w `config.h`.
+- Czasy: krótki 56 ms, długi 140 ms, przerwa 60 ms. Częstotliwości: ton krótki
+  i długi niezależnie ustawialne z PWA (`SETFREQ:SHORT:` / `SETFREQ:LONG:`,
+  też `GETFREQ`; odpowiedź STATUS `freq short=.. long=..`), trzymane w NVS
+  (`szusownik/freqShort/freqLong`), defaulty 880/1100 Hz, zakres 600-1500 Hz.
+  Stałe `SZ_FREQ_*` w `config.h`. Krótki może być >= długi (pełna swoboda
+  użytkownika, bez ostrzeżeń). Ponowne `SETFREQ` z tą samą wartością odtwarza
+  wybrany ton bez zmiany nastawy.
 
 ## 5. Sterowanie dźwiękiem
 
 - **Pasywny buzzer piezo**, GPIO10, sterowanie LEDC 8-bit
   (duty = vol·128/100, max 50%).
 - **Głośność adaptacyjna**: kotwice volLow @60 km/h i volHigh @120 km/h
-  (0..100, domyślnie 40/90), pomiędzy liniowo, powyżej 120 wartość ze 120.
+  (0..100, domyślnie 20/70), pomiędzy liniowo, powyżej 120 wartość ze 120.
 - Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`, też `GETVOL`; odpowiedź
   STATUS `vol low=.. high=..`), trzymane w NVS (`szusownik/volLow/volHigh`).
-  INFO niesie `volLow/volHigh` dla PWA. Każde SETVOL gra feedback
-  (LOW → sygnał 60, HIGH → sygnał 120).
+  INFO niesie `volLow/volHigh` oraz `freqShort/freqLong` dla PWA. Każde SETVOL gra feedback
+  (LOW → sygnał 60, HIGH → sygnał 120); każde SETFREQ gra podgląd
+  (1 długi + 2 krótkie nowymi częstotliwościami, przy głośności HIGH).
 - Sygnał startowy (setup): identyczny do 120 (1 długi + 2 krótkie),
   ale przy głośności 60.
 

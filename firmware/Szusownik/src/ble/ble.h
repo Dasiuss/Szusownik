@@ -23,7 +23,6 @@ class BleFiles {
   Beeper* beeper_ = nullptr;
   bool transferring_ = false;
   String activeFile_;
-  String lastCtrl_;
   String lastError_;
   // stan streamingu (ciężkie bufory w PSRAM, nie w DRAM!)
   tdefl_compressor* comp_ = nullptr;
@@ -53,6 +52,7 @@ class BleFiles {
   void handleCommand(const String& cmd);
   void refreshInfo();
   void reportVolume();
+  void reportFreq();
   void setStatus(const String& s);
   bool startStream(const String& name);
   void abortStream(const String& reason);

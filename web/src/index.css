@@ -169,6 +169,8 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .section-status { color: #89a09e; font-size: 10px; font-weight: 700; }
 .settings-card { padding: 16px; border: 1px solid #dbe9e6; border-radius: 20px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
 .settings-card-heading { display: flex; align-items: center; gap: 10px; }
+.settings-card-heading > div:nth-child(2) { min-width: 0; flex: 1; }
+.settings-card-heading .settings-reset { flex: 0 0 auto; }
 .settings-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 13px; }
 .settings-icon-coral { color: #cf654c; background: #fff0e9; }
 .settings-icon-green { color: #408467; background: #e8f5ef; }

@@ -45,6 +45,10 @@ export interface Freq {
 export const SZ_FREQ_MIN_HZ = 600;
 export const SZ_FREQ_MAX_HZ = 1500;
 export const SZ_FREQ_STEP_HZ = 25;
+export const SZ_VOL_LOW_DEFAULT = 20;
+export const SZ_VOL_HIGH_DEFAULT = 70;
+export const SZ_FREQ_SHORT_DEFAULT = 880;
+export const SZ_FREQ_LONG_DEFAULT = 1100;
 
 export interface SyncProgress {
   file: string;

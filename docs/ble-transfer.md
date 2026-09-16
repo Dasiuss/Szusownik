@@ -239,10 +239,18 @@ NACK:<expected>       — retransmisja od pierwszej brakującej
 GETVOL                — STATUS "vol low=.. high=.."
 SETVOL:LOW:<0-100>    — głośność przy 60 km/h (NVS) + feedback: sygnał 60
 SETVOL:HIGH:<0-100>   — głośność przy 120 km/h (NVS) + feedback: sygnał 120
+GETFREQ               — STATUS "freq short=.. long=.." (firmware 1.2+)
+SETFREQ:SHORT:<600-1500> — ton krótki w Hz (NVS) + feedback: 1 długi + 2 krótkie
+SETFREQ:LONG:<600-1500>  — ton długi w Hz (NVS) + feedback: 1 długi + 2 krótkie
 ```
 
-INFO niesie też `volLow/volHigh` (firmware 1.1+), żeby PWA ustawiła suwaki
-bez dodatkowego odpytywania. Transport ramek (244/240/128/ACK32/pacing 4 ms)
+Ponowne wysłanie `SETVOL` lub `SETFREQ` z tą samą wartością również odtwarza
+feedback. Firmware konsumuje komendę po odczycie, więc identyczna komenda może
+zostać wysłana ponownie bez dodatkowego numeru.
+
+INFO niesie też `volLow/volHigh` (firmware 1.1+) oraz `freqShort/freqLong`
+(firmware 1.2+), żeby PWA ustawiła suwaki bez dodatkowego odpytywania
+(fallback do GETVOL/GETFREQ, gdy pól nie ma). Transport ramek (244/240/128/ACK32/pacing 4 ms)
 bez zmian — profil zamrożony.
 
 Decyzje względem pierwotnej granicy funkcjonalnej:

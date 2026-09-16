@@ -105,13 +105,16 @@ na nagraniach z auta defaulty wystarczą.
   i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
   Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`,
   fallback `GETVOL`), wysyłka `SETVOL` z debounce; każde ustawienie gra feedback
-  na urządzeniu.
+  na urządzeniu. Przycisk Reset przywraca 20%/70%, a kliknięcie suwaka bez
+  przesunięcia ponownie wysyła `SETVOL` z bieżącą wartością.
 - Sekcja **„Częstotliwość pikania"** (firmware 1.2+, inaczej komunikat o wymaganym
   FW): dwa suwaki 600..1500 Hz krok 25 — „Ton krótki" i „Ton długi"
   (niezależne, krótki może być >= długi). Wspólne połączenie BLE z głośnością,
   wartości startowe z INFO (`freqShort/freqLong`, fallback `GETFREQ`), wysyłka
   `SETFREQ` z debounce; każde ustawienie gra podgląd na urządzeniu
-  (1 długi + 2 krótkie nowymi częstotliwościami).
+  (1 długi + 2 krótkie nowymi częstotliwościami). Przycisk Reset przywraca
+  880/1100 Hz, a kliknięcie suwaka bez przesunięcia ponownie wysyła `SETFREQ`
+  z bieżącą wartością.
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

@@ -59,6 +59,10 @@ void BleFiles::refreshInfo() {
     j += String(beeper_->volLow());
     j += ",\"volHigh\":";
     j += String(beeper_->volHigh());
+    j += ",\"freqShort\":";
+    j += String(beeper_->freqShort());
+    j += ",\"freqLong\":";
+    j += String(beeper_->freqLong());
   }
   j += "}";
   chrInfo->setValue(j.c_str());
@@ -72,6 +76,19 @@ void BleFiles::reportVolume() {
   char msg[48];
   snprintf(msg, sizeof(msg), "vol low=%u high=%u", beeper_->volLow(), beeper_->volHigh());
   refreshInfo();  // INFO niesie volLow/volHigh dla PWA
+  setStatus(String(msg));
+  szLogf("BLE: %s", msg);
+}
+
+void BleFiles::reportFreq() {
+  if (!beeper_) {
+    setStatus("err:no-beeper");
+    return;
+  }
+  char msg[48];
+  snprintf(msg, sizeof(msg), "freq short=%u long=%u", beeper_->freqShort(),
+           beeper_->freqLong());
+  refreshInfo();  // INFO niesie freqShort/freqLong dla PWA
   setStatus(String(msg));
   szLogf("BLE: %s", msg);
 }
@@ -113,15 +130,31 @@ void BleFiles::handleCommand(const String& cmd) {
     reportVolume();
   } else if (cmd.startsWith("SETVOL:LOW:")) {
     if (beeper_) {
-      beeper_->setVolLow(cmd.substring(12).toInt());  // feedback: sygnał 60
+      beeper_->setVolLow(cmd.substring(11).toInt());  // feedback: sygnał 60
       reportVolume();
     } else {
       setStatus("err:no-beeper");
     }
   } else if (cmd.startsWith("SETVOL:HIGH:")) {
     if (beeper_) {
-      beeper_->setVolHigh(cmd.substring(13).toInt());  // feedback: sygnał 120
+      beeper_->setVolHigh(cmd.substring(12).toInt());  // feedback: sygnał 120
       reportVolume();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("GETFREQ")) {
+    reportFreq();
+  } else if (cmd.startsWith("SETFREQ:SHORT:")) {
+    if (beeper_) {
+      beeper_->setFreqShort(cmd.substring(14).toInt());  // feedback: 1 długi + 2 krótkie
+      reportFreq();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("SETFREQ:LONG:")) {
+    if (beeper_) {
+      beeper_->setFreqLong(cmd.substring(13).toInt());  // feedback: 1 długi + 2 krótkie
+      reportFreq();
     } else {
       setStatus("err:no-beeper");
     }
@@ -130,12 +163,12 @@ void BleFiles::handleCommand(const String& cmd) {
 
 void BleFiles::poll() {
   if (!chrCtrl) return;
-  // Odczyt ostatniej komendy zamiast callbacku — bez ryzyka API callbacks.
+  // Odczyt i skonsumowanie komendy zamiast callbacku — bez ryzyka API callbacks.
   std::string v = chrCtrl->getValue();
   String cmd(v.c_str());
-  if (cmd != lastCtrl_) {
-    lastCtrl_ = cmd;
-    if (cmd.length()) handleCommand(cmd);
+  if (cmd.length()) {
+    chrCtrl->setValue("");
+    handleCommand(cmd);
   }
   if (transferring_) pumpStream();
 }

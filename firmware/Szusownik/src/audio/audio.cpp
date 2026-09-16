@@ -9,9 +9,15 @@ void Beeper::begin() {
   volPrefs.begin("szusownik", false);
   volLow_ = volPrefs.getUChar("volLow", SZ_VOL_LOW_DEFAULT);
   volHigh_ = volPrefs.getUChar("volHigh", SZ_VOL_HIGH_DEFAULT);
+  freqShort_ = volPrefs.getUShort("freqShort", SZ_FREQ_SHORT_DEFAULT);
+  freqLong_ = volPrefs.getUShort("freqLong", SZ_FREQ_LONG_DEFAULT);
   volPrefs.end();
+  if (freqShort_ < SZ_FREQ_MIN_HZ || freqShort_ > SZ_FREQ_MAX_HZ)
+    freqShort_ = SZ_FREQ_SHORT_DEFAULT;
+  if (freqLong_ < SZ_FREQ_MIN_HZ || freqLong_ > SZ_FREQ_MAX_HZ)
+    freqLong_ = SZ_FREQ_LONG_DEFAULT;
   pinMode(PIN_BUZZER, OUTPUT);
-  ledcAttach(PIN_BUZZER, SZ_BEEP_FREQ_HZ, 8);
+  ledcAttach(PIN_BUZZER, freqShort_, 8);
   ledcWrite(PIN_BUZZER, 0);
 }
 
@@ -46,6 +52,30 @@ uint8_t Beeper::setVolHigh(int v) {
   return volHigh_;
 }
 
+static uint16_t clampFreq(int hz) {
+  if (hz < SZ_FREQ_MIN_HZ) return SZ_FREQ_MIN_HZ;
+  if (hz > SZ_FREQ_MAX_HZ) return SZ_FREQ_MAX_HZ;
+  return (uint16_t)hz;
+}
+
+uint16_t Beeper::setFreqShort(int hz) {
+  freqShort_ = clampFreq(hz);
+  volPrefs.begin("szusownik", false);
+  volPrefs.putUShort("freqShort", freqShort_);
+  volPrefs.end();
+  playFreqPreview();  // feedback nowymi częstotliwościami
+  return freqShort_;
+}
+
+uint16_t Beeper::setFreqLong(int hz) {
+  freqLong_ = clampFreq(hz);
+  volPrefs.begin("szusownik", false);
+  volPrefs.putUShort("freqLong", freqLong_);
+  volPrefs.end();
+  playFreqPreview();  // feedback nowymi częstotliwościami
+  return freqLong_;
+}
+
 void Beeper::buildPattern(float kmh) {
   seqLen_ = 0;
   seqIdx_ = 0;
@@ -61,10 +91,10 @@ void Beeper::buildPattern(float kmh) {
     beeps = (uint8_t)(((int)kmh % 50) / 10);
   }
   for (uint8_t i = 0; i < cont && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {(uint16_t)SZ_RECORD_FREQ_HZ, SZ_BEEP_LONG_MS, SZ_BEEP_GAP_MS};
+    seq_[seqLen_++] = {freqLong_, SZ_BEEP_LONG_MS, SZ_BEEP_GAP_MS};
   }
   for (uint8_t i = 0; i < beeps && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {(uint16_t)SZ_BEEP_FREQ_HZ, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
+    seq_[seqLen_++] = {freqShort_, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
   }
 }
 
@@ -81,15 +111,26 @@ void Beeper::startOneShot(uint8_t vol) {
 
 void Beeper::playShort() {
   seqLen_ = 0;
-  seq_[seqLen_++] = {(uint16_t)SZ_BEEP_FREQ_HZ, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
+  seq_[seqLen_++] = {freqShort_, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
   startOneShot(volLow_);
 }
 
 void Beeper::playLong2() {
   seqLen_ = 0;
-  seq_[seqLen_++] = {(uint16_t)SZ_RECORD_FREQ_HZ, SZ_BEEP_LONG_MS, SZ_BEEP_GAP_MS};
+  seq_[seqLen_++] = {freqLong_, SZ_BEEP_LONG_MS, SZ_BEEP_GAP_MS};
   for (uint8_t i = 0; i < 2; i++) {
-    seq_[seqLen_++] = {(uint16_t)SZ_BEEP_FREQ_HZ, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
+    seq_[seqLen_++] = {freqShort_, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
+  }
+  startOneShot(volHigh_);
+}
+
+void Beeper::playFreqPreview() {
+  // Podgląd po SETFREQ: ten sam kształt co sygnał 120, ale zawsze nowymi
+  // częstotliwościami i przy głośności HIGH (słyszalny na stoku).
+  seqLen_ = 0;
+  seq_[seqLen_++] = {freqLong_, SZ_BEEP_LONG_MS, SZ_BEEP_GAP_MS};
+  for (uint8_t i = 0; i < 2; i++) {
+    seq_[seqLen_++] = {freqShort_, SZ_BEEP_SHORT_MS, SZ_BEEP_GAP_MS};
   }
   startOneShot(volHigh_);
 }
@@ -98,13 +139,13 @@ void Beeper::playBoot() {
   // Setup, blokująco: sygnał identyczny do 120 (1 długi + 2 krótkie,
   // te same czasy/odstępy/częstotliwości), ale głośność z 60.
   uint8_t d = dutyFromVol(volLow_);
-  ledcWriteTone(PIN_BUZZER, SZ_RECORD_FREQ_HZ);
+  ledcWriteTone(PIN_BUZZER, freqLong_);
   ledcWrite(PIN_BUZZER, d);
   delay(SZ_BEEP_LONG_MS);
   ledcWrite(PIN_BUZZER, 0);
   delay(SZ_BEEP_GAP_MS);
   for (uint8_t i = 0; i < 2; i++) {
-    ledcWriteTone(PIN_BUZZER, SZ_BEEP_FREQ_HZ);
+    ledcWriteTone(PIN_BUZZER, freqShort_);
     ledcWrite(PIN_BUZZER, d);
     delay(SZ_BEEP_SHORT_MS);
     ledcWrite(PIN_BUZZER, 0);

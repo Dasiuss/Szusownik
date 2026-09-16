@@ -6,11 +6,13 @@
 // >=100: długie + krótkie (1 długi na każde 50 km/h, reszta dziesiątek krótkimi).
 // Głośność adaptacyjna: volLow @60 km/h -> volHigh @120 km/h liniowo,
 // powyżej 120 wartość z 120. Ustawiane z PWA, trzymane w NVS.
+// Częstotliwości tonów (krótki/długi, niezależne): ustawiane z PWA przez
+// SETFREQ, trzymane w NVS (defaulty 880/1100 Hz, zakres 600-1500 Hz).
 // Nieblokujące (scheduler na millis), poza playBoot() (setup) i feedbackiem
-// one-shot po SETVOL.
+// one-shot po SETVOL/SETFREQ.
 class Beeper {
  public:
-  void begin();  // wczytuje głośność z NVS, podpina LEDC
+  void begin();  // wczytuje głośność i częstotliwości z NVS, podpina LEDC
   void tick(float kmh, unsigned long nowMs);
   void playBoot();  // blokujące, setup: sygnał 120 (1 długi + 2 krótkie)
                     // przy głośności 60. Wywołać PO begin().
@@ -20,6 +22,13 @@ class Beeper {
   uint8_t setVolHigh(int v);
   uint8_t volLow() const { return volLow_; }
   uint8_t volHigh() const { return volHigh_; }
+  // Częstotliwości z PWA (Hz, clamp do SZ_FREQ_MIN/MAX_HZ, zapis do NVS +
+  // feedback one-shot: 1 długi + 2 krótkie nowymi częstotliwościami).
+  // Zwracają przyjętą wartość po clamp.
+  uint16_t setFreqShort(int hz);
+  uint16_t setFreqLong(int hz);
+  uint16_t freqShort() const { return freqShort_; }
+  uint16_t freqLong() const { return freqLong_; }
   // Głośność dla danej prędkości (kotwice 60/120, liniowo, clamp powyżej 120).
   uint8_t volumeFor(float kmh) const;
 
@@ -35,12 +44,16 @@ class Beeper {
   unsigned long stepEnd_ = 0;
   unsigned long nextTick_ = 0;
   bool toneOn_ = false;
-  uint8_t volLow_ = 40;
-  uint8_t volHigh_ = 90;
-  uint8_t playVol_ = 40;  // głośność bieżącej sekwencji
+  uint8_t volLow_ = 20;
+  uint8_t volHigh_ = 70;
+  uint16_t freqShort_ = 880;
+  uint16_t freqLong_ = 1100;
+  uint8_t playVol_ = 20;  // głośność bieżącej sekwencji
   void buildPattern(float kmh);
   void playShort();  // one-shot: 1 krótki (sygnał 60)
   void playLong2();  // one-shot: 1 długi + 2 krótkie (sygnał 120)
+  void playFreqPreview();  // one-shot po SETFREQ: 1 długi + 2 krótkie
+                           // nowymi częstotliwościami, przy głośności HIGH
   void startOneShot(uint8_t vol);
   static uint8_t dutyFromVol(uint8_t v) { return (uint8_t)((v * 128U) / 100U); }
 };
