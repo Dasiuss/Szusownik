@@ -63,6 +63,14 @@ void BleFiles::refreshInfo() {
     j += String(beeper_->freqShort());
     j += ",\"freqLong\":";
     j += String(beeper_->freqLong());
+    j += ",\"beepShortMs\":";
+    j += String(beeper_->beepShortMs());
+    j += ",\"beepLongMs\":";
+    j += String(beeper_->beepLongMs());
+    j += ",\"beepGapMs\":";
+    j += String(beeper_->beepGapMs());
+    j += ",\"signalGapMs\":";
+    j += String(beeper_->signalGapMs());
   }
   j += "}";
   chrInfo->setValue(j.c_str());
@@ -89,6 +97,20 @@ void BleFiles::reportFreq() {
   snprintf(msg, sizeof(msg), "freq short=%u long=%u", beeper_->freqShort(),
            beeper_->freqLong());
   refreshInfo();  // INFO niesie freqShort/freqLong dla PWA
+  setStatus(String(msg));
+  szLogf("BLE: %s", msg);
+}
+
+void BleFiles::reportTiming() {
+  if (!beeper_) {
+    setStatus("err:no-beeper");
+    return;
+  }
+  char msg[96];
+  snprintf(msg, sizeof(msg), "timing short=%u long=%u gap=%u interval=%u",
+           beeper_->beepShortMs(), beeper_->beepLongMs(), beeper_->beepGapMs(),
+           beeper_->signalGapMs());
+  refreshInfo();  // INFO niesie czasy dla PWA
   setStatus(String(msg));
   szLogf("BLE: %s", msg);
 }
@@ -155,6 +177,36 @@ void BleFiles::handleCommand(const String& cmd) {
     if (beeper_) {
       beeper_->setFreqLong(cmd.substring(13).toInt());  // feedback: 1 długi + 2 krótkie
       reportFreq();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("GETTIMING")) {
+    reportTiming();
+  } else if (cmd.startsWith("SETTIMING:SHORT:")) {
+    if (beeper_) {
+      beeper_->setBeepShortMs(cmd.substring(16).toInt());  // feedback: 3 x sygnał 120
+      reportTiming();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("SETTIMING:LONG:")) {
+    if (beeper_) {
+      beeper_->setBeepLongMs(cmd.substring(15).toInt());  // feedback: 3 x sygnał 120
+      reportTiming();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("SETTIMING:GAP:")) {
+    if (beeper_) {
+      beeper_->setBeepGapMs(cmd.substring(14).toInt());  // feedback: 3 x sygnał 120
+      reportTiming();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("SETTIMING:INTERVAL:")) {
+    if (beeper_) {
+      beeper_->setSignalGapMs(cmd.substring(19).toInt());  // feedback: 3 x sygnał 120
+      reportTiming();
     } else {
       setStatus("err:no-beeper");
     }

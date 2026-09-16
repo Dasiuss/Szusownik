@@ -30,6 +30,10 @@ export interface DeviceInfo {
   volHigh?: number;
   freqShort?: number;
   freqLong?: number;
+  beepShortMs?: number;
+  beepLongMs?: number;
+  beepGapMs?: number;
+  signalGapMs?: number;
 }
 
 export interface Volume {
@@ -42,6 +46,13 @@ export interface Freq {
   long: number;
 }
 
+export interface Timing {
+  short: number;
+  long: number;
+  gap: number;
+  interval: number;
+}
+
 export const SZ_FREQ_MIN_HZ = 600;
 export const SZ_FREQ_MAX_HZ = 1500;
 export const SZ_FREQ_STEP_HZ = 25;
@@ -49,6 +60,22 @@ export const SZ_VOL_LOW_DEFAULT = 20;
 export const SZ_VOL_HIGH_DEFAULT = 70;
 export const SZ_FREQ_SHORT_DEFAULT = 880;
 export const SZ_FREQ_LONG_DEFAULT = 1100;
+export const SZ_TIMING_SHORT_MIN_MS = 20;
+export const SZ_TIMING_SHORT_MAX_MS = 200;
+export const SZ_TIMING_SHORT_STEP_MS = 5;
+export const SZ_TIMING_SHORT_DEFAULT_MS = 56;
+export const SZ_TIMING_LONG_MIN_MS = 40;
+export const SZ_TIMING_LONG_MAX_MS = 500;
+export const SZ_TIMING_LONG_STEP_MS = 5;
+export const SZ_TIMING_LONG_DEFAULT_MS = 140;
+export const SZ_TIMING_GAP_MIN_MS = 0;
+export const SZ_TIMING_GAP_MAX_MS = 500;
+export const SZ_TIMING_GAP_STEP_MS = 5;
+export const SZ_TIMING_GAP_DEFAULT_MS = 60;
+export const SZ_TIMING_INTERVAL_MIN_MS = 100;
+export const SZ_TIMING_INTERVAL_MAX_MS = 5000;
+export const SZ_TIMING_INTERVAL_STEP_MS = 50;
+export const SZ_TIMING_INTERVAL_DEFAULT_MS = 1000;
 
 export interface SyncProgress {
   file: string;
@@ -184,6 +211,12 @@ export class SzusownikBle {
     return { short: Number(m[1]), long: Number(m[2]) };
   }
 
+  private static parseTiming(status: string): Timing {
+    const m = /timing short=(\d+) long=(\d+) gap=(\d+) interval=(\d+)/.exec(status);
+    if (!m) throw new Error(`Zła odpowiedź czasów sygnału: ${status}`);
+    return { short: Number(m[1]), long: Number(m[2]), gap: Number(m[3]), interval: Number(m[4]) };
+  }
+
   /**
    * Częstotliwość buzzera (firmware 1.2+): niezależne tony krótki/długi,
    * 600..1500 Hz. Każdy SETFREQ gra podgląd na urządzeniu
@@ -198,6 +231,35 @@ export class SzusownikBle {
     const v = Math.max(SZ_FREQ_MIN_HZ, Math.min(SZ_FREQ_MAX_HZ, Math.round(value)));
     await this.writeCtrl(which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`);
     return SzusownikBle.parseFreq(await this.readStatus());
+  }
+
+  /**
+   * Czasy buzzera (firmware 1.3+): długość krótkiego/długiego tonu, przerwa
+   * między tonami jednego wzoru oraz przerwa między pełnymi wzorami 120 km/h.
+   * Każde SETTIMING zapisuje wartość w NVS i odtwarza trzy wzory testowe.
+   */
+  async getTiming(): Promise<Timing> {
+    await this.writeCtrl("GETTIMING");
+    return SzusownikBle.parseTiming(await this.readStatus());
+  }
+
+  async setTiming(which: keyof Timing, value: number): Promise<Timing> {
+    const limits = {
+      short: [SZ_TIMING_SHORT_MIN_MS, SZ_TIMING_SHORT_MAX_MS],
+      long: [SZ_TIMING_LONG_MIN_MS, SZ_TIMING_LONG_MAX_MS],
+      gap: [SZ_TIMING_GAP_MIN_MS, SZ_TIMING_GAP_MAX_MS],
+      interval: [SZ_TIMING_INTERVAL_MIN_MS, SZ_TIMING_INTERVAL_MAX_MS],
+    } as const;
+    const [min, max] = limits[which];
+    const v = Math.max(min, Math.min(max, Math.round(value)));
+    const command = {
+      short: "SETTIMING:SHORT",
+      long: "SETTIMING:LONG",
+      gap: "SETTIMING:GAP",
+      interval: "SETTIMING:INTERVAL",
+    }[which];
+    await this.writeCtrl(`${command}:${v}`);
+    return SzusownikBle.parseTiming(await this.readStatus());
   }
 
   /**

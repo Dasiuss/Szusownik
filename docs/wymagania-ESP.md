@@ -43,7 +43,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 ## 5. Sterowanie dźwiękiem
 
 - **Pasywny buzzer piezo**, GPIO10, sterowanie LEDC 8-bit
-  (duty = vol·128/100, max 50%).
+  (kwadratowe mapowanie poziomu na duty, max 50%).
 - **Głośność adaptacyjna**: kotwice volLow @60 km/h i volHigh @120 km/h
   (0..100, domyślnie 20/70), pomiędzy liniowo, powyżej 120 wartość ze 120.
 - Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`, też `GETVOL`; odpowiedź
@@ -53,6 +53,15 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   (1 długi + 2 krótkie nowymi częstotliwościami, przy głośności HIGH).
 - Sygnał startowy (setup): identyczny do 120 (1 długi + 2 krótkie),
   ale przy głośności 60.
+- Czasy wzoru są konfigurowalne z PWA przez `SETTIMING:SHORT/LONG/GAP/INTERVAL`,
+  odpowiedź `GETTIMING` ma postać `timing short=.. long=.. gap=.. interval=..`.
+  Wartości są trzymane w NVS (`beepShort/beepLong/beepGap/signalGap`):
+  odpowiednio 20..200 ms, 40..500 ms, 0..500 ms i 100..5000 ms.
+  Po każdej zmianie firmware odtwarza trzy wzory 120 km/h. Przerwa `GAP` jest
+  ciszą między tonami w jednym wzorze, a `INTERVAL` ciszą między pełnymi wzorami.
+- Mapowanie głośności na duty LEDC jest kwadratowe zamiast liniowego, aby niskie
+  poziomy były praktycznie cichsze; przy ustawieniu 1% duty wynosi 0 w 8-bitowej
+  skali. Wartość ustawienia pozostaje logicznym procentem 0..100.
 
 ## 6. Zapis CSV + rotacja plików
 

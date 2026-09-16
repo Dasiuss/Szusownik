@@ -115,6 +115,14 @@ na nagraniach z auta defaulty wystarczą.
   (1 długi + 2 krótkie nowymi częstotliwościami). Przycisk Reset przywraca
   880/1100 Hz, a kliknięcie suwaka bez przesunięcia ponownie wysyła `SETFREQ`
   z bieżącą wartością.
+- Sekcja **„Czasy sygnału"** (firmware 1.3+, inaczej komunikat o wymaganym FW):
+  cztery suwaki: krótkie piknięcie 20..200 ms krok 5, długie piknięcie
+  40..500 ms krok 5, przerwa w sygnale 0..500 ms krok 5 oraz przerwa między
+  sygnałami 100..5000 ms krok 50. Wartości startowe są pobierane z INFO
+  (`beepShortMs/beepLongMs/beepGapMs/signalGapMs`, fallback `GETTIMING`),
+  wysyłka `SETTIMING` działa z debounce i każde ustawienie odtwarza trzy pełne
+  sygnały 120 km/h. Reset przywraca 56/140/60/1000 ms, a kliknięcie bez
+  przesunięcia ponownie wysyła bieżącą wartość.
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

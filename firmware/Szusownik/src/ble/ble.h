@@ -53,6 +53,7 @@ class BleFiles {
   void refreshInfo();
   void reportVolume();
   void reportFreq();
+  void reportTiming();
   void setStatus(const String& s);
   bool startStream(const String& name);
   void abortStream(const String& reason);

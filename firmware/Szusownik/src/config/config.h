@@ -4,7 +4,7 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md.
 
-#define SZ_FW_VERSION "1.2.1-audio"
+#define SZ_FW_VERSION "1.3.0-audio"
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
 #define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude,heading"
 
@@ -13,10 +13,12 @@
 static const float SZ_HYST_KMH = 3.0f;
 
 // Buzzer (pasywny piezo, GPIO10, sterowanie LEDC z głośnością):
-// sygnał co 1 s, cisza <60 km/h. Mapowanie: 60-69:1, 70-79:2, 80-89:3,
+// domyślnie przerwa między sygnałami 1000 ms, cisza <60 km/h. Mapowanie: 60-69:1, 70-79:2, 80-89:3,
 // 90-99:4 krótkie; >=100: długie + krótkie (1 długi na każde 50, reszta
 // dziesiątek krótkimi — 120 = 1 długi + 2 krótkie). Im szybciej, tym więcej.
-#define SZ_BEEP_INTERVAL_MS 1000
+#define SZ_BEEP_INTERVAL_DEFAULT_MS 1000
+#define SZ_BEEP_INTERVAL_MIN_MS 100
+#define SZ_BEEP_INTERVAL_MAX_MS 5000
 // Częstotliwości tonów (ustawialne z PWA przez SETFREQ, trzymane w NVS;
 // suwaki 600-1500 Hz, krok 25). Krótki i długi niezależne — użytkownik może
 // ustawić krótki >= długi (decyzja: pełna swoboda, bez ostrzeżeń).
@@ -24,12 +26,18 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_FREQ_LONG_DEFAULT 1100   // długie ("kreski")
 #define SZ_FREQ_MIN_HZ 600
 #define SZ_FREQ_MAX_HZ 1500
-#define SZ_BEEP_SHORT_MS 56     // -30% względem MVP1 (było 80)
-#define SZ_BEEP_LONG_MS 140     // -30% względem MVP1 (było 200)
-#define SZ_BEEP_GAP_MS 60       // -50% względem MVP1 (było 120)
+#define SZ_BEEP_SHORT_DEFAULT_MS 56     // -30% względem MVP1 (było 80)
+#define SZ_BEEP_SHORT_MIN_MS 20
+#define SZ_BEEP_SHORT_MAX_MS 200
+#define SZ_BEEP_LONG_DEFAULT_MS 140     // -30% względem MVP1 (było 200)
+#define SZ_BEEP_LONG_MIN_MS 40
+#define SZ_BEEP_LONG_MAX_MS 500
+#define SZ_BEEP_GAP_DEFAULT_MS 60       // -50% względem MVP1 (było 120)
+#define SZ_BEEP_GAP_MIN_MS 0
+#define SZ_BEEP_GAP_MAX_MS 500
 #define SZ_SILENCE_BELOW_KMH 60.0f
 
-// Głośność adaptacyjna 0..100 (duty LEDC = vol * 128 / 100, max 50%).
+// Głośność adaptacyjna 0..100 (kwadratowe mapowanie na duty LEDC, max 50%).
 // Kotwice: volLow przy 60 km/h, volHigh przy 120 km/h, pomiędzy liniowo,
 // powyżej 120 wartość z 120. Ustawiane z PWA (SETVOL), trzymane w NVS.
 #define SZ_VOL_LOW_KMH 60.0f

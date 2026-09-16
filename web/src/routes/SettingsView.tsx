@@ -7,25 +7,44 @@ import {
   SZ_FREQ_MIN_HZ,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_FREQ_STEP_HZ,
+  SZ_TIMING_GAP_DEFAULT_MS,
+  SZ_TIMING_GAP_MAX_MS,
+  SZ_TIMING_GAP_MIN_MS,
+  SZ_TIMING_GAP_STEP_MS,
+  SZ_TIMING_INTERVAL_DEFAULT_MS,
+  SZ_TIMING_INTERVAL_MAX_MS,
+  SZ_TIMING_INTERVAL_MIN_MS,
+  SZ_TIMING_INTERVAL_STEP_MS,
+  SZ_TIMING_LONG_DEFAULT_MS,
+  SZ_TIMING_LONG_MAX_MS,
+  SZ_TIMING_LONG_MIN_MS,
+  SZ_TIMING_LONG_STEP_MS,
+  SZ_TIMING_SHORT_DEFAULT_MS,
+  SZ_TIMING_SHORT_MAX_MS,
+  SZ_TIMING_SHORT_MIN_MS,
+  SZ_TIMING_SHORT_STEP_MS,
   SZ_VOL_HIGH_DEFAULT,
   SZ_VOL_LOW_DEFAULT,
 } from "../lib/ble.ts";
 import { useDevice } from "../lib/device.tsx";
-import type { Freq, Volume } from "../lib/ble.ts";
+import type { Freq, Timing, Volume } from "../lib/ble.ts";
 
 export default function SettingsView() {
   const device = useDevice();
   const [volume, setVolume] = useState<Volume | null>(null);
   const [frequency, setFrequency] = useState<Freq | null>(null);
+  const [timing, setTiming] = useState<Timing | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (device.state !== "connected") {
       setVolume(null);
       setFrequency(null);
+      setTiming(null);
       return;
     }
     let active = true;
@@ -34,18 +53,25 @@ export default function SettingsView() {
     async function loadSettings() {
       const nextVolume = await device.getVolume();
       let nextFrequency: Freq | null = null;
+      let nextTiming: Timing | null = null;
       try {
         nextFrequency = await device.getFrequency();
       } catch {
         nextFrequency = null;
       }
-      return { nextVolume, nextFrequency };
+      try {
+        nextTiming = await device.getTiming();
+      } catch {
+        nextTiming = null;
+      }
+      return { nextVolume, nextFrequency, nextTiming };
     }
     loadSettings()
-      .then(({ nextVolume, nextFrequency }) => {
+      .then(({ nextVolume, nextFrequency, nextTiming }) => {
         if (!active) return;
         setVolume(nextVolume);
         setFrequency(nextFrequency);
+        setTiming(nextTiming);
       })
       .catch((caught) => {
         if (active) setSettingsError(caught instanceof Error ? caught.message : String(caught));
@@ -92,6 +118,23 @@ export default function SettingsView() {
       .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
   }
 
+  function changeTiming(which: keyof Timing, value: number) {
+    setTiming((current) => current ? { ...current, [which]: value } : current);
+    if (timingTimer.current) clearTimeout(timingTimer.current);
+    timingTimer.current = setTimeout(() => {
+      void device.setTiming(which, value)
+        .then(setTiming)
+        .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+    }, 600);
+  }
+
+  function testTiming(which: keyof Timing, value: number) {
+    if (timingTimer.current) clearTimeout(timingTimer.current);
+    void device.setTiming(which, value)
+      .then(setTiming)
+      .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+  }
+
   async function resetVolume() {
     if (!volume) return;
     if (volumeTimer.current) clearTimeout(volumeTimer.current);
@@ -115,6 +158,23 @@ export default function SettingsView() {
     try {
       await device.setFrequency("short", SZ_FREQ_SHORT_DEFAULT);
       setFrequency(await device.setFrequency("long", SZ_FREQ_LONG_DEFAULT));
+    } catch (caught) {
+      setSettingsError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  async function resetTiming() {
+    if (!timing) return;
+    if (timingTimer.current) clearTimeout(timingTimer.current);
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      await device.setTiming("short", SZ_TIMING_SHORT_DEFAULT_MS);
+      await device.setTiming("long", SZ_TIMING_LONG_DEFAULT_MS);
+      await device.setTiming("gap", SZ_TIMING_GAP_DEFAULT_MS);
+      setTiming(await device.setTiming("interval", SZ_TIMING_INTERVAL_DEFAULT_MS));
     } catch (caught) {
       setSettingsError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -176,9 +236,19 @@ export default function SettingsView() {
          {frequency ? <div className="sliders">
              <SoundSlider label="Ton krótki" hint="podgląd na urządzeniu" value={frequency.short} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("short", value)} onPreview={(value) => testFrequency("short", value)} suffix=" Hz" />
              <SoundSlider label="Ton długi" hint="podgląd na urządzeniu" value={frequency.long} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("long", value)} onPreview={(value) => testFrequency("long", value)} suffix=" Hz" />
-          </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.2+, żeby ustawiać częstotliwość." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
-        </div>
-      </section>
+           </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.2+, żeby ustawiać częstotliwość." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+         </div>
+
+         <div className="settings-card">
+          <div className="settings-card-heading"><div className="settings-icon settings-icon-coral"><Icon name="activity" size={19} /></div><div><h3>Czasy sygnału</h3><p>Każdy klik odtwarza trzy sygnały 120 km/h.</p></div><button className="button button-ghost settings-reset" disabled={!timing || settingsBusy} onClick={() => void resetTiming()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
+          {timing ? <div className="sliders">
+              <SoundSlider label="Krótkie piknięcie" hint="długość tonu" value={timing.short} min={SZ_TIMING_SHORT_MIN_MS} max={SZ_TIMING_SHORT_MAX_MS} step={SZ_TIMING_SHORT_STEP_MS} onChange={(value) => changeTiming("short", value)} onPreview={(value) => testTiming("short", value)} suffix=" ms" />
+              <SoundSlider label="Długie piknięcie" hint="długość tonu" value={timing.long} min={SZ_TIMING_LONG_MIN_MS} max={SZ_TIMING_LONG_MAX_MS} step={SZ_TIMING_LONG_STEP_MS} onChange={(value) => changeTiming("long", value)} onPreview={(value) => testTiming("long", value)} suffix=" ms" />
+              <SoundSlider label="Przerwa w sygnale" hint="między piknięciami" value={timing.gap} min={SZ_TIMING_GAP_MIN_MS} max={SZ_TIMING_GAP_MAX_MS} step={SZ_TIMING_GAP_STEP_MS} onChange={(value) => changeTiming("gap", value)} onPreview={(value) => testTiming("gap", value)} suffix=" ms" />
+              <SoundSlider label="Przerwa między sygnałami" hint="między wzorami 120 km/h" value={timing.interval} min={SZ_TIMING_INTERVAL_MIN_MS} max={SZ_TIMING_INTERVAL_MAX_MS} step={SZ_TIMING_INTERVAL_STEP_MS} onChange={(value) => changeTiming("interval", value)} onPreview={(value) => testTiming("interval", value)} suffix=" ms" />
+           </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.3+, żeby ustawiać czasy sygnału." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+         </div>
+       </section>
     </div>
   );
 }

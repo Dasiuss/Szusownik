@@ -6,6 +6,7 @@ import {
   type FileMeta,
   type Freq,
   type SyncProgress,
+  type Timing,
   type Volume,
 } from "./ble.ts";
 
@@ -26,6 +27,8 @@ interface DeviceContextValue {
   setVolume: (which: "low" | "high", value: number) => Promise<Volume>;
   getFrequency: () => Promise<Freq>;
   setFrequency: (which: "short" | "long", value: number) => Promise<Freq>;
+  getTiming: () => Promise<Timing>;
+  setTiming: (which: keyof Timing, value: number) => Promise<Timing>;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -156,6 +159,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return requireClient().setFrequency(which, value);
   }
 
+  async function getTiming(): Promise<Timing> {
+    return requireClient().getTiming();
+  }
+
+  async function setTiming(which: keyof Timing, value: number): Promise<Timing> {
+    return requireClient().setTiming(which, value);
+  }
+
   useEffect(() => {
     void tryReconnect();
     return clearIdleTimer;
@@ -178,6 +189,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setVolume,
         getFrequency,
         setFrequency,
+        getTiming,
+        setTiming,
       }}
     >
       {children}
