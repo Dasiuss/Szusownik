@@ -48,27 +48,42 @@ export function enrich(samples: Sample[]): EnrichedSample[] {
   }));
 }
 
+const UPHILL_CUT_GAIN_M = 5;
+const UPHILL_TREND_EPSILON_M = 0.05;
+
 /**
- * Cięcie na zjazdy v1: ruch W GÓRĘ (wysokość rośnie) trwający >=3 s
- * rozdziela dwa zjazdy (wymagania-PWA §6). Epsilon 0.5 m filtruje szum.
+ * Cięcie na zjazdy v1: ciągły ruch W GÓRĘ osiągający co najmniej 5 m
+ * rozdziela dwa zjazdy (wymagania-PWA §6). Wysokość jest już wygładzona,
+ * więc próg dotyczy skumulowanego wzrostu, a epsilon tylko trendu między próbkami.
  */
-export function splitRuns(enriched: EnrichedSample[], uphillSec = 3): Run[] {
+export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_GAIN_M): Run[] {
   const cuts: number[] = [0];
   let climbStart = -1;
+  let waitingForDescent = false;
   for (let i = 1; i < enriched.length; i++) {
     const dt = (Date.parse(enriched[i].t) - Date.parse(enriched[i - 1].t)) / 1000;
-    if (!(dt > 0 && dt < 3600)) {
+    if (dt < 0 || dt >= 3600) {
       climbStart = -1;
+      waitingForDescent = false;
       continue;
     }
-    if (enriched[i].altSm > enriched[i - 1].altSm + 0.5) {
+    if (dt === 0) continue;
+
+    const altDelta = enriched[i].altSm - enriched[i - 1].altSm;
+    if (waitingForDescent) {
+      if (altDelta < -UPHILL_TREND_EPSILON_M) waitingForDescent = false;
+      else continue;
+    }
+
+    if (altDelta > UPHILL_TREND_EPSILON_M) {
       if (climbStart < 0) climbStart = i - 1;
-      const climbSec = (Date.parse(enriched[i].t) - Date.parse(enriched[climbStart].t)) / 1000;
-      if (climbSec >= uphillSec) {
+      const climbGain = enriched[i].altSm - enriched[climbStart].altSm;
+      if (climbGain >= uphillGainM) {
         cuts.push(i + 1);
         climbStart = -1;
+        waitingForDescent = true;
       }
-    } else if (enriched[i].altSm < enriched[i - 1].altSm - 0.5) {
+    } else if (altDelta < -UPHILL_TREND_EPSILON_M) {
       climbStart = -1;
     }
   }
