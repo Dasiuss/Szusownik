@@ -42,7 +42,6 @@ export default function DayView() {
         <div>
           <span className="eyebrow">Aktywność</span>
           <h1>{isToday ? "Dzisiaj" : dateLabel}</h1>
-          <p className="page-subtitle">Twoje zjazdy, bez zbędnego szukania.</p>
         </div>
         <DeviceStatus state={device.state} />
       </header>

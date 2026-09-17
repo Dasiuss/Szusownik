@@ -49,10 +49,10 @@ export function enrich(samples: Sample[]): EnrichedSample[] {
 }
 
 /**
- * Cięcie na zjazdy v1: ruch W GÓRĘ (wysokość rośnie) trwający >30 s
+ * Cięcie na zjazdy v1: ruch W GÓRĘ (wysokość rośnie) trwający >=3 s
  * rozdziela dwa zjazdy (wymagania-PWA §6). Epsilon 0.5 m filtruje szum.
  */
-export function splitRuns(enriched: EnrichedSample[], uphillSec = 30): Run[] {
+export function splitRuns(enriched: EnrichedSample[], uphillSec = 3): Run[] {
   const cuts: number[] = [0];
   let climbStart = -1;
   for (let i = 1; i < enriched.length; i++) {
@@ -64,7 +64,7 @@ export function splitRuns(enriched: EnrichedSample[], uphillSec = 30): Run[] {
     if (enriched[i].altSm > enriched[i - 1].altSm + 0.5) {
       if (climbStart < 0) climbStart = i - 1;
       const climbSec = (Date.parse(enriched[i].t) - Date.parse(enriched[climbStart].t)) / 1000;
-      if (climbSec > uphillSec) {
+      if (climbSec >= uphillSec) {
         cuts.push(i + 1);
         climbStart = -1;
       }

@@ -29,6 +29,8 @@ interface DeviceContextValue {
   setFrequency: (which: "short" | "long", value: number) => Promise<Freq>;
   getTiming: () => Promise<Timing>;
   setTiming: (which: keyof Timing, value: number) => Promise<Timing>;
+  getMinBeepKmh: () => Promise<number>;
+  setMinBeepKmh: (value: number) => Promise<number>;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -167,6 +169,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return requireClient().setTiming(which, value);
   }
 
+  async function getMinBeepKmh(): Promise<number> {
+    return requireClient().getMinBeepKmh();
+  }
+
+  async function setMinBeepKmh(value: number): Promise<number> {
+    return requireClient().setMinBeepKmh(value);
+  }
+
   useEffect(() => {
     void tryReconnect();
     return clearIdleTimer;
@@ -191,6 +201,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setFrequency,
         getTiming,
         setTiming,
+        getMinBeepKmh,
+        setMinBeepKmh,
       }}
     >
       {children}

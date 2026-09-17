@@ -60,7 +60,7 @@ export default function RunView() {
     return run.samples.map((sample) => ({
       d: (sample.cumDistM - firstDistance) / 1000,
       v: Math.round(sample.speedSm * 10) / 10,
-      g: Math.round(-sample.gradeSm * 10) / 10,
+      g: Math.round(sample.gradeSm * 10) / 10,
     }));
   }, [run]);
 
@@ -124,7 +124,7 @@ export default function RunView() {
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
               <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
               <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
-              <Tooltip contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} />
+              <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
               <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
             </ComposedChart>
@@ -144,12 +144,12 @@ export default function RunView() {
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
               <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
               <YAxis axisLine={false} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
-              <Tooltip contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} />
-              <Area dataKey="g" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
+              <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
+              <Area baseValue={0} dataKey="g" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <div className="chart-axis-label">Dystans [km] · dodatnie = w dół</div>
+        <div className="chart-axis-label">Dystans [km] · ujemne = w dół</div>
       </section>
     </div>
   );

@@ -247,17 +247,19 @@ SETTIMING:SHORT:<20-200>       — długość krótkiego tonu w ms (NVS) + 3 syg
 SETTIMING:LONG:<40-500>        — długość długiego tonu w ms (NVS) + 3 sygnały 120
 SETTIMING:GAP:<0-500>          — przerwa między tonami wzoru w ms (NVS) + 3 sygnały 120
 SETTIMING:INTERVAL:<100-5000>  — przerwa między wzorami w ms (NVS) + 3 sygnały 120
+GETMINBEEP                     — STATUS "beep min=.." (firmware 1.4+)
+SETMINBEEP:<60-120>            — minimalna prędkość pikania w km/h (NVS) + 3 sygnały 120
 ```
 
-Ponowne wysłanie `SETVOL`, `SETFREQ` lub `SETTIMING` z tą samą wartością również
+Ponowne wysłanie `SETVOL`, `SETFREQ`, `SETTIMING` lub `SETMINBEEP` z tą samą wartością również
 odtwarza feedback. `SETTIMING` odtwarza trzy pełne wzory 120 km/h, aby można było
 ocenić długości i odstępy. Firmware konsumuje komendę po odczycie, więc identyczna
 komenda może zostać wysłana ponownie bez dodatkowego numeru.
 
 INFO niesie też `volLow/volHigh` (firmware 1.1+), `freqShort/freqLong`
-(firmware 1.2+) oraz `beepShortMs/beepLongMs/beepGapMs/signalGapMs`
-(firmware 1.3+), żeby PWA ustawiła suwaki bez dodatkowego odpytywania
-(fallback do GETVOL/GETFREQ/GETTIMING, gdy pól nie ma). Transport ramek
+(firmware 1.2+), `beepShortMs/beepLongMs/beepGapMs/signalGapMs`
+(firmware 1.3+) oraz `minBeepKmh` (firmware 1.4+), żeby PWA ustawiła suwaki bez dodatkowego odpytywania
+(fallback do GETVOL/GETFREQ/GETTIMING/GETMINBEEP, gdy pól nie ma). Transport ramek
 (244/240/128/ACK32/pacing 4 ms) bez zmian — profil zamrożony.
 
 Decyzje względem pierwotnej granicy funkcjonalnej:

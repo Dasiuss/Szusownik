@@ -40,6 +40,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 ## 5. Ekran szczegółów zjazdu
 
 - Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **nachylenie (przekrój stoku)**.
+- Na wykresie nachylenia wartości ujemne oznaczają jazdę w dół, a dodatnie podjazd.
 - Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
   jednocześnie.
 - Oś prędkości **0-based**: domyślnie 0–100 km/h; przy przekroczeniu 100 — skala 0–150 km/h,
@@ -47,7 +48,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 ## 6. Przetwarzanie danych (wycinanie zjazdów)
 
-- **Reguła cięcia:** ruch w górę trwający **> 30 s** rozdziela dwa zjazdy.
+- **Reguła cięcia testowa:** ruch w górę trwający **>= 3 s** rozdziela dwa zjazdy.
 - Dla każdego zjazdu: dystans (haversine z lat/lon), max prędkość, max nachylenie.
 - **Nachylenie w stopniach**, liczone z **Δwysokości / Δdystansu**.
 - „Dystans w dół" = suma dystansów zjazdów (bez podjazdów/wyciągów).
@@ -123,6 +124,10 @@ na nagraniach z auta defaulty wystarczą.
   wysyłka `SETTIMING` działa z debounce i każde ustawienie odtwarza trzy pełne
   sygnały 120 km/h. Reset przywraca 56/140/60/1000 ms, a kliknięcie bez
   przesunięcia ponownie wysyła bieżącą wartość.
+- Sekcja **„Minimalna prędkość pikania"** (firmware 1.4+, inaczej komunikat o wymaganym FW):
+  suwak 60..120 km/h krok 1, domyślnie 60 km/h. Poniżej ustawionego progu jest cisza,
+  ale wzór sygnału dla prędkości powyżej progu pozostaje bez zmian. Wysyłka `SETMINBEEP`
+  działa z debounce, a Reset przywraca 60 km/h.
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

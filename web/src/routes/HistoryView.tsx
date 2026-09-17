@@ -35,7 +35,6 @@ export default function HistoryView() {
         <div>
           <span className="eyebrow">Twoje dane</span>
           <h1>Historia</h1>
-          <p className="page-subtitle">Każdy zjazd zostaje na swoim miejscu.</p>
         </div>
         <span className="history-count"><strong>{runs.length}</strong> zjazdów</span>
       </header>

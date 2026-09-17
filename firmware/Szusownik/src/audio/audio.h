@@ -3,7 +3,8 @@
 #include "../config/config.h"
 
 // Pasywny buzzer piezo (GPIO10, LEDC 8-bit, głośność przez duty).
-// Mapowanie prędkości: <60 cisza; 60-69:1, 70-79:2, 80-89:3, 90-99:4 krótkie;
+// Mapowanie prędkości: poniżej ustawionego progu cisza; 60-69:1, 70-79:2,
+// 80-89:3, 90-99:4 krótkie;
 // >=100: długie + krótkie (1 długi na każde 50 km/h, reszta dziesiątek krótkimi).
 // Głośność adaptacyjna: volLow @60 km/h -> volHigh @120 km/h liniowo,
 // powyżej 120 wartość z 120. Ustawiane z PWA, trzymane w NVS.
@@ -35,10 +36,12 @@ class Beeper {
   uint16_t beepLongMs() const { return beepLongMs_; }
   uint16_t beepGapMs() const { return beepGapMs_; }
   uint16_t signalGapMs() const { return signalGapMs_; }
+  uint8_t minBeepKmh() const { return minBeepKmh_; }
   uint16_t setBeepShortMs(int ms);
   uint16_t setBeepLongMs(int ms);
   uint16_t setBeepGapMs(int ms);
   uint16_t setSignalGapMs(int ms);
+  uint8_t setMinBeepKmh(int kmh);
   // Głośność dla danej prędkości (kotwice 60/120, liniowo, clamp powyżej 120).
   uint8_t volumeFor(float kmh) const;
 
@@ -65,6 +68,7 @@ class Beeper {
   uint16_t beepLongMs_ = SZ_BEEP_LONG_DEFAULT_MS;
   uint16_t beepGapMs_ = SZ_BEEP_GAP_DEFAULT_MS;
   uint16_t signalGapMs_ = SZ_BEEP_INTERVAL_DEFAULT_MS;
+  uint8_t minBeepKmh_ = SZ_BEEP_MIN_KMH_DEFAULT;
   uint8_t playVol_ = 20;  // głośność bieżącej sekwencji
   void buildPattern(float kmh);
   void build120Pattern();

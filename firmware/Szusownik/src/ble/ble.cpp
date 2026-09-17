@@ -71,6 +71,8 @@ void BleFiles::refreshInfo() {
     j += String(beeper_->beepGapMs());
     j += ",\"signalGapMs\":";
     j += String(beeper_->signalGapMs());
+    j += ",\"minBeepKmh\":";
+    j += String(beeper_->minBeepKmh());
   }
   j += "}";
   chrInfo->setValue(j.c_str());
@@ -111,6 +113,18 @@ void BleFiles::reportTiming() {
            beeper_->beepShortMs(), beeper_->beepLongMs(), beeper_->beepGapMs(),
            beeper_->signalGapMs());
   refreshInfo();  // INFO niesie czasy dla PWA
+  setStatus(String(msg));
+  szLogf("BLE: %s", msg);
+}
+
+void BleFiles::reportMinBeep() {
+  if (!beeper_) {
+    setStatus("err:no-beeper");
+    return;
+  }
+  char msg[40];
+  snprintf(msg, sizeof(msg), "beep min=%u", beeper_->minBeepKmh());
+  refreshInfo();
   setStatus(String(msg));
   szLogf("BLE: %s", msg);
 }
@@ -207,6 +221,15 @@ void BleFiles::handleCommand(const String& cmd) {
     if (beeper_) {
       beeper_->setSignalGapMs(cmd.substring(19).toInt());  // feedback: 3 x sygnał 120
       reportTiming();
+    } else {
+      setStatus("err:no-beeper");
+    }
+  } else if (cmd.startsWith("GETMINBEEP")) {
+    reportMinBeep();
+  } else if (cmd.startsWith("SETMINBEEP:")) {
+    if (beeper_) {
+      beeper_->setMinBeepKmh(cmd.substring(11).toInt());
+      reportMinBeep();
     } else {
       setStatus("err:no-beeper");
     }

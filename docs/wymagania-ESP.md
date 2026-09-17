@@ -28,7 +28,8 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 ## 4. Obliczanie prędkości (beeper)
 
 - Prędkość z **Dopplera** (nie z Δ pozycji).
-- Mapowanie prędkość → piknięcia (im szybciej, tym więcej): <60 cisza;
+- Mapowanie prędkość → piknięcia (im szybciej, tym więcej): poniżej ustawionej
+  minimalnej prędkości pikania cisza (domyślnie <60 km/h);
   60–69: 1× krótki, 70–79: 2×, 80–89: 3×, 90–99: 4×; ≥100: długie + krótkie
   (1 długi na każde 50 km/h, reszta dziesiątek krótkimi — np. 120 = 1 długi
   + 2 krótkie, max 3 długie). Sygnał co **1 s**, nieblokujący scheduler.
@@ -62,6 +63,9 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 - Mapowanie głośności na duty LEDC jest kwadratowe zamiast liniowego, aby niskie
   poziomy były praktycznie cichsze; przy ustawieniu 1% duty wynosi 0 w 8-bitowej
   skali. Wartość ustawienia pozostaje logicznym procentem 0..100.
+- Minimalna prędkość pikania jest konfigurowalna z PWA przez `SETMINBEEP` / `GETMINBEEP`,
+  trzymana w NVS jako `minBeep`, zakres 60..120 km/h, domyślnie 60 km/h. Próg tylko
+  wycisza niższe prędkości; nie zmienia liczby tonów dla prędkości, która już pika.
 
 ## 6. Zapis CSV + rotacja plików
 

@@ -7,6 +7,10 @@ import {
   SZ_FREQ_MIN_HZ,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_FREQ_STEP_HZ,
+  SZ_MAX_BEEP_KMH,
+  SZ_MIN_BEEP_DEFAULT_KMH,
+  SZ_MIN_BEEP_KMH,
+  SZ_MIN_BEEP_STEP_KMH,
   SZ_TIMING_GAP_DEFAULT_MS,
   SZ_TIMING_GAP_MAX_MS,
   SZ_TIMING_GAP_MIN_MS,
@@ -34,17 +38,20 @@ export default function SettingsView() {
   const [volume, setVolume] = useState<Volume | null>(null);
   const [frequency, setFrequency] = useState<Freq | null>(null);
   const [timing, setTiming] = useState<Timing | null>(null);
+  const [minBeepKmh, setMinBeepKmh] = useState<number | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const minBeepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (device.state !== "connected") {
       setVolume(null);
       setFrequency(null);
       setTiming(null);
+      setMinBeepKmh(null);
       return;
     }
     let active = true;
@@ -54,6 +61,7 @@ export default function SettingsView() {
       const nextVolume = await device.getVolume();
       let nextFrequency: Freq | null = null;
       let nextTiming: Timing | null = null;
+      let nextMinBeepKmh: number | null = null;
       try {
         nextFrequency = await device.getFrequency();
       } catch {
@@ -64,14 +72,20 @@ export default function SettingsView() {
       } catch {
         nextTiming = null;
       }
-      return { nextVolume, nextFrequency, nextTiming };
+      try {
+        nextMinBeepKmh = await device.getMinBeepKmh();
+      } catch {
+        nextMinBeepKmh = null;
+      }
+      return { nextVolume, nextFrequency, nextTiming, nextMinBeepKmh };
     }
     loadSettings()
-      .then(({ nextVolume, nextFrequency, nextTiming }) => {
+      .then(({ nextVolume, nextFrequency, nextTiming, nextMinBeepKmh }) => {
         if (!active) return;
         setVolume(nextVolume);
         setFrequency(nextFrequency);
         setTiming(nextTiming);
+        setMinBeepKmh(nextMinBeepKmh);
       })
       .catch((caught) => {
         if (active) setSettingsError(caught instanceof Error ? caught.message : String(caught));
@@ -135,6 +149,23 @@ export default function SettingsView() {
       .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
   }
 
+  function changeMinBeepKmh(value: number) {
+    setMinBeepKmh(value);
+    if (minBeepTimer.current) clearTimeout(minBeepTimer.current);
+    minBeepTimer.current = setTimeout(() => {
+      void device.setMinBeepKmh(value)
+        .then(setMinBeepKmh)
+        .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+    }, 600);
+  }
+
+  function testMinBeepKmh(value: number) {
+    if (minBeepTimer.current) clearTimeout(minBeepTimer.current);
+    void device.setMinBeepKmh(value)
+      .then(setMinBeepKmh)
+      .catch((caught) => setSettingsError(caught instanceof Error ? caught.message : String(caught)));
+  }
+
   async function resetVolume() {
     if (!volume) return;
     if (volumeTimer.current) clearTimeout(volumeTimer.current);
@@ -182,6 +213,20 @@ export default function SettingsView() {
     }
   }
 
+  async function resetMinBeepKmh() {
+    if (minBeepKmh === null) return;
+    if (minBeepTimer.current) clearTimeout(minBeepTimer.current);
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      setMinBeepKmh(await device.setMinBeepKmh(SZ_MIN_BEEP_DEFAULT_KMH));
+    } catch (caught) {
+      setSettingsError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
   const connected = device.state === "connected" || device.state === "checking" || device.state === "downloading";
 
   return (
@@ -190,7 +235,6 @@ export default function SettingsView() {
         <div>
           <span className="eyebrow">Połączenie i ustawienia</span>
           <h1>Urządzenie</h1>
-          <p className="page-subtitle">Jedno połączenie. Wszystko pod ręką.</p>
         </div>
         <span className={`status-pill${connected ? " status-pill-connected" : ""}`}><span className="status-dot" /> {connected ? "Połączono" : "Offline"}</span>
       </header>
@@ -247,8 +291,15 @@ export default function SettingsView() {
               <SoundSlider label="Przerwa w sygnale" hint="między piknięciami" value={timing.gap} min={SZ_TIMING_GAP_MIN_MS} max={SZ_TIMING_GAP_MAX_MS} step={SZ_TIMING_GAP_STEP_MS} onChange={(value) => changeTiming("gap", value)} onPreview={(value) => testTiming("gap", value)} suffix=" ms" />
               <SoundSlider label="Przerwa między sygnałami" hint="między wzorami 120 km/h" value={timing.interval} min={SZ_TIMING_INTERVAL_MIN_MS} max={SZ_TIMING_INTERVAL_MAX_MS} step={SZ_TIMING_INTERVAL_STEP_MS} onChange={(value) => changeTiming("interval", value)} onPreview={(value) => testTiming("interval", value)} suffix=" ms" />
            </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.3+, żeby ustawiać czasy sygnału." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
-         </div>
-       </section>
+          </div>
+
+          <div className="settings-card">
+           <div className="settings-card-heading"><div className="settings-icon settings-icon-green"><Icon name="gauge" size={19} /></div><div><h3>Minimalna prędkość pikania</h3><p>Poniżej wybranego progu urządzenie zachowuje ciszę.</p></div><button className="button button-ghost settings-reset" disabled={minBeepKmh === null || settingsBusy} onClick={() => void resetMinBeepKmh()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
+           {minBeepKmh !== null ? <div className="sliders">
+               <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_MIN_BEEP_KMH} max={SZ_MAX_BEEP_KMH} step={SZ_MIN_BEEP_STEP_KMH} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
+            </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.4+, żeby ustawiać minimalną prędkość pikania." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+          </div>
+        </section>
     </div>
   );
 }

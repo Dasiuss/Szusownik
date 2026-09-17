@@ -34,6 +34,7 @@ export interface DeviceInfo {
   beepLongMs?: number;
   beepGapMs?: number;
   signalGapMs?: number;
+  minBeepKmh?: number;
 }
 
 export interface Volume {
@@ -76,6 +77,10 @@ export const SZ_TIMING_INTERVAL_MIN_MS = 100;
 export const SZ_TIMING_INTERVAL_MAX_MS = 5000;
 export const SZ_TIMING_INTERVAL_STEP_MS = 50;
 export const SZ_TIMING_INTERVAL_DEFAULT_MS = 1000;
+export const SZ_MIN_BEEP_KMH = 60;
+export const SZ_MAX_BEEP_KMH = 120;
+export const SZ_MIN_BEEP_STEP_KMH = 1;
+export const SZ_MIN_BEEP_DEFAULT_KMH = 60;
 
 export interface SyncProgress {
   file: string;
@@ -217,6 +222,12 @@ export class SzusownikBle {
     return { short: Number(m[1]), long: Number(m[2]), gap: Number(m[3]), interval: Number(m[4]) };
   }
 
+  private static parseMinBeep(status: string): number {
+    const m = /beep min=(\d+)/.exec(status);
+    if (!m) throw new Error(`Zła odpowiedź minimalnej prędkości pikania: ${status}`);
+    return Number(m[1]);
+  }
+
   /**
    * Częstotliwość buzzera (firmware 1.2+): niezależne tony krótki/długi,
    * 600..1500 Hz. Każdy SETFREQ gra podgląd na urządzeniu
@@ -260,6 +271,18 @@ export class SzusownikBle {
     }[which];
     await this.writeCtrl(`${command}:${v}`);
     return SzusownikBle.parseTiming(await this.readStatus());
+  }
+
+  /** Minimalna prędkość pikania (firmware 1.4+); wzór dla danej prędkości pozostaje bez zmian. */
+  async getMinBeepKmh(): Promise<number> {
+    await this.writeCtrl("GETMINBEEP");
+    return SzusownikBle.parseMinBeep(await this.readStatus());
+  }
+
+  async setMinBeepKmh(value: number): Promise<number> {
+    const v = Math.max(SZ_MIN_BEEP_KMH, Math.min(SZ_MAX_BEEP_KMH, Math.round(value)));
+    await this.writeCtrl(`SETMINBEEP:${v}`);
+    return SzusownikBle.parseMinBeep(await this.readStatus());
   }
 
   /**

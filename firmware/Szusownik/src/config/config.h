@@ -4,7 +4,7 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md.
 
-#define SZ_FW_VERSION "1.3.0-audio"
+#define SZ_FW_VERSION "1.4.0-audio"
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
 #define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude,heading"
 
@@ -13,7 +13,8 @@
 static const float SZ_HYST_KMH = 3.0f;
 
 // Buzzer (pasywny piezo, GPIO10, sterowanie LEDC z głośnością):
-// domyślnie przerwa między sygnałami 1000 ms, cisza <60 km/h. Mapowanie: 60-69:1, 70-79:2, 80-89:3,
+// domyślnie przerwa między sygnałami 1000 ms, cisza poniżej ustawionego progu.
+// Mapowanie: 60-69:1, 70-79:2, 80-89:3,
 // 90-99:4 krótkie; >=100: długie + krótkie (1 długi na każde 50, reszta
 // dziesiątek krótkimi — 120 = 1 długi + 2 krótkie). Im szybciej, tym więcej.
 #define SZ_BEEP_INTERVAL_DEFAULT_MS 1000
@@ -35,7 +36,9 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_BEEP_GAP_DEFAULT_MS 60       // -50% względem MVP1 (było 120)
 #define SZ_BEEP_GAP_MIN_MS 0
 #define SZ_BEEP_GAP_MAX_MS 500
-#define SZ_SILENCE_BELOW_KMH 60.0f
+#define SZ_BEEP_MIN_KMH_DEFAULT 60
+#define SZ_BEEP_MIN_KMH_MIN 60
+#define SZ_BEEP_MIN_KMH_MAX 120
 
 // Głośność adaptacyjna 0..100 (kwadratowe mapowanie na duty LEDC, max 50%).
 // Kotwice: volLow przy 60 km/h, volHigh przy 120 km/h, pomiędzy liniowo,

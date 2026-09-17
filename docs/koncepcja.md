@@ -69,28 +69,29 @@ Dwa główne elementy:
 
 ### Sygnały dźwiękowe
 - Sygnał co **1 s** (konfigurowalny), punkt odniesienia **100 km/h**.
-- Piknięcie = 10 km/h poniżej 100; dźwięk ciągły (200 ms) = powyżej 100.
-- Poniżej **60 km/h** — cisza.
+- Poniżej 100 km/h liczba krótkich piknięć rośnie od 1 do 4 wraz z prędkością;
+  od 100 km/h używane są długie piknięcia oraz krótkie za kolejne dziesiątki.
+- Poniżej ustawionej minimalnej prędkości pikania — cisza (domyślnie poniżej **60 km/h**).
 
 | Prędkość [km/h] | Sygnał |
 |-----------------|--------|
-| < 60            | brak |
-| 60–70           | 4 piknięcia |
-| 70–80           | 3 piknięcia |
-| 80–90           | 2 piknięcia |
-| 90–100          | 1 piknięcie |
-| 100–110         | ciągły |
-| 110–120         | ciągły + 1 piknięcie |
-| 120–130         | ciągły + 2 piknięcia |
-| 130–140         | ciągły + 3 piknięcia |
-| 140–150         | ciągły + 4 piknięcia |
-| 150–160         | 2 × ciągły |
-| 160–170         | 2 × ciągły + 1 piknięcie |
+| < próg          | brak |
+| 60–69           | 1 krótkie piknięcie |
+| 70–79           | 2 krótkie piknięcia |
+| 80–89           | 3 krótkie piknięcia |
+| 90–99           | 4 krótkie piknięcia |
+| 100–109         | 1 długie piknięcie |
+| 110–119         | 1 długie + 1 krótkie |
+| 120–129         | 1 długie + 2 krótkie |
+| 130–139         | 1 długie + 3 krótkie |
+| 140–149         | 1 długie + 4 krótkie |
+| 150–159         | 2 długie |
+| 160–169         | 2 długie + 1 krótkie |
 | …               | … |
 
-- Reguła: poniżej 100 — piknięcia = `(100 − prędkość) / 10`; powyżej 100 — kolejny
-  dźwięk ciągły co **50 km/h** (100 → 1, 150 → 2, 200 → 3…), a piknięcia liczą
-  dziesiątki ponad aktualny próg.
+- Reguła: poniżej 100 — 1/2/3/4 krótkie piknięcia dla przedziałów 60–69/70–79/80–89/90–99;
+  powyżej 100 — kolejne długie piknięcie co **50 km/h** (100 → 1, 150 → 2, 200 → 3…),
+  a krótkie piknięcia liczą dziesiątki ponad aktualnym progiem.
 
 ### Dane i transfer
 - Pola CSV: timestamp (UTC z GPS), lat/lon, prędkość, wysokość, heading.

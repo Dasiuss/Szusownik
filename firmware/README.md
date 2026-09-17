@@ -7,7 +7,7 @@ Moduły (`firmware/Szusownik/src/`):
 - `config/` — piny, stałe, UUID BLE v1, logowanie z timestampem.
 - `gnss/` — pomiar (NEO-M8N, NMEA, autokonfiguracja UBX, adaptacyjne próbkowanie).
 - `storage/` — zapis surowego CSV na microSD, rotacja, FIFO, odczyt do BLE.
-- `audio/` — buzzer piezo (LEDC, głośność adaptacyjna 60→120 km/h, NVS, SETVOL/SETFREQ/SETTIMING z PWA).
+- `audio/` — buzzer piezo (LEDC, próg pikania 60..120 km/h, głośność adaptacyjna 60→120 km/h, NVS, SETVOL/SETFREQ/SETTIMING/SETMINBEEP z PWA).
 - `hud/` — OLED (SPD/MAX/TOTAL, bez REM/mapy/animacji w MVP1).
 - `ble/` — transfer BLE v1 (INFO/CTRL/DATA/STATUS) + CRC32.
 - `miniz/` — vendored kompresor DEFLATE (public domain, patch `TDEFL_LESS_MEMORY=1`).

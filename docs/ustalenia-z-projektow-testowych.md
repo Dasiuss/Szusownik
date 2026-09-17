@@ -139,7 +139,7 @@ Urządzenie powinno:
 
 Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 
-- ruch w górę trwający ponad 30 s rozdziela dwa zjazdy;
+- ruch w górę trwający co najmniej 3 s rozdziela dwa zjazdy (próg testowy dla nagrań z auta);
 - dystans liczyć z kolejnych współrzędnych, najlepiej haversine lub Turf;
 - nachylenie liczyć z różnicy wysokości i dystansu;
 - dystans aktywności to suma dystansów zjazdów, bez wyciągów;

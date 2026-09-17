@@ -15,6 +15,7 @@ void Beeper::begin() {
   beepLongMs_ = audioPrefs.getUShort("beepLong", SZ_BEEP_LONG_DEFAULT_MS);
   beepGapMs_ = audioPrefs.getUShort("beepGap", SZ_BEEP_GAP_DEFAULT_MS);
   signalGapMs_ = audioPrefs.getUShort("signalGap", SZ_BEEP_INTERVAL_DEFAULT_MS);
+  minBeepKmh_ = audioPrefs.getUChar("minBeep", SZ_BEEP_MIN_KMH_DEFAULT);
   audioPrefs.end();
   if (freqShort_ < SZ_FREQ_MIN_HZ || freqShort_ > SZ_FREQ_MAX_HZ)
     freqShort_ = SZ_FREQ_SHORT_DEFAULT;
@@ -28,6 +29,8 @@ void Beeper::begin() {
     beepGapMs_ = SZ_BEEP_GAP_DEFAULT_MS;
   if (signalGapMs_ < SZ_BEEP_INTERVAL_MIN_MS || signalGapMs_ > SZ_BEEP_INTERVAL_MAX_MS)
     signalGapMs_ = SZ_BEEP_INTERVAL_DEFAULT_MS;
+  if (minBeepKmh_ < SZ_BEEP_MIN_KMH_MIN || minBeepKmh_ > SZ_BEEP_MIN_KMH_MAX)
+    minBeepKmh_ = SZ_BEEP_MIN_KMH_DEFAULT;
   pinMode(PIN_BUZZER, OUTPUT);
   ledcAttach(PIN_BUZZER, freqShort_, 8);
   ledcWrite(PIN_BUZZER, 0);
@@ -130,12 +133,23 @@ uint16_t Beeper::setSignalGapMs(int ms) {
   return signalGapMs_;
 }
 
+uint8_t Beeper::setMinBeepKmh(int kmh) {
+  if (kmh < SZ_BEEP_MIN_KMH_MIN) kmh = SZ_BEEP_MIN_KMH_MIN;
+  if (kmh > SZ_BEEP_MIN_KMH_MAX) kmh = SZ_BEEP_MIN_KMH_MAX;
+  minBeepKmh_ = (uint8_t)kmh;
+  audioPrefs.begin("szusownik", false);
+  audioPrefs.putUChar("minBeep", minBeepKmh_);
+  audioPrefs.end();
+  playTimingPreview();
+  return minBeepKmh_;
+}
+
 void Beeper::buildPattern(float kmh) {
   seqLen_ = 0;
   seqIdx_ = 0;
   playVol_ = volumeFor(kmh);
   patternLoaded_ = true;
-  if (kmh < SZ_SILENCE_BELOW_KMH) return;
+  if (kmh < minBeepKmh_) return;
   uint8_t cont = 0, beeps = 0;
   if (kmh < 100.0f) {
     // Im szybciej, tym więcej: 60-69:1, 70-79:2, 80-89:3, 90-99:4.
@@ -146,19 +160,17 @@ void Beeper::buildPattern(float kmh) {
     beeps = (uint8_t)(((int)kmh % 50) / 10);
   }
   for (uint8_t i = 0; i < cont && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {freqLong_, beepLongMs_, 0};
+    seq_[seqLen_++] = {freqLong_, beepLongMs_, beepGapMs_};
   }
   for (uint8_t i = 0; i < beeps && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {freqShort_, beepShortMs_, 0};
+    seq_[seqLen_++] = {freqShort_, beepShortMs_, beepGapMs_};
   }
-  for (uint8_t i = 0; i + 1 < seqLen_; i++) {
-    seq_[i].gapAfter = beepGapMs_;
-  }
+  if (seqLen_ > 0) seq_[seqLen_ - 1].gapAfter = 0;
 }
 
 void Beeper::build120Pattern() {
   seqLen_ = 0;
-  seq_[seqLen_++] = {freqLong_, beepLongMs_, 0};
+  seq_[seqLen_++] = {freqLong_, beepLongMs_, beepGapMs_};
   seq_[seqLen_++] = {freqShort_, beepShortMs_, beepGapMs_};
   seq_[seqLen_++] = {freqShort_, beepShortMs_, 0};
   seqIdx_ = 0;

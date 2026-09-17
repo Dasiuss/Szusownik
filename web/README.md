@@ -12,7 +12,7 @@ Struktura `src/`:
 
 - `lib/csv.ts` — parsowanie + walidacja schematu CSV z urządzenia.
 - `lib/geo.ts` — haversine, średnie ruchome, nachylenie (defaulty z wymagań-PWA §6).
-- `lib/runs.ts` — wzbogacanie próbek, cięcie zjazdów (podjazd >30 s), statystyki dnia.
+- `lib/runs.ts` — wzbogacanie próbek, cięcie zjazdów (podjazd >=3 s), statystyki dnia.
 - `lib/db.ts` — Dexie/IndexedDB, schemat v2 (surowe CSV, zjazdy i metadane).
 - `lib/data.ts` — seed demo, grupowanie dni, materializacja zjazdów i lokalne operacje danych.
 - `lib/ble.ts` — transfer BLE i sprawdzanie nowych plików bez rozłączania sesji.
