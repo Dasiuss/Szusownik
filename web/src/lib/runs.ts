@@ -55,6 +55,8 @@ const UPHILL_TREND_EPSILON_M = 0.05;
  * Cięcie na zjazdy v1: ciągły ruch W GÓRĘ osiągający co najmniej 5 m
  * rozdziela dwa zjazdy (wymagania-PWA §6). Wysokość jest już wygładzona,
  * więc próg dotyczy skumulowanego wzrostu, a epsilon tylko trendu między próbkami.
+ * Próg jest wykrywany na końcu podjazdu, ale granica trafia na jego początek,
+ * dzięki czemu poprzedni zjazd kończy się przed wyciągiem.
  */
 export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_GAIN_M): Run[] {
   const cuts: number[] = [0];
@@ -79,7 +81,7 @@ export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_G
       if (climbStart < 0) climbStart = i - 1;
       const climbGain = enriched[i].altSm - enriched[climbStart].altSm;
       if (climbGain >= uphillGainM) {
-        cuts.push(i + 1);
+        if (climbStart > cuts[cuts.length - 1]) cuts.push(climbStart);
         climbStart = -1;
         waitingForDescent = true;
       }

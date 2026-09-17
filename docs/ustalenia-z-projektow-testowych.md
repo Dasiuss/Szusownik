@@ -140,7 +140,8 @@ Urządzenie powinno:
 Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 
 - skumulowany wzrost wygładzonej wysokości o co najmniej 5 m rozdziela dwa zjazdy
-  (próg testowy dla nagrań z auta);
+  (próg testowy dla nagrań z auta), a granica jest początkiem tego wzrostu, nie jego
+  końcem; w ten sposób poprzedni zjazd kończy się przed wyciągiem;
 - dystans liczyć z kolejnych współrzędnych, najlepiej haversine lub Turf;
 - nachylenie liczyć z różnicy wysokości i dystansu;
 - dystans aktywności to suma dystansów zjazdów, bez wyciągów;

@@ -57,7 +57,9 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 ## 6. Przetwarzanie danych (wycinanie zjazdów)
 
 - **Reguła cięcia testowa:** skumulowany wzrost wygładzonej wysokości o **>= 5 m**
-  rozdziela dwa zjazdy. Drobne zmiany wysokości między próbkami są ignorowane.
+  rozdziela dwa zjazdy, ale granica jest ustawiana na początku wykrytego wzrostu;
+  poprzedni zjazd kończy się przed odcinkiem wyciągu, a kolejny zaczyna się od niego.
+  Drobne zmiany wysokości między próbkami są ignorowane.
 - Dla każdego zjazdu: dystans (haversine z lat/lon), max prędkość, max nachylenie.
 - **Nachylenie w stopniach**, liczone z **Δwysokości / Δdystansu**.
 - „Dystans w dół" = suma dystansów zjazdów (bez podjazdów/wyciągów).
