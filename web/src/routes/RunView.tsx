@@ -60,7 +60,7 @@ export default function RunView() {
     return run.samples.map((sample) => ({
       d: (sample.cumDistM - firstDistance) / 1000,
       v: Math.round(sample.speedSm * 10) / 10,
-      g: Math.round(sample.gradeSm * 10) / 10,
+      h: Math.round(sample.altSm * 10) / 10,
     }));
   }, [run]);
 
@@ -135,8 +135,8 @@ export default function RunView() {
 
       <section className="chart-card">
         <div className="chart-heading">
-          <div><span className="eyebrow">Przekrój stoku</span><h2>Nachylenie na trasie</h2></div>
-          <span className="chart-legend legend-grade"><i /> nachylenie</span>
+          <div><span className="eyebrow">Profil wysokości</span><h2>Wysokość na trasie</h2></div>
+          <span className="chart-legend legend-altitude"><i /> wysokość</span>
         </div>
         <div className="chart-wrap">
           <ResponsiveContainer height="100%" width="100%">
@@ -145,11 +145,11 @@ export default function RunView() {
               <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
               <YAxis axisLine={false} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
-              <Area baseValue={0} dataKey="g" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
+              <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <div className="chart-axis-label">Dystans [km] · ujemne = w dół</div>
+        <div className="chart-axis-label">Dystans [km] · wysokość [m]</div>
       </section>
     </div>
   );

@@ -32,15 +32,17 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - Po połączeniu PWA automatycznie sprawdza listę plików. Nowe pliki są zapowiadane kartą
   na górze widoku „Dzisiaj”; użytkownik zatwierdza pobranie wszystkich jednym kliknięciem.
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
-- **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie.
+- **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie; najnowszy zjazd jest pierwszy.
+- Kafelek **„Cały dzień”** otwiera połączone statystyki i wykresy wszystkich zjazdów tego dnia.
 - Klik w zjazd → ekran szczegółów.
 - Historia grupuje zjazdy według lokalnej strefy czasowej telefonu. Zjazd może mieć krótką,
   edytowalną nazwę; użytkownik może usunąć pojedynczy zjazd.
 
 ## 5. Ekran szczegółów zjazdu
 
-- Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **nachylenie (przekrój stoku)**.
-- Na wykresie nachylenia wartości ujemne oznaczają jazdę w dół, a dodatnie podjazd.
+- Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **zmierzona wysokość**.
+- Wykres wysokości pokazuje wygładzoną wysokość w metrach, dzięki czemu spadki wysokości
+  wizualnie odpowiadają zjazdom stoku.
 - Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
   jednocześnie.
 - Oś prędkości **0-based**: domyślnie 0–100 km/h; przy przekroczeniu 100 — skala 0–150 km/h,

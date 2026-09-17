@@ -19,7 +19,8 @@ Struktura `src/`:
 - `lib/device.tsx` — wspólna sesja BLE, reconnect i limit bezczynności 10 minut.
 - `routes/DayView.tsx` — karta nowych plików, statystyki dnia i lista zjazdów.
 - `routes/HistoryView.tsx` — historia aktywności pogrupowana po lokalnych dniach.
-- `routes/RunView.tsx` — nazwa, usuwanie i wykresy prędkość/nachylenie vs dystans.
+- `routes/RunView.tsx` — nazwa, usuwanie i wykresy prędkość/wysokość vs dystans.
+- `routes/DaySummaryView.tsx` — połączone statystyki i wykresy całego dnia.
 - `routes/SettingsView.tsx` — status urządzenia oraz ustawienia dźwięku.
 
 Komendy (katalog `web/`):

@@ -173,7 +173,7 @@ export async function getAllRuns(): Promise<StoredRun[]> {
 
 export async function getRunsForDay(dayKey: string): Promise<StoredRun[]> {
   const runs = await db.runs.where("dayKey").equals(dayKey).toArray();
-  return runs.sort((a, b) => Date.parse(a.startT) - Date.parse(b.startT));
+  return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
 }
 
 export async function getDayKeys(): Promise<string[]> {

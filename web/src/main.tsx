@@ -4,6 +4,7 @@ import { createHashRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
 import App from "./App.tsx";
 import DayView from "./routes/DayView.tsx";
+import DaySummaryView from "./routes/DaySummaryView.tsx";
 import HistoryView from "./routes/HistoryView.tsx";
 import RunView from "./routes/RunView.tsx";
 import SettingsView from "./routes/SettingsView.tsx";
@@ -15,6 +16,7 @@ const router = createHashRouter([
     element: <App />,
     children: [
       { index: true, element: <DayView /> },
+      { path: "dzien/:dayKey/calosc", element: <DaySummaryView /> },
       { path: "dzien/:dayKey", element: <DayView /> },
       { path: "historia", element: <HistoryView /> },
       { path: "zjazd/:runId", element: <RunView /> },

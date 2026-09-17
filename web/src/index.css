@@ -107,6 +107,17 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .run-time { display: block; margin-top: 3px; color: #82979a; font-size: 11px; }
 .run-card-stats { display: flex; gap: 14px; margin-top: 14px; padding-top: 11px; border-top: 1px solid #edf3f1; color: #82979a; font-size: 10px; }
 .run-card-stats b { color: #365d60; font-size: 12px; }
+.day-summary-card { display: block; padding: 16px; border: 1px solid #b9ddd0; border-radius: 19px; color: #fff; background: linear-gradient(135deg, #286064, #17363b); box-shadow: 0 12px 26px #2860642b; transition: transform .15s ease, box-shadow .15s ease; }
+.day-summary-card:active { transform: scale(.99); }
+.day-summary-topline { display: flex; align-items: center; gap: 11px; }
+.day-summary-icon { display: grid; width: 37px; height: 37px; flex: 0 0 auto; place-items: center; border-radius: 12px; color: #d7f1e5; background: #4a8d7d; }
+.day-summary-copy { min-width: 0; flex: 1; }
+.day-summary-copy .eyebrow { color: #a9d2c2; }
+.day-summary-copy strong { display: block; margin-top: 2px; font-size: 16px; }
+.day-summary-copy p { margin-top: 3px; color: #b6d0ca; font-size: 11px; }
+.day-summary-topline > svg { color: #a9d2c2; }
+.day-summary-stats { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 15px; padding-top: 11px; border-top: 1px solid #ffffff24; color: #b6d0ca; font-size: 10px; }
+.day-summary-stats b { color: #fff; font-size: 12px; }
 .empty-card { display: grid; justify-items: center; gap: 8px; padding: 34px 18px; border: 1px dashed #cbded9; border-radius: 21px; color: #71858a; background: #f6fbf9; text-align: center; }
 .empty-card-large { min-height: 250px; align-content: center; }
 .empty-icon { display: grid; width: 56px; height: 56px; place-items: center; margin-bottom: 4px; border-radius: 18px; color: #4b9276; background: #e4f3ec; }
@@ -145,7 +156,7 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .chart-heading h2 { font-size: 16px; }
 .chart-legend { display: inline-flex; align-items: center; gap: 5px; color: #82979a; font-size: 10px; white-space: nowrap; }
 .chart-legend i { width: 7px; height: 7px; border-radius: 50%; background: #ed7657; }
-.legend-grade i { background: #358866; }
+.legend-altitude i { background: #358866; }
 .chart-wrap { height: 220px; margin-top: 12px; }
 .chart-axis-label { padding: 2px 38px 0; color: #9aabab; font-size: 9px; text-align: right; }
 

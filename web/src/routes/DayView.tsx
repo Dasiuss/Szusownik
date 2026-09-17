@@ -74,12 +74,22 @@ export default function DayView() {
               {isToday && <Link className="text-link" to="/historia">Historia <Icon name="chevron" size={16} /></Link>}
             </div>
             {stats.runs.length > 0 ? (
-              <div className="run-list">
+              <>
+                <Link className="day-summary-card" to={`/dzien/${selectedDayKey}/calosc`}>
+                  <div className="day-summary-topline">
+                    <div className="day-summary-icon"><Icon name="mountain" size={20} /></div>
+                    <div className="day-summary-copy"><span className="eyebrow">Podsumowanie</span><strong>Cały dzień</strong><p>Połączone wykresy wszystkich zjazdów</p></div>
+                    <Icon name="chevron" size={20} />
+                  </div>
+                  <div className="day-summary-stats"><span><b>{stats.runs.length}</b> zjazdów</span><span><b>{formatDistance(stats.downhillM)}</b> w dół</span><span><b>{stats.maxSpeed.toFixed(0)}</b> km/h max</span></div>
+                </Link>
+                <div className="run-list">
                 {stats.runs.map((run, index) => {
                   const stored = runs[index];
                   return stored ? <RunCard key={run.id} run={run} stored={stored} index={index} /> : null;
                 })}
-              </div>
+                </div>
+              </>
             ) : (
               <EmptyActivity isToday={isToday} />
             )}
