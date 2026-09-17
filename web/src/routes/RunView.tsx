@@ -78,6 +78,7 @@ export default function RunView() {
   }
 
   const yMax = run.maxSpeed > 100 ? 150 : 100;
+  const altitudeDomain = getAltitudeDomain(chartData);
 
   return (
     <div className="page-stack detail-page">
@@ -143,7 +144,7 @@ export default function RunView() {
             <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
               <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
-              <YAxis axisLine={false} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
+              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={38} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
@@ -157,4 +158,12 @@ export default function RunView() {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function getAltitudeDomain(data: Array<{ h: number }>): [number, number] {
+  const values = data.map((point) => point.h);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const padding = Math.max((max - min) * 0.12, 1);
+  return [Math.floor((min - padding) * 10) / 10, Math.ceil((max + padding) * 10) / 10];
 }
