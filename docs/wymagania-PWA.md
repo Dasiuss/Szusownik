@@ -45,6 +45,12 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   wizualnie odpowiadają zjazdom stoku.
 - Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
   jednocześnie.
+- Na osi X stosować czytelne, zaokrąglone przedziały dystansu: co 250 m dla tras poniżej
+  2 km, co 500 m poniżej 6 km i co 1 km dla dłuższych tras; zakres osi zaokrąglać do
+  pełnego przedziału.
+- Na widoku „Cały dzień” oznaczać granice zjazdów pionowymi liniami na wykresach oraz
+  pokazywać pod nimi klikalny pasek segmentów o szerokości proporcjonalnej do dystansu;
+  kliknięcie segmentu otwiera szczegóły zjazdu.
 - Oś prędkości **0-based**: domyślnie 0–100 km/h; przy przekroczeniu 100 — skala 0–150 km/h,
   a zakres **100–150 na lekko czerwonym tle** (wyróżnienie).
 

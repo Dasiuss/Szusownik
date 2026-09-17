@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { Icon } from "../components/Icon.tsx";
+import { getDistanceAxis } from "../lib/chart.ts";
 import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, renameRun } from "../lib/data.ts";
 import { db, type StoredRun } from "../lib/db.ts";
 
@@ -79,6 +80,7 @@ export default function RunView() {
 
   const yMax = run.maxSpeed > 100 ? 150 : 100;
   const altitudeDomain = getAltitudeDomain(chartData);
+  const distanceAxis = getDistanceAxis(run.distanceM / 1000);
 
   return (
     <div className="page-stack detail-page">
@@ -121,10 +123,10 @@ export default function RunView() {
         </div>
         <div className="chart-wrap">
           <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
-              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
+              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
               <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
@@ -141,10 +143,10 @@ export default function RunView() {
         </div>
         <div className="chart-wrap">
           <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
-              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={38} />
+              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
@@ -158,6 +160,10 @@ export default function RunView() {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatDistanceTick(value: number): string {
+  return Number(value.toFixed(2)).toString();
 }
 
 function getAltitudeDomain(data: Array<{ h: number }>): [number, number] {

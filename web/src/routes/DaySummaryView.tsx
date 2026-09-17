@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceLine,
   ReferenceArea,
   ResponsiveContainer,
   Tooltip,
@@ -12,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { Icon } from "../components/Icon.tsx";
+import { getDistanceAxis } from "../lib/chart.ts";
 import { formatDayLabel, formatDistance, formatDuration, getRunsForDay } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
@@ -20,6 +22,12 @@ interface ChartPoint {
   d: number;
   v: number;
   h: number;
+}
+
+interface RunSegment {
+  endD: number;
+  index: number;
+  run: StoredRun;
 }
 
 export default function DaySummaryView() {
@@ -51,6 +59,7 @@ export default function DaySummaryView() {
     () => [...runs].sort((a, b) => Date.parse(a.startT) - Date.parse(b.startT)),
     [runs],
   );
+  const segments = useMemo(() => buildRunSegments(chronologicalRuns), [chronologicalRuns]);
   const chartData = useMemo(() => buildChartData(chronologicalRuns), [chronologicalRuns]);
   const maxSpeed = runs.reduce((max, run) => Math.max(max, run.maxSpeed), 0);
   const distanceM = runs.reduce((sum, run) => sum + run.distanceM, 0);
@@ -70,6 +79,7 @@ export default function DaySummaryView() {
 
   const yMax = maxSpeed > 100 ? 150 : 100;
   const altitudeDomain = getAltitudeDomain(chartData);
+  const distanceAxis = getDistanceAxis((segments.at(-1)?.endD ?? 0));
   const startT = chronologicalRuns[0]?.startT ?? runs[0].startT;
   const endT = chronologicalRuns.at(-1)?.endT ?? runs[0].endT;
 
@@ -101,12 +111,13 @@ export default function DaySummaryView() {
         </div>
         <div className="chart-wrap">
           <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
-              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={32} />
+              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
+              {segments.slice(0, -1).map((segment) => <ReferenceLine key={`speed-${segment.run.id}`} stroke="#8fb7ac" strokeDasharray="4 4" x={segment.endD} />)}
               <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
@@ -121,19 +132,49 @@ export default function DaySummaryView() {
         </div>
         <div className="chart-wrap">
           <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: -16, right: 8, top: 10, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={(value: number) => value.toFixed(1)} tickLine={false} />
-              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} width={38} />
+              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
+              {segments.slice(0, -1).map((segment) => <ReferenceLine key={`altitude-${segment.run.id}`} stroke="#8fb7ac" strokeDasharray="4 4" x={segment.endD} />)}
               <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
         <div className="chart-axis-label">Dystans [km] · wysokość [m]</div>
       </section>
+
+      <section className="run-segments-card" aria-label="Podział trasy na zjazdy">
+        <div className="run-segments-heading">
+          <div><span className="eyebrow">Podział trasy</span><h2>Kliknij zjazd, aby otworzyć szczegóły</h2></div>
+        </div>
+        <div className="run-segments-scroll">
+          <div className="run-segments">
+            {segments.map((segment) => (
+              <Link
+                className="run-segment"
+                key={segment.run.id}
+                style={{ flexGrow: Math.max(segment.run.distanceM, 1) }}
+                to={`/zjazd/${encodeURIComponent(segment.run.id)}`}
+              >
+                <strong>Zjazd {segment.index + 1}</strong>
+                <span>{formatClock(segment.run.startT)} · {formatDistance(segment.run.distanceM)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
+}
+
+function buildRunSegments(runs: StoredRun[]): RunSegment[] {
+  let distanceOffsetM = 0;
+  return runs.map((run, index) => {
+    distanceOffsetM += run.distanceM;
+    return { endD: distanceOffsetM / 1000, index, run };
+  });
 }
 
 function buildChartData(runs: StoredRun[]): ChartPoint[] {
@@ -160,6 +201,14 @@ function formatClockRange(startT: string, endT: string): string {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function formatDistanceTick(value: number): string {
+  return Number(value.toFixed(2)).toString();
 }
 
 function getAltitudeDomain(data: Array<{ h: number }>): [number, number] {
