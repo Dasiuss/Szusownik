@@ -111,6 +111,11 @@ CSV      HUD             |
   jazdy wyciągiem w dół, potem liczba wyciągów, ostrzeżenia, trudność, transfery
   i dopiero długość.
 - Cache'ować surową odpowiedź Overpass i ponownie przetwarzać ją lokalnie.
+- Zakres pobierania danych mapowych ograniczyć do Sölden, ale nie blokować
+  użytkownikowi przesuwania widoku poza ten zakres.
+- Dane wektorowe tras i wyciągów przechowywać lokalnie przez 8 dni.
+- Panel wyniku routingu ma być mały i pokazywać łączny dystans oraz kolorową
+  sekwencję tras i wyciągów, bez dodatkowych statystyk.
 
 ## 4. Integracja z istniejącą koncepcją Szusownika
 
@@ -151,11 +156,14 @@ Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 
 ### Pozycja na mapie
 
-`MapyTest` nie ma jeszcze GPS. Do Szusownika trzeba dodać:
+`MapyTest` nie ma jeszcze GPS. W Szusowniku:
 
-- `navigator.geolocation.watchPosition` dla pozycji telefonu, jeśli telefon ma
-  być źródłem bieżącej pozycji;
-- albo pozycję z pliku/urządzenia, jeśli dokładniejszy GNSS jest źródłem głównym;
+- `navigator.geolocation.watchPosition` dostarcza bieżącą pozycję telefonu,
+  rysowaną jako niebieska kropka;
+- bieżąca pozycja telefonu jest domyślnym początkiem routingu, ale użytkownik
+  może wskazać inny punkt startowy;
+- ostatnie pięć minut próbek z plików jest rysowane jako surowy ślad względem
+  czasu telefonu, bez map-matchingu;
 - zapis śladu lokalnie;
 - dopasowanie śladu do geometrii tras;
 - określenie pokrycia trasy i zaliczenia przejazdu.

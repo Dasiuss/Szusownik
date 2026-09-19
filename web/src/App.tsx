@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Icon } from "./components/Icon.tsx";
 import { ensureLocalData } from "./lib/data.ts";
 import { DeviceProvider } from "./lib/device.tsx";
 
 export default function App() {
+  const location = useLocation();
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
@@ -42,7 +43,7 @@ export default function App() {
   return (
     <DeviceProvider>
       <div className="app-shell">
-        <main className="app-main">
+        <main className={`app-main${location.pathname === "/mapa" ? " app-main-map" : ""}`}>
           <div className="page-container">
             <Outlet />
           </div>
@@ -50,6 +51,7 @@ export default function App() {
         <nav className="bottom-nav" aria-label="Główna nawigacja">
           <NavItem to="/" end icon="activity" label="Dzisiaj" />
           <NavItem to="/historia" icon="archive" label="Historia" />
+          <NavItem to="/mapa" icon="map" label="Mapa" />
           <NavItem to="/urzadzenie" icon="settings" label="Urządzenie" />
         </nav>
       </div>
@@ -57,7 +59,7 @@ export default function App() {
   );
 }
 
-function NavItem({ to, end, icon, label }: { to: string; end?: boolean; icon: "activity" | "archive" | "settings"; label: string }) {
+function NavItem({ to, end, icon, label }: { to: string; end?: boolean; icon: "activity" | "archive" | "map" | "settings"; label: string }) {
   return (
     <NavLink className={({ isActive }) => `nav-item${isActive ? " nav-item-active" : ""}`} end={end} to={to}>
       <Icon name={icon} size={21} />

@@ -25,19 +25,20 @@ algorytmów tylko dlatego, że zmieni się język lub podział komponentów.
 | Overpass | `https://overpass-api.de/api/interpreter` | JSON | trasy, wyciągi, relacje ośrodków |
 | MapLibre demo fonts | `https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf` | glyphs | etykiety |
 
-Zakres testowy Sölden:
+Zakres pobierania danych dla Sölden:
 
 ```js
 [10.75, 46.85, 11.05, 47.1] // west, south, east, north
 ```
 
-Bounds są ustawione na źródłach raster i DEM. MapLibre nie pobiera kafelków poza
-obszarem, ale mapa nie ma `maxBounds` ani `minZoom`: użytkownik może przesuwać
-widok dalej, tylko zobaczy tło/fog.
+Bounds są ustawione na źródłach raster i DEM i ograniczają pobieranie danych do
+obszaru Sölden. Nie są ograniczeniem interfejsu mapy: mapa celowo nie ma
+`maxBounds`, więc użytkownik może swobodnie przesuwać widok dalej, tylko zobaczy
+tło/fog poza obszarem danych.
 
 Konfiguracja referencyjna:
 
-- środek `[10.977123714520985, 46.95802633395613]`;
+- początkowy środek kamery `[10.977123714520985, 46.95802633395613]`;
 - zoom desktop `13`, telefon `12` przy breakpoint `768px`;
 - pitch `40`, bearing `-90`, max pitch `85`, max zoom `19`;
 - terrain exaggeration `0.6`;
@@ -265,8 +266,10 @@ benchmarku, żeby nie zmienić reguł wyboru trasy.
 - biała obwódka;
 - osobne etykiety nadpisujące kolizje zwykłych etykiet.
 
-Panel pokazuje kolejność tras i wyciągów, liczbę wyciągów, liczbę zjazdów
-wyciągiem w dół i długość całkowitą. Panel jest domyślnie zwinięty.
+Panel wyniku jest mały i pokazuje przede wszystkim łączny dystans oraz sekwencję
+przejazdu, na przykład `[8 km] 12 -> Giggijochbahn -> 15 -> 16`. Numery tras
+mają kolory odpowiadające trudności, a wyciągi są wyróżnione osobnym kolorem.
+Panel nie pokazuje dodatkowych statystyk routingu.
 
 Menu:
 
@@ -283,7 +286,7 @@ Cache Overpass:
 
 ```text
 key: maptest:ski-data:v2
-TTL: 24 h
+TTL: 8 dni
 storage: localStorage
 ```
 
@@ -298,16 +301,18 @@ Cache przechowuje surową odpowiedź Overpass, nie gotowy GeoJSON. Po uruchomien
 jest ponownie normalizowana. Zmiana query albo formatu wymaga podbicia wersji
 klucza.
 
-Sama mapa nie ma jeszcze service workera. PWA jest instalowalne, ale nie daje
-pełnego offline dla map i danych sieciowych. Szusownik powinien rozdzielić:
+Ośmiodniowy TTL dotyczy wektorowych danych tras i wyciągów z Overpass. Kafelkowy
+podkład i DEM mają osobną politykę cache, ponieważ nie są tym samym zbiorem danych.
+Sama mapa nie ma jeszcze pełnego cache kafelków. PWA jest instalowalne, ale nie
+daje pełnego offline dla map i danych sieciowych. Szusownik powinien rozdzielić:
 
 - offline dane użytkownika i ostatni znany model tras;
 - opcjonalny cache kafelków;
 - jawny komunikat, kiedy mapa/routing działa na danych nieaktualnych.
 
-## 9. GPS i map-matching - czego jeszcze nie ma
+## 9. GPS, ślad i map-matching
 
-W `MapyTest` nie ma:
+W referencyjnym `MapyTest` nie ma:
 
 - `navigator.geolocation`;
 - `watchPosition`;
@@ -315,6 +320,17 @@ W `MapyTest` nie ma:
 - automatycznego dopasowania punktu do trasy;
 - zaliczania trasy;
 - statystyk pokrycia.
+
+W Szusowniku bieżąca pozycja mapy pochodzi bezpośrednio z telefonu przez
+`navigator.geolocation.watchPosition` i jest rysowana jako niebieska kropka.
+Domyślnie bieżąca pozycja telefonu jest początkiem routingu, ale użytkownik może
+zmienić punkt startowy ręcznie. Odmowa uprawnień lub brak sygnału GPS nie blokuje
+mapy ani routingu z ręcznie wskazanych punktów.
+
+Mapa pokazuje również zapisany ślad z ostatnich pięciu minut czasu telefonu.
+Są to próbki z plików, których timestamp mieści się w przedziale od `now - 5 min`
+do `now`. Ślad jest rysowany bez map-matchingu, bez przypisywania go do tras i
+nie zastępuje niebieskiej kropki bieżącej pozycji.
 
 Planowana ścieżka implementacji:
 
@@ -343,7 +359,7 @@ Dobre decyzje do zachowania:
 
 - worker MapLibre;
 - bounds źródeł;
-- cache 24 h;
+- cache 8 dni;
 - osobne źródła tras i wyciągów;
 - szerokie hit-area zamiast skomplikowanych zapytań;
 - bbox przed dokładnym porównaniem segmentów;

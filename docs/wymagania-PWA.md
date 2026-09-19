@@ -13,7 +13,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 - Maksymalizacja przestrzeni na ekranie; **bez nazwy aplikacji w nagłówkach**.
 - **Język PL**. Jednostki i formaty: prędkość **km/h**, dystans **km**, czas **min:sec**, zegar **24 h**.
-- UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Urządzenie**.
+- UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Mapa / Urządzenie**.
 - Kierunek wizualny: jasny outdoor, wysoki kontrast i szybki odczyt wyników.
 
 ## 3. Auth i użytkownicy

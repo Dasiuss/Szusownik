@@ -171,6 +171,11 @@ export async function getAllRuns(): Promise<StoredRun[]> {
   return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
 }
 
+export async function getAllStoredSamples(): Promise<Sample[]> {
+  const files = await db.files.toArray();
+  return files.flatMap((file) => parseDeviceCsv(file.raw));
+}
+
 export async function getRunsForDay(dayKey: string): Promise<StoredRun[]> {
   const runs = await db.runs.where("dayKey").equals(dayKey).toArray();
   return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
