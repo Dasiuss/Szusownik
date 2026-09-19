@@ -1,38 +1,96 @@
-import { ROUTE_SNAP_RADIUS_M, type Position, type SkiLineFeature } from "./mapData.ts";
+import { ROUTE_SNAP_RADIUS_M, type Position, type SkiLineFeature, type SkiProperties } from "./mapData.ts";
 
 const METERS_PER_DEGREE = 111320;
-const ELEVATION_TOLERANCE_M = 15;
+const ROUTE_CONNECT_RADIUS_M = 100;
+const ROUTE_ELEVATION_TOLERANCE_M = 15;
 
-interface RouteNode {
-  id: string;
+type RouteKind = "piste" | "lift";
+type BBox = [number, number, number, number];
+type XY = [number, number];
+export type RouteCost = [number, number, number, number, number, number];
+
+interface RouteSegment {
+  start: Position;
+  end: Position;
+  location: number;
+  length: number;
+  bbox: BBox;
+}
+
+interface NormalizedRouteFeature {
+  uid: string;
+  kind: RouteKind;
+  properties: SkiProperties;
+  coordinates: Position[];
+  segments: RouteSegment[];
+  bbox: BBox;
+  length: number;
+}
+
+interface RoutePoint {
   coordinate: Position;
-  featureUid?: string;
-  feature?: SkiLineFeature;
+  distance: number;
+  location: number;
+}
+
+interface RoutePointRecord {
+  coordinate: Position;
+  location: number;
+  featureUid: string;
+  elevation: number | null;
+  endpoint?: boolean;
+}
+
+interface ExtraPoint {
+  id: string;
+  uid: string;
+  coordinate: Position;
+  location: number;
+}
+
+interface ConnectionSpec {
+  sourcePoint: RoutePointRecord;
+  targetPoint: RoutePointRecord;
+  distance: number;
+}
+
+interface RouteGraphNode {
+  coordinate: Position;
   elevation: number | null;
 }
 
-interface RouteEdge {
+interface RouteGraphEdge {
   to: string;
-  distance: number;
+  featureUid: string | null;
+  geometry: Position[];
   kind: "piste" | "lift" | "connection";
-  feature?: SkiLineFeature;
-  downhillLiftCount: number;
+  distance: number;
+  transferDistance: number;
+  blackDistance: number;
+  ungroomedDistance: number;
   liftCount: number;
-  warningDistance: number;
-  difficultDistance: number;
-  connectionDistance: number;
+  downhillLiftCount: number;
 }
 
-interface CandidatePoint {
-  feature: SkiLineFeature;
-  segmentIndex: number;
+interface RouteGraph {
+  nodes: Map<string, RouteGraphNode>;
+  adjacency: Map<string, RouteGraphEdge[]>;
+  extraNodeIds: Record<string, string | undefined>;
+}
+
+interface GraphRoute {
+  featureUids: string[];
+  steps: string[];
+  edges: RouteGraphEdge[];
+  cost: RouteCost;
+}
+
+export interface SnappedRoutePoint {
+  uid: string;
+  featureUid: string;
   coordinate: Position;
   distance: number;
-  fraction: number;
-}
-
-interface Cost {
-  values: [number, number, number, number, number, number];
+  location: number;
 }
 
 export interface RouteSequenceItem {
@@ -44,12 +102,13 @@ export interface RouteSequenceItem {
 
 export interface RouteResult {
   distanceM: number;
+  cost: RouteCost;
   sequence: RouteSequenceItem[];
   segments: {
     type: "FeatureCollection";
     features: Array<{
       type: "Feature";
-      properties: { kind: "piste" | "lift" | "connection"; color: string };
+      properties: { kind: "piste" | "lift" | "connection"; color: string; label?: string };
       geometry: { type: "LineString"; coordinates: Position[] };
     }>;
   };
@@ -57,131 +116,587 @@ export interface RouteResult {
   end: Position;
 }
 
+type ElevationProvider = ((coordinate: Position) => number | null | undefined) | undefined;
+
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
 }
 
-function distanceM(a: Position, b: Position): number {
-  const lat = toRadians((a[1] + b[1]) / 2);
-  const x = (b[0] - a[0]) * METERS_PER_DEGREE * Math.cos(lat);
+function longitudeScale(latitude: number): number {
+  return METERS_PER_DEGREE * Math.max(Math.cos(toRadians(latitude)), 0.1);
+}
+
+function coordinateDistance(a: Position, b: Position): number {
+  const latitude = (a[1] + b[1]) / 2;
+  const x = (b[0] - a[0]) * longitudeScale(latitude);
   const y = (b[1] - a[1]) * METERS_PER_DEGREE;
-  return Math.sqrt(x * x + y * y);
+  return Math.hypot(x, y);
 }
 
-function projectPoint(point: Position, start: Position, end: Position): { coordinate: Position; fraction: number; distance: number } {
-  const lat = toRadians(point[1]);
-  const scale = METERS_PER_DEGREE * Math.cos(lat);
-  const px = point[0] * scale;
-  const py = point[1] * METERS_PER_DEGREE;
-  const ax = start[0] * scale;
-  const ay = start[1] * METERS_PER_DEGREE;
-  const bx = end[0] * scale;
-  const by = end[1] * METERS_PER_DEGREE;
-  const dx = bx - ax;
-  const dy = by - ay;
-  const denominator = dx * dx + dy * dy;
-  const fraction = denominator > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / denominator)) : 0;
-  const coordinate: Position = [start[0] + (end[0] - start[0]) * fraction, start[1] + (end[1] - start[1]) * fraction];
-  return { coordinate, fraction, distance: distanceM(point, coordinate) };
+function normalizeRouteFeatures(features: SkiLineFeature[]): NormalizedRouteFeature[] {
+  return features
+    .filter((feature) => feature.geometry.type === "LineString" && feature.geometry.coordinates.length >= 2)
+    .map((feature) => {
+      const coordinates = feature.geometry.coordinates;
+      const segments: RouteSegment[] = [];
+      let length = 0;
+      let west = Infinity;
+      let south = Infinity;
+      let east = -Infinity;
+      let north = -Infinity;
+
+      for (let index = 0; index < coordinates.length; index += 1) {
+        const coordinate = coordinates[index];
+        west = Math.min(west, coordinate[0]);
+        south = Math.min(south, coordinate[1]);
+        east = Math.max(east, coordinate[0]);
+        north = Math.max(north, coordinate[1]);
+        if (index === 0) continue;
+
+        const start = coordinates[index - 1];
+        const segmentLength = coordinateDistance(start, coordinate);
+        segments.push({
+          start,
+          end: coordinate,
+          location: length,
+          length: segmentLength,
+          bbox: [
+            Math.min(start[0], coordinate[0]),
+            Math.min(start[1], coordinate[1]),
+            Math.max(start[0], coordinate[0]),
+            Math.max(start[1], coordinate[1]),
+          ],
+        });
+        length += segmentLength;
+      }
+
+      return {
+        uid: feature.properties.uid,
+        kind: feature.properties.routeKind,
+        properties: feature.properties,
+        coordinates,
+        segments,
+        bbox: [west, south, east, north],
+        length,
+      };
+    })
+    .filter((feature) => feature.length > 0);
 }
 
-function nearestPoint(point: Position, features: SkiLineFeature[]): CandidatePoint | null {
-  let closest: CandidatePoint | null = null;
+function elevationAt(getElevation: ElevationProvider, coordinate: Position): number | null {
+  if (!getElevation) return null;
+  try {
+    const elevation = getElevation(coordinate);
+    return typeof elevation === "number" && Number.isFinite(elevation) ? elevation : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasElevation(elevation: number | null): elevation is number {
+  return elevation !== null && Number.isFinite(elevation);
+}
+
+function isWithinRouteBounds(coordinates: Position, feature: NormalizedRouteFeature, radius: number): boolean {
+  const [longitude, latitude] = coordinates;
+  const latitudeRadius = radius / METERS_PER_DEGREE;
+  const longitudeRadius = radius / longitudeScale(latitude);
+  return (
+    longitude >= feature.bbox[0] - longitudeRadius &&
+    longitude <= feature.bbox[2] + longitudeRadius &&
+    latitude >= feature.bbox[1] - latitudeRadius &&
+    latitude <= feature.bbox[3] + latitudeRadius
+  );
+}
+
+function areBboxesWithinDistance(first: BBox, second: BBox, radius: number): boolean {
+  const latitude = (first[1] + first[3] + second[1] + second[3]) / 4;
+  const latitudeRadius = radius / METERS_PER_DEGREE;
+  const longitudeRadius = radius / longitudeScale(latitude);
+  return !(
+    first[2] + longitudeRadius < second[0] ||
+    second[2] + longitudeRadius < first[0] ||
+    first[3] + latitudeRadius < second[1] ||
+    second[3] + latitudeRadius < first[1]
+  );
+}
+
+function nearestRoutePoint(feature: NormalizedRouteFeature, coordinates: Position): RoutePoint {
+  const [queryLongitude, queryLatitude] = coordinates;
+  const lngScale = longitudeScale(queryLatitude);
+  let bestDistanceSquared = Infinity;
+  let bestCoordinate: Position = feature.coordinates[0];
+  let bestLocation = 0;
+
+  for (const segment of feature.segments) {
+    const ax = (segment.start[0] - queryLongitude) * lngScale;
+    const ay = (segment.start[1] - queryLatitude) * METERS_PER_DEGREE;
+    const bx = (segment.end[0] - queryLongitude) * lngScale;
+    const by = (segment.end[1] - queryLatitude) * METERS_PER_DEGREE;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const segmentLengthSquared = dx * dx + dy * dy;
+    const projection = segmentLengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / segmentLengthSquared));
+    const closestX = ax + dx * projection;
+    const closestY = ay + dy * projection;
+    const distanceSquared = closestX * closestX + closestY * closestY;
+
+    if (distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestCoordinate = [
+        segment.start[0] + (segment.end[0] - segment.start[0]) * projection,
+        segment.start[1] + (segment.end[1] - segment.start[1]) * projection,
+      ];
+      bestLocation = segment.location + segment.length * projection;
+    }
+  }
+
+  return {
+    coordinate: bestCoordinate,
+    distance: Math.sqrt(bestDistanceSquared),
+    location: Math.min(bestLocation, feature.length),
+  };
+}
+
+function nearestPiste(normalizedFeatures: NormalizedRouteFeature[], coordinates: Position): SnappedRoutePoint | null {
+  let nearest: RoutePoint & { featureUid: string } | null = null;
+  for (const feature of normalizedFeatures) {
+    if (feature.kind !== "piste" || !isWithinRouteBounds(coordinates, feature, ROUTE_SNAP_RADIUS_M)) continue;
+    const candidate = nearestRoutePoint(feature, coordinates);
+    if (!nearest || candidate.distance < nearest.distance) {
+      nearest = { ...candidate, featureUid: feature.uid };
+    }
+  }
+  if (!nearest || nearest.distance > ROUTE_SNAP_RADIUS_M) return null;
+  return { ...nearest, uid: nearest.featureUid };
+}
+
+export function snapToPiste(features: SkiLineFeature[], coordinate: Position, liftUid?: string): SnappedRoutePoint | null {
+  const normalizedFeatures = normalizeRouteFeatures(features);
+  let snap = nearestPiste(normalizedFeatures, coordinate);
+
+  if (liftUid) {
+    const lift = normalizedFeatures.find((feature) => feature.uid === liftUid && feature.kind === "lift");
+    if (lift) {
+      const liftPoint = nearestRoutePoint(lift, coordinate);
+      const liftSnap = nearestPiste(normalizedFeatures, liftPoint.coordinate);
+      if (liftSnap && (!snap || liftSnap.distance < snap.distance)) snap = liftSnap;
+    }
+  }
+
+  return snap;
+}
+
+function pointOnSegment(point: XY, start: XY, end: XY): { ratio: number; point: XY } {
+  const direction: XY = [end[0] - start[0], end[1] - start[1]];
+  const lengthSquared = direction[0] * direction[0] + direction[1] * direction[1];
+  const position: XY = [point[0] - start[0], point[1] - start[1]];
+  const ratio = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(1, (position[0] * direction[0] + position[1] * direction[1]) / lengthSquared));
+  return {
+    ratio,
+    point: [start[0] + direction[0] * ratio, start[1] + direction[1] * ratio],
+  };
+}
+
+function cross(first: XY, second: XY): number {
+  return first[0] * second[1] - first[1] * second[0];
+}
+
+interface ClosestSegmentPoints {
+  firstLocation: number;
+  secondLocation: number;
+  firstCoordinate: Position;
+  secondCoordinate: Position;
+  distance: number;
+}
+
+function closestSegmentPoints(firstSegment: RouteSegment, secondSegment: RouteSegment): ClosestSegmentPoints {
+  const origin = firstSegment.start;
+  const latitude = (firstSegment.start[1] + firstSegment.end[1] + secondSegment.start[1] + secondSegment.end[1]) / 4;
+  const lngScale = longitudeScale(latitude);
+  const toLocal = (coordinate: Position): XY => [
+    (coordinate[0] - origin[0]) * lngScale,
+    (coordinate[1] - origin[1]) * METERS_PER_DEGREE,
+  ];
+  const firstStart: XY = [0, 0];
+  const firstEnd = toLocal(firstSegment.end);
+  const secondStart = toLocal(secondSegment.start);
+  const secondEnd = toLocal(secondSegment.end);
+  const firstDirection: XY = [firstEnd[0] - firstStart[0], firstEnd[1] - firstStart[1]];
+  const secondDirection: XY = [secondEnd[0] - secondStart[0], secondEnd[1] - secondStart[1]];
+
+  const candidates: Array<{ firstRatio: number; secondRatio: number; distance: number }> = [];
+  const addCandidate = (firstRatio: number, secondRatio: number): void => {
+    const firstPoint: XY = [
+      firstStart[0] + firstDirection[0] * firstRatio,
+      firstStart[1] + firstDirection[1] * firstRatio,
+    ];
+    const secondPoint: XY = [
+      secondStart[0] + secondDirection[0] * secondRatio,
+      secondStart[1] + secondDirection[1] * secondRatio,
+    ];
+    candidates.push({
+      firstRatio,
+      secondRatio,
+      distance: Math.hypot(firstPoint[0] - secondPoint[0], firstPoint[1] - secondPoint[1]),
+    });
+  };
+
+  const offset: XY = [secondStart[0] - firstStart[0], secondStart[1] - firstStart[1]];
+  const denominator = cross(firstDirection, secondDirection);
+  if (Math.abs(denominator) > 1e-9) {
+    const firstRatio = cross(offset, secondDirection) / denominator;
+    const secondRatio = cross(offset, firstDirection) / denominator;
+    if (firstRatio >= 0 && firstRatio <= 1 && secondRatio >= 0 && secondRatio <= 1) {
+      addCandidate(firstRatio, secondRatio);
+    }
+  }
+
+  addCandidate(pointOnSegment(secondStart, firstStart, firstEnd).ratio, 0);
+  addCandidate(pointOnSegment(secondEnd, firstStart, firstEnd).ratio, 1);
+  addCandidate(0, pointOnSegment(firstStart, secondStart, secondEnd).ratio);
+  addCandidate(1, pointOnSegment(firstEnd, secondStart, secondEnd).ratio);
+
+  const closest = candidates.reduce((best, candidate) => candidate.distance < best.distance ? candidate : best);
+  const interpolate = (start: Position, end: Position, ratio: number): Position => [
+    start[0] + (end[0] - start[0]) * ratio,
+    start[1] + (end[1] - start[1]) * ratio,
+  ];
+  return {
+    firstLocation: firstSegment.location + firstSegment.length * closest.firstRatio,
+    secondLocation: secondSegment.location + secondSegment.length * closest.secondRatio,
+    firstCoordinate: interpolate(firstSegment.start, firstSegment.end, closest.firstRatio),
+    secondCoordinate: interpolate(secondSegment.start, secondSegment.end, closest.secondRatio),
+    distance: closest.distance,
+  };
+}
+
+function coordinateAtRouteLocation(feature: NormalizedRouteFeature, location: number): Position {
+  if (location <= 0) return feature.coordinates[0];
+  if (location >= feature.length) return feature.coordinates[feature.coordinates.length - 1];
+
+  for (const segment of feature.segments) {
+    const segmentEnd = segment.location + segment.length;
+    if (location > segmentEnd) continue;
+    const portion = segment.length === 0 ? 0 : (location - segment.location) / segment.length;
+    return [
+      segment.start[0] + (segment.end[0] - segment.start[0]) * portion,
+      segment.start[1] + (segment.end[1] - segment.start[1]) * portion,
+    ];
+  }
+  return feature.coordinates[feature.coordinates.length - 1];
+}
+
+function routeFeatureSlice(feature: NormalizedRouteFeature, startLocation: number, endLocation: number): Position[] {
+  const forward = endLocation >= startLocation;
+  const low = Math.min(startLocation, endLocation);
+  const high = Math.max(startLocation, endLocation);
+  const coordinates: Position[] = [coordinateAtRouteLocation(feature, low)];
+
+  for (const segment of feature.segments) {
+    const vertexLocation = segment.location + segment.length;
+    if (vertexLocation > low && vertexLocation < high) coordinates.push(segment.end);
+  }
+  coordinates.push(coordinateAtRouteLocation(feature, high));
+  return forward ? coordinates : coordinates.reverse();
+}
+
+function addGraphEdge(adjacency: Map<string, RouteGraphEdge[]>, from: string, edge: RouteGraphEdge): void {
+  const edges = adjacency.get(from) ?? [];
+  edges.push(edge);
+  adjacency.set(from, edges);
+}
+
+function buildRouteGraph(features: NormalizedRouteFeature[], getElevation: ElevationProvider, extraPoints: ExtraPoint[]): RouteGraph {
+  const featureByUid = new Map(features.map((feature) => [feature.uid, feature]));
+  const pointsByFeature = new Map<string, RoutePointRecord[]>();
+  const pointNodeIds = new Map<RoutePointRecord, string>();
+  const extraRecords = new Map<string, RoutePointRecord>();
+  const connectionSpecs: ConnectionSpec[] = [];
+
+  const addPoint = (feature: NormalizedRouteFeature, data: Omit<RoutePointRecord, "featureUid">): RoutePointRecord => {
+    const points = pointsByFeature.get(feature.uid);
+    if (!points) throw new Error("Nieprawidłowy graf trasy.");
+    const existing = points.find((candidate) => Math.abs(candidate.location - data.location) <= 1);
+    if (existing) return existing;
+    const pointRecord = { ...data, featureUid: feature.uid };
+    points.push(pointRecord);
+    return pointRecord;
+  };
+
   for (const feature of features) {
-    const coordinates = feature.geometry.coordinates;
-    for (let index = 0; index < coordinates.length - 1; index++) {
-      const projected = projectPoint(point, coordinates[index], coordinates[index + 1]);
-      if (!closest || projected.distance < closest.distance) {
-        closest = { feature, segmentIndex: index, ...projected };
+    pointsByFeature.set(feature.uid, [
+      {
+        featureUid: feature.uid,
+        coordinate: feature.coordinates[0],
+        location: 0,
+        elevation: elevationAt(getElevation, feature.coordinates[0]),
+        endpoint: true,
+      },
+      {
+        featureUid: feature.uid,
+        coordinate: feature.coordinates[feature.coordinates.length - 1],
+        location: feature.length,
+        elevation: elevationAt(getElevation, feature.coordinates[feature.coordinates.length - 1]),
+        endpoint: true,
+      },
+    ]);
+  }
+
+  for (const extra of extraPoints) {
+    const feature = featureByUid.get(extra.uid);
+    if (!feature) continue;
+    const points = pointsByFeature.get(feature.uid);
+    const startPoint = points?.find((candidate) => candidate.location === 0);
+    const endPoint = points?.find((candidate) => candidate.location === feature.length);
+    const interpolatedElevation = startPoint && endPoint && hasElevation(startPoint.elevation) && hasElevation(endPoint.elevation)
+      ? startPoint.elevation + (endPoint.elevation - startPoint.elevation) * (extra.location / feature.length)
+      : elevationAt(getElevation, extra.coordinate);
+    const pointRecord = addPoint(feature, {
+      coordinate: extra.coordinate,
+      location: extra.location,
+      elevation: interpolatedElevation,
+    });
+    extraRecords.set(extra.id, pointRecord);
+  }
+
+  const endpoints: RoutePointRecord[] = [];
+  for (const feature of features) {
+    endpoints.push(...(pointsByFeature.get(feature.uid) ?? []).filter((point) => point.endpoint));
+  }
+
+  for (const sourcePoint of endpoints) {
+    const sourceFeature = featureByUid.get(sourcePoint.featureUid);
+    if (!sourceFeature) continue;
+    for (const targetFeature of features) {
+      if (targetFeature.uid === sourceFeature.uid) continue;
+      if (sourceFeature.kind !== "lift" && targetFeature.kind !== "lift") continue;
+      if (!isWithinRouteBounds(sourcePoint.coordinate, targetFeature, ROUTE_CONNECT_RADIUS_M)) continue;
+
+      let targetPoint: RoutePointRecord | null = null;
+      let connectionDistance = Infinity;
+      const targetPoints = pointsByFeature.get(targetFeature.uid) ?? [];
+      if (targetFeature.kind === "lift") {
+        for (const candidate of targetPoints) {
+          if (!candidate.endpoint) continue;
+          const distance = coordinateDistance(sourcePoint.coordinate, candidate.coordinate);
+          if (distance < connectionDistance) {
+            targetPoint = candidate;
+            connectionDistance = distance;
+          }
+        }
+      } else {
+        const nearest = nearestRoutePoint(targetFeature, sourcePoint.coordinate);
+        if (nearest.distance <= ROUTE_CONNECT_RADIUS_M) {
+          targetPoint = addPoint(targetFeature, {
+            coordinate: nearest.coordinate,
+            location: nearest.location,
+            elevation: elevationAt(getElevation, nearest.coordinate),
+          });
+          connectionDistance = nearest.distance;
+        }
+      }
+
+      if (targetPoint && connectionDistance <= ROUTE_CONNECT_RADIUS_M) {
+        connectionSpecs.push({ sourcePoint, targetPoint, distance: connectionDistance });
       }
     }
   }
-  return closest;
+
+  const pisteFeatures = features.filter((feature) => feature.kind === "piste");
+  for (let firstIndex = 0; firstIndex < pisteFeatures.length; firstIndex += 1) {
+    const firstFeature = pisteFeatures[firstIndex];
+    for (let secondIndex = firstIndex + 1; secondIndex < pisteFeatures.length; secondIndex += 1) {
+      const secondFeature = pisteFeatures[secondIndex];
+      if (!areBboxesWithinDistance(firstFeature.bbox, secondFeature.bbox, ROUTE_CONNECT_RADIUS_M)) continue;
+
+      let closest: ClosestSegmentPoints | null = null;
+      for (const firstSegment of firstFeature.segments) {
+        for (const secondSegment of secondFeature.segments) {
+          if (!areBboxesWithinDistance(firstSegment.bbox, secondSegment.bbox, ROUTE_CONNECT_RADIUS_M)) continue;
+          const candidate = closestSegmentPoints(firstSegment, secondSegment);
+          if (!closest || candidate.distance < closest.distance) closest = candidate;
+        }
+      }
+
+      if (!closest || closest.distance > ROUTE_CONNECT_RADIUS_M) continue;
+      const firstPoint = addPoint(firstFeature, {
+        coordinate: closest.firstCoordinate,
+        location: closest.firstLocation,
+        elevation: elevationAt(getElevation, closest.firstCoordinate),
+      });
+      const secondPoint = addPoint(secondFeature, {
+        coordinate: closest.secondCoordinate,
+        location: closest.secondLocation,
+        elevation: elevationAt(getElevation, closest.secondCoordinate),
+      });
+      connectionSpecs.push(
+        { sourcePoint: firstPoint, targetPoint: secondPoint, distance: closest.distance },
+        { sourcePoint: secondPoint, targetPoint: firstPoint, distance: closest.distance },
+      );
+    }
+  }
+
+  const nodes = new Map<string, RouteGraphNode>();
+  const adjacency = new Map<string, RouteGraphEdge[]>();
+
+  for (const feature of features) {
+    const rawPoints = pointsByFeature.get(feature.uid) ?? [];
+    const sortedPoints = [...rawPoints].sort((first, second) => first.location - second.location);
+    const mergedGroups: RoutePointRecord[][] = [];
+    for (const point of sortedPoints) {
+      const lastGroup = mergedGroups[mergedGroups.length - 1];
+      if (lastGroup && Math.abs(lastGroup[0].location - point.location) <= 1) lastGroup.push(point);
+      else mergedGroups.push([point]);
+    }
+
+    for (let index = 0; index < mergedGroups.length; index += 1) {
+      const group = mergedGroups[index];
+      const representative = group[0];
+      const nodeId = `${feature.uid}:${index}`;
+      for (const point of group) pointNodeIds.set(point, nodeId);
+      nodes.set(nodeId, { coordinate: representative.coordinate, elevation: representative.elevation });
+    }
+
+    const firstGroup = mergedGroups[0];
+    const lastGroup = mergedGroups[mergedGroups.length - 1];
+    if (!firstGroup || !lastGroup) continue;
+    const startElevation = firstGroup[0].elevation;
+    const endElevation = lastGroup[0].elevation;
+    let forward = true;
+    if (hasElevation(startElevation) && hasElevation(endElevation)) {
+      forward = feature.kind === "lift" ? startElevation <= endElevation : startElevation >= endElevation;
+    }
+
+    const orderedGroups = forward ? mergedGroups : [...mergedGroups].reverse();
+    for (let index = 1; index < orderedGroups.length; index += 1) {
+      const fromPoint = orderedGroups[index - 1][0];
+      const toPoint = orderedGroups[index][0];
+      const from = pointNodeIds.get(fromPoint);
+      const to = pointNodeIds.get(toPoint);
+      const segmentDistance = Math.abs(toPoint.location - fromPoint.location);
+      if (!from || !to || segmentDistance <= 0) continue;
+
+      const isBlackPiste = feature.kind === "piste" && (feature.properties.difficulty === "advanced" || feature.properties.difficulty === "expert");
+      const isUngroomedPiste = feature.kind === "piste" && feature.properties.warning;
+      const featureEdge: RouteGraphEdge = {
+        to,
+        featureUid: feature.uid,
+        geometry: routeFeatureSlice(feature, fromPoint.location, toPoint.location),
+        kind: feature.kind,
+        distance: segmentDistance,
+        transferDistance: 0,
+        blackDistance: isBlackPiste ? segmentDistance : 0,
+        ungroomedDistance: isUngroomedPiste ? segmentDistance : 0,
+        liftCount: feature.kind === "lift" ? 1 : 0,
+        downhillLiftCount: 0,
+      };
+      addGraphEdge(adjacency, from, featureEdge);
+      if (feature.kind === "lift") {
+        addGraphEdge(adjacency, to, {
+          ...featureEdge,
+          to: from,
+          geometry: routeFeatureSlice(feature, toPoint.location, fromPoint.location),
+          downhillLiftCount: 1,
+        });
+      }
+    }
+  }
+
+  for (const connection of connectionSpecs) {
+    const from = pointNodeIds.get(connection.sourcePoint);
+    const to = pointNodeIds.get(connection.targetPoint);
+    if (!from || !to || from === to) continue;
+    if (hasElevation(connection.sourcePoint.elevation) && hasElevation(connection.targetPoint.elevation) && connection.targetPoint.elevation > connection.sourcePoint.elevation + ROUTE_ELEVATION_TOLERANCE_M) continue;
+    addGraphEdge(adjacency, from, {
+      to,
+      featureUid: null,
+      kind: "connection",
+      geometry: [connection.sourcePoint.coordinate, connection.targetPoint.coordinate],
+      distance: connection.distance,
+      transferDistance: connection.distance,
+      blackDistance: 0,
+      ungroomedDistance: 0,
+      liftCount: 0,
+      downhillLiftCount: 0,
+    });
+  }
+
+  const extraNodeIds: Record<string, string | undefined> = {};
+  for (const [id, point] of extraRecords) extraNodeIds[id] = pointNodeIds.get(point);
+  return { nodes, adjacency, extraNodeIds };
 }
 
-function compareCost(a: Cost, b: Cost): number {
-  for (let i = 0; i < a.values.length; i++) {
-    if (a.values[i] !== b.values[i]) return a.values[i] - b.values[i];
+function compareRouteCost(first: RouteCost, second: RouteCost): number {
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] !== second[index]) return first[index] - second[index];
   }
   return 0;
 }
 
-function plusCost(cost: Cost, edge: RouteEdge): Cost {
-  const warning = edge.feature?.properties.warning ? edge.distance : 0;
-  const difficult = edge.feature && ["advanced", "expert"].includes(edge.feature.properties.difficulty) ? edge.distance : 0;
-  return {
-    values: [
-      cost.values[0] + edge.downhillLiftCount,
-      cost.values[1] + edge.liftCount,
-      cost.values[2] + warning,
-      cost.values[3] + difficult,
-      cost.values[4] + edge.connectionDistance,
-      cost.values[5] + edge.distance,
-    ],
-  };
+function nextRouteCost(cost: RouteCost, edge: RouteGraphEdge): RouteCost {
+  return [
+    cost[0] + edge.downhillLiftCount,
+    cost[1] + edge.liftCount,
+    cost[2] + edge.ungroomedDistance,
+    cost[3] + edge.blackDistance,
+    cost[4] + edge.transferDistance,
+    cost[5] + edge.distance,
+  ];
 }
 
-function addEdge(edges: Map<string, RouteEdge[]>, from: string, edge: RouteEdge): void {
-  const list = edges.get(from) ?? [];
-  list.push(edge);
-  edges.set(from, list);
-}
+function findGraphRoute(graph: RouteGraph): GraphRoute | null {
+  const start = graph.extraNodeIds.start;
+  const end = graph.extraNodeIds.end;
+  if (!start || !end) return null;
 
-function elevationAllows(from: RouteNode, to: RouteNode, kind: "piste" | "lift" | "connection"): boolean {
-  if (kind !== "piste" || from.elevation === null || to.elevation === null) return true;
-  return to.elevation <= from.elevation + ELEVATION_TOLERANCE_M;
-}
+  const initial: RouteCost = [0, 0, 0, 0, 0, 0];
+  const distances = new Map<string, RouteCost>([[start, initial]]);
+  const previous = new Map<string, { node: string; edge: RouteGraphEdge }>();
+  const queue: Array<{ node: string; cost: RouteCost }> = [{ node: start, cost: initial }];
 
-function addDirectionalEdges(edges: Map<string, RouteEdge[]>, from: RouteNode, to: RouteNode, kind: "piste" | "lift" | "connection", feature?: SkiLineFeature): void {
-  const length = distanceM(from.coordinate, to.coordinate);
-  const makeEdge = (target: RouteNode): RouteEdge => ({
-    to: target.id,
-    distance: length,
-    kind,
-    feature,
-    downhillLiftCount: kind === "lift" && from.elevation !== null && target.elevation !== null && target.elevation < from.elevation ? 1 : 0,
-    liftCount: kind === "lift" ? 1 : 0,
-    warningDistance: kind === "piste" && feature?.properties.warning ? length : 0,
-    difficultDistance: kind === "piste" && feature && ["advanced", "expert"].includes(feature.properties.difficulty) ? length : 0,
-    connectionDistance: kind === "connection" ? length : 0,
-  });
-  if (elevationAllows(from, to, kind)) addEdge(edges, from.id, makeEdge(to));
-  if (elevationAllows(to, from, kind)) addEdge(edges, to.id, { ...makeEdge(from), to: from.id, downhillLiftCount: kind === "lift" && to.elevation !== null && from.elevation !== null && from.elevation < to.elevation ? 1 : 0 });
-}
+  while (queue.length > 0) {
+    queue.sort((first, second) => compareRouteCost(first.cost, second.cost));
+    const current = queue.shift();
+    if (!current) break;
+    const knownCost = distances.get(current.node);
+    if (!knownCost || compareRouteCost(current.cost, knownCost) !== 0) continue;
+    if (current.node === end) break;
 
-class MinHeap {
-  private items: Array<{ id: string; cost: Cost }> = [];
-
-  push(item: { id: string; cost: Cost }): void {
-    this.items.push(item);
-    let index = this.items.length - 1;
-    while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (compareCost(this.items[parent].cost, this.items[index].cost) <= 0) break;
-      [this.items[parent], this.items[index]] = [this.items[index], this.items[parent]];
-      index = parent;
-    }
-  }
-
-  pop(): { id: string; cost: Cost } | undefined {
-    const first = this.items[0];
-    const last = this.items.pop();
-    if (last && this.items.length > 0) {
-      this.items[0] = last;
-      let index = 0;
-      while (true) {
-        const left = index * 2 + 1;
-        const right = left + 1;
-        let smallest = index;
-        if (left < this.items.length && compareCost(this.items[left].cost, this.items[smallest].cost) < 0) smallest = left;
-        if (right < this.items.length && compareCost(this.items[right].cost, this.items[smallest].cost) < 0) smallest = right;
-        if (smallest === index) break;
-        [this.items[index], this.items[smallest]] = [this.items[smallest], this.items[index]];
-        index = smallest;
+    for (const edge of graph.adjacency.get(current.node) ?? []) {
+      const nextCost = nextRouteCost(current.cost, edge);
+      const previousCost = distances.get(edge.to);
+      if (!previousCost || compareRouteCost(nextCost, previousCost) < 0) {
+        distances.set(edge.to, nextCost);
+        previous.set(edge.to, { node: current.node, edge });
+        queue.push({ node: edge.to, cost: nextCost });
       }
     }
-    return first;
   }
+
+  const finalCost = distances.get(end);
+  if (!finalCost) return null;
+
+  const edges: RouteGraphEdge[] = [];
+  let node = end;
+  while (node !== start) {
+    const step = previous.get(node);
+    if (!step) return null;
+    edges.push(step.edge);
+    node = step.node;
+  }
+  edges.reverse();
+
+  const steps: string[] = [];
+  for (const edge of edges) {
+    if (edge.featureUid && steps[steps.length - 1] !== edge.featureUid) steps.push(edge.featureUid);
+  }
+  if (steps.length === 0) return null;
+  return { featureUids: [...new Set(steps)], steps, edges, cost: finalCost };
 }
 
 export async function findRoute(
@@ -190,132 +705,54 @@ export async function findRoute(
   end: Position,
   getElevation?: (coordinate: Position) => number | null,
 ): Promise<RouteResult> {
-  const snapFeatures = features.filter((feature) => feature.properties.routeKind === "piste");
-  const startCandidate = nearestPoint(start, snapFeatures.length > 0 ? snapFeatures : features);
-  const endCandidate = nearestPoint(end, snapFeatures.length > 0 ? snapFeatures : features);
+  const normalizedFeatures = normalizeRouteFeatures(features);
+  const startCandidate = nearestPiste(normalizedFeatures, start);
+  const endCandidate = nearestPiste(normalizedFeatures, end);
   if (!startCandidate || startCandidate.distance > ROUTE_SNAP_RADIUS_M) throw new Error("Punkt startowy jest dalej niż 100 m od trasy.");
   if (!endCandidate || endCandidate.distance > ROUTE_SNAP_RADIUS_M) throw new Error("Punkt docelowy jest dalej niż 100 m od trasy.");
 
-  const nodes = new Map<string, RouteNode>();
-  const edges = new Map<string, RouteEdge[]>();
-  const featureNodes = new Map<string, string[]>();
+  const graph = buildRouteGraph(normalizedFeatures, getElevation, [
+    { id: "start", uid: startCandidate.uid, coordinate: startCandidate.coordinate, location: startCandidate.location },
+    { id: "end", uid: endCandidate.uid, coordinate: endCandidate.coordinate, location: endCandidate.location },
+  ]);
+  const result = findGraphRoute(graph);
+  if (!result) throw new Error("Nie znalazłem połączenia między tymi punktami.");
 
-  for (const feature of features) {
-    if (feature.geometry.coordinates.length < 2) continue;
-    const ids: string[] = [];
-    for (let index = 0; index < feature.geometry.coordinates.length; index++) {
-      const coordinate = feature.geometry.coordinates[index];
-      const id = `${feature.id}:${index}`;
-      nodes.set(id, { id, coordinate, featureUid: feature.id, feature, elevation: getElevation?.(coordinate) ?? null });
-      ids.push(id);
-    }
-    featureNodes.set(feature.id, ids);
-    for (let index = 0; index < ids.length - 1; index++) {
-      const from = nodes.get(ids[index]);
-      const to = nodes.get(ids[index + 1]);
-      if (from && to) addDirectionalEdges(edges, from, to, feature.properties.routeKind, feature);
-    }
-  }
-
-  const cellSize = ROUTE_SNAP_RADIUS_M;
-  const grid = new Map<string, string[]>();
-  const gridKey = (coordinate: Position): string => `${Math.floor(coordinate[0] * METERS_PER_DEGREE / cellSize)}:${Math.floor(coordinate[1] * METERS_PER_DEGREE / cellSize)}`;
-  for (const node of nodes.values()) {
-    const key = gridKey(node.coordinate);
-    grid.set(key, [...(grid.get(key) ?? []), node.id]);
-  }
-  for (const node of nodes.values()) {
-    const x = Math.floor(node.coordinate[0] * METERS_PER_DEGREE / cellSize);
-    const y = Math.floor(node.coordinate[1] * METERS_PER_DEGREE / cellSize);
-    const nearby = new Set<string>();
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (const id of grid.get(`${x + dx}:${y + dy}`) ?? []) nearby.add(id);
-      }
-    }
-    for (const otherId of nearby) {
-      const other = nodes.get(otherId);
-      if (!other || other.featureUid === node.featureUid || node.id >= other.id) continue;
-      if (distanceM(node.coordinate, other.coordinate) <= ROUTE_SNAP_RADIUS_M) addDirectionalEdges(edges, node, other, "connection");
-    }
-  }
-
-  const virtualNode = (id: string, candidate: CandidatePoint): RouteNode => ({
-    id,
-    coordinate: candidate.coordinate,
-    featureUid: candidate.feature.id,
-    feature: candidate.feature,
-    elevation: getElevation?.(candidate.coordinate) ?? null,
-  });
-  const startNode = virtualNode("__start", startCandidate);
-  const endNode = virtualNode("__end", endCandidate);
-  nodes.set(startNode.id, startNode);
-  nodes.set(endNode.id, endNode);
-
-  const connectVirtual = (virtual: RouteNode, candidate: CandidatePoint): void => {
-    const ids = featureNodes.get(candidate.feature.id) ?? [];
-    const first = nodes.get(ids[candidate.segmentIndex]);
-    const second = nodes.get(ids[candidate.segmentIndex + 1]);
-    if (first) addDirectionalEdges(edges, virtual, first, candidate.feature.properties.routeKind, candidate.feature);
-    if (second) addDirectionalEdges(edges, virtual, second, candidate.feature.properties.routeKind, candidate.feature);
-  };
-  connectVirtual(startNode, startCandidate);
-  connectVirtual(endNode, endCandidate);
-
-  const initial: Cost = { values: [0, 0, 0, 0, 0, 0] };
-  const distances = new Map<string, Cost>([[startNode.id, initial]]);
-  const previous = new Map<string, { from: string; edge: RouteEdge }>();
-  const queue = new MinHeap();
-  queue.push({ id: startNode.id, cost: initial });
-  while (true) {
-    const current = queue.pop();
-    if (!current) break;
-    const known = distances.get(current.id);
-    if (!known || compareCost(current.cost, known) !== 0) continue;
-    if (current.id === endNode.id) break;
-    for (const edge of edges.get(current.id) ?? []) {
-      const nextCost = plusCost(current.cost, edge);
-      const oldCost = distances.get(edge.to);
-      if (!oldCost || compareCost(nextCost, oldCost) < 0) {
-        distances.set(edge.to, nextCost);
-        previous.set(edge.to, { from: current.id, edge });
-        queue.push({ id: edge.to, cost: nextCost });
-      }
-    }
-  }
-
-  if (!distances.has(endNode.id)) throw new Error("Nie znalazłem połączenia między tymi punktami.");
-  const path: Array<{ from: RouteNode; to: RouteNode; edge: RouteEdge }> = [];
-  let currentId = endNode.id;
-  while (currentId !== startNode.id) {
-    const step = previous.get(currentId);
-    if (!step) throw new Error("Nie udało się odtworzyć wyznaczonej trasy.");
-    const from = nodes.get(step.from);
-    const to = nodes.get(currentId);
-    if (!from || !to) throw new Error("Nieprawidłowy graf trasy.");
-    path.unshift({ from, to, edge: step.edge });
-    currentId = step.from;
-  }
-
+  const featureByUid = new Map(normalizedFeatures.map((feature) => [feature.uid, feature]));
   const sequence: RouteSequenceItem[] = [];
-  const segments = path.map(({ from, to, edge }) => {
-    if (edge.feature && edge.kind !== "connection") {
-      const last = sequence[sequence.length - 1];
-      if (!last || last.uid !== edge.feature.id) {
-        sequence.push({ uid: edge.feature.id, label: edge.feature.properties.label, kind: edge.kind, color: edge.feature.properties.difficultyColor });
-      }
-    }
-    return {
-      type: "Feature" as const,
-      properties: { kind: edge.kind, color: edge.kind === "lift" ? "#7c3aed" : edge.kind === "piste" ? edge.feature?.properties.difficultyColor ?? "#1557b0" : "#1557b0" },
-      geometry: { type: "LineString" as const, coordinates: [from.coordinate, to.coordinate] },
-    };
-  });
+  for (const uid of result.steps) {
+    const feature = featureByUid.get(uid);
+    if (!feature) continue;
+    const previous = sequence[sequence.length - 1];
+    if (previous?.uid === uid) continue;
+    sequence.push({
+      uid,
+      label: feature.properties.label || feature.properties.name || (feature.kind === "lift" ? "Wyciąg" : "Trasa"),
+      kind: feature.kind,
+      color: feature.kind === "lift" ? "#7c3aed" : feature.properties.difficultyColor,
+    });
+  }
+
+  const segmentFeatures = result.edges
+    .filter((edge) => edge.geometry.length >= 2)
+    .map((edge) => {
+      const feature = edge.featureUid ? featureByUid.get(edge.featureUid) : undefined;
+      return {
+        type: "Feature" as const,
+        properties: {
+          kind: edge.kind,
+          color: edge.kind === "lift" ? "#7c3aed" : edge.kind === "piste" ? feature?.properties.difficultyColor ?? "#1557b0" : "#1557b0",
+          ...(feature && edge.kind !== "connection" ? { label: feature.properties.name || feature.properties.ref || undefined } : {}),
+        },
+        geometry: { type: "LineString" as const, coordinates: edge.geometry },
+      };
+    });
 
   return {
-    distanceM: path.reduce((total, step) => total + step.edge.distance, 0),
+    distanceM: result.cost[5],
+    cost: result.cost,
     sequence,
-    segments: { type: "FeatureCollection", features: segments },
+    segments: { type: "FeatureCollection", features: segmentFeatures },
     start: startCandidate.coordinate,
     end: endCandidate.coordinate,
   };

@@ -14,6 +14,20 @@ export const DIFFICULTY_COLORS: Record<string, string> = {
   unknown: "#888888",
 };
 
+export const AERIALWAY_LABELS: Record<string, string> = {
+  chair_lift: "krzesełkowy",
+  gondola: "gondolowy",
+  cable_car: "kolejka linowa",
+  drag_lift: "orczyk",
+  "t-bar": "orczyk (T)",
+  "j-bar": "orczyk (J)",
+  platter: "talerczyk",
+  rope_tow: "wyrwirączka",
+  magic_carpet: "taśma",
+  mixed_lift: "gondola+krzesełka",
+  zip_line: "tyrolka",
+};
+
 export interface SkiProperties {
   uid: string;
   label: string;
@@ -24,6 +38,9 @@ export interface SkiProperties {
   pisteType: string;
   grooming: string;
   warning: boolean;
+  site: string | null;
+  aerialway: string;
+  openingHours: string;
   routeKind: "piste" | "lift";
 }
 
@@ -100,43 +117,33 @@ function difficultyFor(tags: Record<string, string>): string {
 }
 
 function labelFor(tags: Record<string, string>): string {
-  return tags.ref ?? tags.name ?? tags["piste:name"] ?? "Bez nazwy";
+  return tags.ref ?? tags.name ?? tags["piste:name"] ?? "";
 }
 
 function lineGeometry(element: OverpassElement): Position[] {
   if (element.geometry && element.geometry.length >= 2) {
     return element.geometry.map((point) => [point.lon, point.lat]);
   }
-
-  const memberLines = element.members
-    ?.filter((member) => member.type === "way" && member.geometry && member.geometry.length >= 2)
-    .map((member) => member.geometry!.map((point) => [point.lon, point.lat] as Position));
-  if (!memberLines || memberLines.length === 0) return [];
-
-  const merged: Position[] = [];
-  for (const memberLine of memberLines) {
-    const first = memberLine[0];
-    const last = merged[merged.length - 1];
-    if (last && first && last[0] === first[0] && last[1] === first[1]) merged.push(...memberLine.slice(1));
-    else merged.push(...memberLine);
-  }
-  return merged;
+  return [];
 }
 
-function propertiesFor(element: OverpassElement, routeKind: "piste" | "lift"): SkiProperties {
+function propertiesFor(element: OverpassElement, routeKind: "piste" | "lift", site: string | null): SkiProperties {
   const tags = element.tags ?? {};
   const difficulty = routeKind === "piste" ? difficultyFor(tags) : "unknown";
-  const grooming = tags.grooming ?? "";
+  const grooming = tags["piste:grooming"] ?? tags.grooming ?? "";
   return {
     uid: `${element.type}/${element.id}`,
     label: routeKind === "piste" ? labelFor(tags) : tags.name ?? tags.ref ?? "Wyciąg",
-    name: tags.name ?? "",
+    name: routeKind === "lift" ? tags.name ?? tags.ref ?? "" : tags.name ?? "",
     ref: tags.ref ?? "",
     difficulty,
     difficultyColor: DIFFICULTY_COLORS[difficulty],
     pisteType: tags["piste:type"] ?? "",
     grooming,
     warning: grooming === "backcountry" || grooming === "mogul",
+    site,
+    aerialway: tags.aerialway ?? "",
+    openingHours: tags.opening_hours ?? "",
     routeKind,
   };
 }
@@ -145,17 +152,17 @@ function samePosition(a: Position, b: Position): boolean {
   return Math.abs(a[0] - b[0]) < 0.0000001 && Math.abs(a[1] - b[1]) < 0.0000001;
 }
 
-function normalizeElement(element: OverpassElement, routeKind: "piste" | "lift"): SkiFeature | null {
+function normalizeElement(element: OverpassElement, routeKind: "piste" | "lift", site: string | null): SkiFeature | null {
   const tags = element.tags ?? {};
   if (routeKind === "piste") {
     const pisteType = tags["piste:type"] ?? "";
     if (!pisteType.split(/[;,]/).some((value) => value.trim() === "downhill")) return null;
-    if (tags.grooming === "no" || tags["piste:difficulty"] === "freeride") return null;
+    if ((tags["piste:grooming"] ?? tags.grooming) === "no" || tags["piste:difficulty"] === "freeride") return null;
   }
 
   const coordinates = lineGeometry(element);
   if (coordinates.length < 2) return null;
-  const properties = propertiesFor(element, routeKind);
+  const properties = propertiesFor(element, routeKind, site);
   const id = properties.uid;
   const closed = coordinates.length >= 4 && samePosition(coordinates[0], coordinates[coordinates.length - 1]);
 
@@ -180,12 +187,42 @@ export function normalizeSkiData(elements: OverpassElement[], stale: boolean, sa
   const lifts: SkiFeature[] = [];
   const seen = new Set<string>();
 
+  const siteRelations = elements.filter((element) => element.type === "relation" && element.tags?.site === "piste");
+  const routeRelations = elements.filter((element) => element.type === "relation" && Boolean(element.tags?.["piste:type"]));
+  const memberToSite = new Map<string, string | null>();
+  for (const siteRelation of siteRelations) {
+    const site = siteRelation.tags?.name ?? null;
+    for (const member of siteRelation.members ?? []) {
+      if (member.type !== "node") memberToSite.set(`${member.type}/${member.ref}`, site);
+    }
+  }
+  const wayToRoute = new Map<string, number>();
+  for (const routeRelation of routeRelations) {
+    for (const member of routeRelation.members ?? []) {
+      if (member.type === "way") wayToRoute.set(`way/${member.ref}`, routeRelation.id);
+    }
+  }
+  const routeToSite = new Map<number, string | null>();
+  for (const routeRelation of routeRelations) {
+    const site = memberToSite.get(`relation/${routeRelation.id}`);
+    if (site) routeToSite.set(routeRelation.id, site);
+  }
+  const siteFor = (element: OverpassElement): string | null => {
+    const direct = memberToSite.get(`${element.type}/${element.id}`);
+    if (direct !== undefined) return direct;
+    if (element.type === "way") {
+      const routeId = wayToRoute.get(`way/${element.id}`);
+      if (routeId !== undefined) return routeToSite.get(routeId) ?? null;
+    }
+    return null;
+  };
+
   for (const element of elements) {
     const tags = element.tags ?? {};
     const isLift = Boolean(tags.aerialway);
     const isPiste = Boolean(tags["piste:type"]);
     if (!isLift && !isPiste) continue;
-    const feature = normalizeElement(element, isLift ? "lift" : "piste");
+    const feature = normalizeElement(element, isLift ? "lift" : "piste", siteFor(element));
     if (!feature || seen.has(feature.id)) continue;
     seen.add(feature.id);
     if (isLift) lifts.push(feature);

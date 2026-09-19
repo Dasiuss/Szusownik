@@ -42,6 +42,8 @@ Konfiguracja referencyjna:
 - zoom desktop `13`, telefon `12` przy breakpoint `768px`;
 - pitch `40`, bearing `-90`, max pitch `85`, max zoom `19`;
 - terrain exaggeration `0.6`;
+- `ScaleControl` w lewym dolnym rogu; bez klikalnego zoomu i kompasu;
+- stały marker domu `32x42`, kolor `#0b3d66`, pozycja `[11.0095, 46.9726]`;
 - sky/fog: `#a5d6f5`, `#f0f6fa`, `#e8eef2`;
 - worker MapLibre ładowany z bundla Vite przez `setWorkerUrl`.
 
@@ -100,7 +102,7 @@ Właściwości trasy:
 
 ```text
 uid, osmId, osmType, name, ref, label, difficulty,
-pisteType, grooming, warning, site
+pisteType, grooming, openingHours, warning, site
 ```
 
 `label` preferuje `ref`, potem `name`, potem `piste:name`. `warning` jest
@@ -178,8 +180,9 @@ nie jest bezpośrednio punktem startowym lub końcowym.
 - sumaryczną długość;
 - bbox.
 
-Odległość używa Turf, a lokalne odległości do projekcji segmentów używają
-przybliżenia:
+Referencyjny `MapyTest` ma Turf w zależnościach, ale PWA nie dodaje go do
+bundle'a. Lokalny routing używa jednego przybliżenia metrycznego zarówno do
+odległości, jak i projekcji segmentów:
 
 ```text
 METERS_PER_DEGREE = 111320
@@ -254,8 +257,9 @@ To oznacza, że routing może wybrać dłuższą czarną trasę zamiast dodatkow
 wyciągu i jest to zachowanie zamierzone.
 
 Kolejka Dijkstry w `MapyTest` jest zwykłą tablicą sortowaną przy każdym kroku.
-Dla dużego obszaru trzeba rozważyć kopiec binarny lub A*, ale dopiero po
-benchmarku, żeby nie zmienić reguł wyboru trasy.
+Szusownik używa obecnie tego samego algorytmu i kolejności kosztów, aby wynik
+był zgodny z referencyjną mapą. Dla dużego obszaru można rozważyć kopiec
+binarny lub A*, ale dopiero po benchmarku, żeby nie zmienić reguł wyboru trasy.
 
 ## 7. Wynik routingu i UI
 
@@ -267,9 +271,23 @@ benchmarku, żeby nie zmienić reguł wyboru trasy.
 - osobne etykiety nadpisujące kolizje zwykłych etykiet.
 
 Panel wyniku jest mały i pokazuje przede wszystkim łączny dystans oraz sekwencję
-przejazdu, na przykład `[8 km] 12 -> Giggijochbahn -> 15 -> 16`. Numery tras
-mają kolory odpowiadające trudności, a wyciągi są wyróżnione osobnym kolorem.
-Panel nie pokazuje dodatkowych statystyk routingu.
+przejazdu, na przykład `[8 km] 12 -> Giggijochbahn -> 15 -> 16`. Sekwencja
+używa kolorowych badge'y: numery tras mają kolory odpowiadające trudności, a
+wyciągi są wyróżnione fioletem.
+Panel nie pokazuje dodatkowych statystyk routingu i jest testowo umieszczony u
+góry mapy. Przycisk routingu uruchamia trzyklikowy flow: przycisk, punkt startowy,
+punkt docelowy. Po drugim kliknięciu wynik jest liczony automatycznie. Początek
+i koniec są markerami MapLibre, nie punktami circle-layer.
+
+Karta zaznaczonej trasy pokazuje `opening_hours`, `grooming`, długość oraz bezwzględną różnicę
+między najniższą i najwyższą próbką geometrii z DEM. Ma również przycisk
+`Nawiguj`, który używa pozycji GPS jako startu lub markera domu przy braku GPS.
+Po zaznaczeniu kliknięciem na mapie prowadzi do dokładnego miejsca kliknięcia;
+wybór z listy używa punktu referencyjnego w środku geometrii.
+
+`classic` nie jest wyświetlane. Dla niestandardowego groomingu informacja jest
+pokazywana pod trudnością. Długość, różnica wysokości i średnie nachylenie są
+pokazywane w jednej linii z ikonami. Nachylenie to `różnica DEM / długość * 100`.
 
 Menu:
 
@@ -277,6 +295,9 @@ Menu:
 - deduplikuje odcinki tej samej trasy;
 - sortuje naturalnie przez `Intl.Collator('pl', { numeric: true })`;
 - ma wyszukiwanie po nazwie/numerze;
+- pokazuje przybliżoną długość elementu;
+- ma osobny przycisk `X` do zamknięcia panelu;
+- zaczyna się od górnej krawędzi mapy i można je przełączać drugim kliknięciem lupki;
 - pojedynczy klik zaznacza i miga grupą pięć razy co 180 ms;
 - double-click wykonuje `fitBounds`, padding 80, maxZoom 13, zachowując pitch i bearing.
 
@@ -323,9 +344,10 @@ W referencyjnym `MapyTest` nie ma:
 
 W Szusowniku bieżąca pozycja mapy pochodzi bezpośrednio z telefonu przez
 `navigator.geolocation.watchPosition` i jest rysowana jako niebieska kropka.
-Domyślnie bieżąca pozycja telefonu jest początkiem routingu, ale użytkownik może
-zmienić punkt startowy ręcznie. Odmowa uprawnień lub brak sygnału GPS nie blokuje
-mapy ani routingu z ręcznie wskazanych punktów.
+Domyślnie bieżąca pozycja telefonu jest początkiem nawigacji z karty elementu.
+Przy braku GPS nawigacja z karty zaczyna się ze stałego markera domu.
+Ręczny routing zaczyna się przyciskiem i wymaga dwóch kliknięć na mapie.
+Odmowa uprawnień lub brak sygnału GPS nie blokuje mapy ani ręcznego routingu.
 
 Mapa pokazuje również zapisany ślad z ostatnich pięciu minut czasu telefonu.
 Są to próbki z plików, których timestamp mieści się w przedziale od `now - 5 min`
