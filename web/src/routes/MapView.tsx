@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
-import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "../components/Icon.tsx";
 import { getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
@@ -80,7 +80,7 @@ const MAP_STYLE: StyleSpecification = {
     { id: "topo", type: "raster", source: "topo", paint: { "raster-saturation": -0.15, "raster-contrast": 0.05 } },
   ],
   terrain: { source: "dem", exaggeration: 0.6 },
-  sky: { "sky-color": "#a5d6f5", "sky-horizon-color": "#f0f6fa", "horizon-fog-blend": 0.2, "fog-color": "#e8eef2" },
+  sky: { "sky-color": "#a5d6f5", "horizon-color": "#f0f6fa", "horizon-fog-blend": 0.2, "fog-color": "#e8eef2" },
 };
 
 const COLOR_EXPRESSION = [
