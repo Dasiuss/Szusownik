@@ -32,6 +32,7 @@ import {
 } from "../lib/ble.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { Freq, Timing, Volume } from "../lib/ble.ts";
+import { clearPwaData } from "../lib/reset.ts";
 
 export default function SettingsView() {
   const device = useDevice();
@@ -41,6 +42,9 @@ export default function SettingsView() {
   const [minBeepKmh, setMinBeepKmh] = useState<number | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [resetArmed, setResetArmed] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -227,6 +231,28 @@ export default function SettingsView() {
     }
   }
 
+  function armDataReset() {
+    setResetError(null);
+    setResetArmed(true);
+  }
+
+  async function resetPwaData() {
+    if (resetBusy) return;
+    for (const timer of [volumeTimer, frequencyTimer, timingTimer, minBeepTimer]) {
+      if (timer.current) clearTimeout(timer.current);
+    }
+    setResetBusy(true);
+    setResetError(null);
+    try {
+      device.disconnect();
+      await clearPwaData();
+      window.location.reload();
+    } catch (caught) {
+      setResetBusy(false);
+      setResetError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
   const connected = device.state === "connected" || device.state === "checking" || device.state === "downloading";
 
   return (
@@ -298,6 +324,30 @@ export default function SettingsView() {
            {minBeepKmh !== null ? <div className="sliders">
                <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_MIN_BEEP_KMH} max={SZ_MAX_BEEP_KMH} step={SZ_MIN_BEEP_STEP_KMH} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
             </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.4+, żeby ustawiać minimalną prędkość pikania." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+          </div>
+        </section>
+
+        <section className="settings-section settings-danger-section">
+          <div className="section-heading"><div><span className="eyebrow">Dane aplikacji</span><h2>Reset PWA</h2></div></div>
+          <div className="settings-card settings-danger-card">
+            <div className="settings-card-heading"><div className="settings-icon settings-icon-danger"><Icon name="trash" size={19} /></div><div><h3>Wyczyść dane PWA</h3><p>Usuwa zapisane pliki, zjazdy, cache mapy i ustawienia tej aplikacji.</p></div></div>
+            {!resetArmed ? (
+              <button className="button button-danger settings-danger-button" type="button" onClick={armDataReset}>
+                <Icon name="trash" size={16} /> Wyczyść dane PWA
+              </button>
+            ) : (
+              <div className="settings-danger-confirm">
+                <strong>To usunie wszystkie lokalne dane.</strong>
+                <p>Nie będzie można ich odzyskać. Urządzenie BLE zostanie rozłączone, a aplikacja uruchomi się jak przy pierwszym wejściu.</p>
+                <div className="settings-danger-actions">
+                  <button className="button button-ghost" type="button" onClick={() => setResetArmed(false)} disabled={resetBusy}>Anuluj</button>
+                  <button className="button button-danger" type="button" onClick={() => void resetPwaData()} disabled={resetBusy}>
+                    {resetBusy ? <><span className="spinner spinner-light" /> Czyszczę…</> : "Tak, usuń wszystko"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {resetError && <div className="settings-danger-error"><Icon name="x" size={16} /> {resetError}</div>}
           </div>
         </section>
     </div>

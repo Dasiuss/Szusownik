@@ -187,6 +187,18 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .settings-section { gap: 12px; }
 .section-status { color: #89a09e; font-size: 10px; font-weight: 700; }
 .settings-card { padding: 16px; border: 1px solid #dbe9e6; border-radius: 20px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
+.settings-danger-section { margin-top: 10px; }
+.settings-danger-card { border-color: #f0cfc6; background: #fffaf8; }
+.settings-icon-danger { color: #b45e4b; background: #fff0eb; }
+.settings-danger-button { margin-top: 17px; color: #a84f3e; background: #ffe9e2; }
+.settings-danger-button:hover { background: #ffddd4; }
+.settings-danger-confirm { margin-top: 17px; padding: 12px; border: 1px solid #f0cfc6; border-radius: 13px; color: #9b4838; background: #fff4f0; }
+.settings-danger-confirm strong { display: block; font-size: 12px; }
+.settings-danger-confirm p { margin-top: 5px; color: #a66558; font-size: 11px; line-height: 1.45; }
+.settings-danger-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 11px; }
+.button-danger { color: #fff; background: #b45e4b; box-shadow: 0 7px 15px #b45e4b2e; }
+.button-danger:hover { background: #9f4d3d; }
+.settings-danger-error { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; color: #9b4838; font-size: 11px; line-height: 1.4; }
 .settings-card-heading { display: flex; align-items: center; gap: 10px; }
 .settings-card-heading > div:nth-child(2) { min-width: 0; flex: 1; }
 .settings-card-heading .settings-reset { flex: 0 0 auto; }
