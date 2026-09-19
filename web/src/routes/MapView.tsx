@@ -593,6 +593,9 @@ export default function MapView() {
   async function calculateRouteFor(routeStart: Position, routeEnd: Position) {
     setRouting(true);
     setRouteError(null);
+    // Pozwól przeglądarce namalować markery i komunikat przed synchroniczną
+    // budową grafu, która blokuje główny wątek.
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
     try {
       const map = mapRef.current;
       const result = await findRoute(mapData.lines, routeStart, routeEnd, (coordinate) => {

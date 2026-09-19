@@ -203,8 +203,19 @@ przy każdym porównaniu.
 
 Połączenie tras jest rozważane przy odległości do `100 m`. Bbox ogranicza
 liczbę porównań, a `closestSegmentPoints` szuka najbliższych punktów segmentów.
-Połączenia między trasami są dodawane w obu kierunkach, po czym filtruje je
-kontrola wysokości.
+Dla każdej pary tras graf dostaje: najlepszy styk w promieniu (jak dotąd) plus
+bliskie kontakty tras — kontakty do `5 m` (`JUNCTION_DISTANCE_M`), grupowane
+przechodnio (single linkage, union-find) w klastry min. `10 m` od siebie
+wzdłuż obu geometrii (`pistePairContacts`). W klastrze zostaje najbliższy
+kontakt, nie pierwszy w kolejności segmentów OSM.
+Każdy styk jest dodawany w obu kierunkach, po czym filtruje je kontrola
+wysokości. Sam najlepszy styk nie wystarcza: odnogi tej samej trasy (np.
+wspólny start + dolne połączenie w kształcie T) stykają się w dwóch miejscach
+i drugie połączenie byłoby niewidoczne dla grafu. Branie wszystkich par
+segmentów w promieniu (bez progu `5 m`) jest zabronione: w rozwidleniach daje
+dziesiątki fałszywych „połączeń” 10–100 m, które rozdmuchują graf (wolny
+Dijkstra na sortowanej tablicy) i pozwalają routerowi ciąć przez teren zamiast
+jechać trasą.
 
 Połączenia z wyciągami bazują głównie na endpointach wyciągu. Krawędzie wyciągu
 mają kierunek normalny w górę oraz awaryjny w dół. Kierunek w dół dostaje karę

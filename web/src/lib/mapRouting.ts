@@ -514,30 +514,23 @@ function buildRouteGraph(features: NormalizedRouteFeature[], getElevation: Eleva
       const secondFeature = pisteFeatures[secondIndex];
       if (!areBboxesWithinDistance(firstFeature.bbox, secondFeature.bbox, ROUTE_CONNECT_RADIUS_M)) continue;
 
-      let closest: ClosestSegmentPoints | null = null;
-      for (const firstSegment of firstFeature.segments) {
-        for (const secondSegment of secondFeature.segments) {
-          if (!areBboxesWithinDistance(firstSegment.bbox, secondSegment.bbox, ROUTE_CONNECT_RADIUS_M)) continue;
-          const candidate = closestSegmentPoints(firstSegment, secondSegment);
-          if (!closest || candidate.distance < closest.distance) closest = candidate;
-        }
+      const contacts = pistePairContacts(firstFeature, secondFeature);
+      for (const contact of contacts) {
+        const firstPoint = addPoint(firstFeature, {
+          coordinate: contact.firstCoordinate,
+          location: contact.firstLocation,
+          elevation: elevationAt(getElevation, contact.firstCoordinate),
+        });
+        const secondPoint = addPoint(secondFeature, {
+          coordinate: contact.secondCoordinate,
+          location: contact.secondLocation,
+          elevation: elevationAt(getElevation, contact.secondCoordinate),
+        });
+        connectionSpecs.push(
+          { sourcePoint: firstPoint, targetPoint: secondPoint, distance: contact.distance },
+          { sourcePoint: secondPoint, targetPoint: firstPoint, distance: contact.distance },
+        );
       }
-
-      if (!closest || closest.distance > ROUTE_CONNECT_RADIUS_M) continue;
-      const firstPoint = addPoint(firstFeature, {
-        coordinate: closest.firstCoordinate,
-        location: closest.firstLocation,
-        elevation: elevationAt(getElevation, closest.firstCoordinate),
-      });
-      const secondPoint = addPoint(secondFeature, {
-        coordinate: closest.secondCoordinate,
-        location: closest.secondLocation,
-        elevation: elevationAt(getElevation, closest.secondCoordinate),
-      });
-      connectionSpecs.push(
-        { sourcePoint: firstPoint, targetPoint: secondPoint, distance: closest.distance },
-        { sourcePoint: secondPoint, targetPoint: firstPoint, distance: closest.distance },
-      );
     }
   }
 
@@ -697,6 +690,70 @@ function findGraphRoute(graph: RouteGraph): GraphRoute | null {
   }
   if (steps.length === 0) return null;
   return { featureUids: [...new Set(steps)], steps, edges, cost: finalCost };
+}
+
+const CONTACT_CLUSTER_M = 10;
+const JUNCTION_DISTANCE_M = 5;
+
+function isSameContactCluster(first: ClosestSegmentPoints, second: ClosestSegmentPoints): boolean {
+  return (
+    Math.abs(first.firstLocation - second.firstLocation) <= CONTACT_CLUSTER_M &&
+    Math.abs(first.secondLocation - second.secondLocation) <= CONTACT_CLUSTER_M
+  );
+}
+
+function pistePairContacts(
+  firstFeature: NormalizedRouteFeature,
+  secondFeature: NormalizedRouteFeature,
+): ClosestSegmentPoints[] {
+  let best: ClosestSegmentPoints | null = null;
+  const junctionCandidates: ClosestSegmentPoints[] = [];
+  for (const firstSegment of firstFeature.segments) {
+    for (const secondSegment of secondFeature.segments) {
+      if (!areBboxesWithinDistance(firstSegment.bbox, secondSegment.bbox, ROUTE_CONNECT_RADIUS_M)) continue;
+      const candidate = closestSegmentPoints(firstSegment, secondSegment);
+      if (candidate.distance > ROUTE_CONNECT_RADIUS_M) continue;
+      if (!best || candidate.distance < best.distance) best = candidate;
+      if (candidate.distance <= JUNCTION_DISTANCE_M) junctionCandidates.push(candidate);
+    }
+  }
+  if (!best) return [];
+
+  // Najpierw sortujemy po dystansie, żeby reprezentantem klastra był
+  // najbliższy kontakt, a nie pierwszy w kolejności segmentów OSM.
+  junctionCandidates.sort((first, second) => first.distance - second.distance);
+
+  // Klastrowanie z domknięciem przechodnim (single linkage, union-find):
+  // kontakty łączone łańcuchowo należą do jednego klastra.
+  const parent = junctionCandidates.map((_, index) => index);
+  const findRoot = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root];
+    parent[index] = root;
+    return root;
+  };
+  for (let firstIndex = 0; firstIndex < junctionCandidates.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < junctionCandidates.length; secondIndex += 1) {
+      if (isSameContactCluster(junctionCandidates[firstIndex], junctionCandidates[secondIndex])) {
+        parent[findRoot(firstIndex)] = findRoot(secondIndex);
+      }
+    }
+  }
+  const bestPerCluster = new Map<number, ClosestSegmentPoints>();
+  for (let index = 0; index < junctionCandidates.length; index += 1) {
+    const root = findRoot(index);
+    const current = bestPerCluster.get(root);
+    if (!current || junctionCandidates[index].distance < current.distance) {
+      bestPerCluster.set(root, junctionCandidates[index]);
+    }
+  }
+  const contacts = [...bestPerCluster.values()];
+
+  // Fallback odziedziczony po poprzednim algorytmie: pary tras stykające się
+  // tylko na większą odległość (do 100 m) nadal dostają jedno połączenie.
+  if (!contacts.some((other) => isSameContactCluster(other, best))) contacts.push(best);
+  contacts.sort((first, second) => first.distance - second.distance);
+  return contacts;
 }
 
 export async function findRoute(

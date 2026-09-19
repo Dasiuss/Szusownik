@@ -1,0 +1,3 @@
+cd /d "%~dp0web"
+echo [dev_PWA] Startuje Vite dev (http://localhost:5173/Szusownik/) ...
+npm run dev -- --open
