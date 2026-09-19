@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { Icon } from "../components/Icon.tsx";
 import { getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
@@ -52,6 +53,8 @@ type RouteMode = "idle" | "start" | "end";
 
 const EMPTY_COLLECTION: GeoJsonLineCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_POINTS: GeoJsonPointCollection = { type: "FeatureCollection", features: [] };
+
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 const MAP_STYLE: StyleSpecification = {
   version: 8,
@@ -180,6 +183,7 @@ export default function MapView() {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routing, setRouting] = useState(false);
   const [selected, setSelected] = useState<SelectedFeature | null>(null);
+  const [routeOpen, setRouteOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [samples, setSamples] = useState<Sample[]>([]);
   const device = useDevice();
@@ -315,7 +319,7 @@ export default function MapView() {
       setMapReady(true);
     });
     map.on("error", (event) => {
-      if (event.error?.message?.includes("Overpass")) setMapError(event.error.message);
+      if (event.error?.message) setMapError(event.error.message);
     });
     return () => {
       map.remove();
@@ -368,6 +372,7 @@ export default function MapView() {
         return map.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] }, { exaggerated: false });
       });
       setRoute(result);
+      setRouteOpen(false);
     } catch (error: unknown) {
       setRoute(null);
       setRouteError(error instanceof Error ? error.message : String(error));
@@ -404,32 +409,22 @@ export default function MapView() {
     setManualStart(null);
     setRouteError(null);
     setRouteMode("idle");
+    setRouteOpen(false);
   }
 
   return (
     <div className="map-page">
       <div className="map-canvas" ref={mapContainer} aria-label="Mapa tras narciarskich Sölden" />
-      <div className="map-topbar">
-        <div>
-          <span className="map-kicker">Mapa ośrodka</span>
-          <strong>Sölden</strong>
-        </div>
-        <div className="map-top-actions">
-          <span className={`map-data-status${mapData.stale ? " map-data-status-stale" : ""}`}>
-            <span className="map-status-dot" /> {mapError ? "Brak danych" : mapData.stale ? "Dane starsze" : "Trasy gotowe"}
-          </span>
-          <button className="map-icon-button" type="button" onClick={centerOnPosition} disabled={!position} aria-label="Pokaż moją pozycję" title="Pokaż moją pozycję"><Icon name="activity" size={19} /></button>
-        </div>
+      <div className="map-actions">
+        <span className={`map-data-status${mapData.stale ? " map-data-status-stale" : ""}`}>
+          <span className="map-status-dot" /> {mapError ? "Brak danych" : !mapData.savedAt ? "Ładowanie" : mapData.stale ? "Dane starsze" : "Trasy gotowe"}
+        </span>
+        <button className="map-icon-button" type="button" onClick={centerOnPosition} disabled={!position} aria-label="Pokaż moją pozycję" title="Pokaż moją pozycję"><Icon name="activity" size={19} /></button>
+        <button className={`map-icon-button${routeOpen ? " map-icon-button-active" : ""}`} type="button" onClick={() => setRouteOpen((open) => !open)} aria-label="Włącz routing" title="Wyznacz trasę"><Icon name="route" size={19} /></button>
       </div>
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /> {mapError}. Mapa może nie zawierać tras.</div>}
       {!mapError && !mapData.stale && !mapReady && <div className="map-loading"><span className="spinner" /> Wczytuję mapę i trasy…</div>}
-
-      <div className="map-legend">
-        <span><i className="legend-line legend-line-blue" /> plan</span>
-        <span><i className="legend-line legend-line-coral" /> ostatnie 5 min</span>
-        <span><i className="legend-dot legend-dot-gps" /> GPS telefonu</span>
-      </div>
 
       {selected && (
         <section className="map-feature-card">
@@ -441,7 +436,7 @@ export default function MapView() {
       )}
 
       {route && (
-        <section className="map-route-result">
+          <section className={`map-route-result${routeOpen ? " map-route-result-above" : ""}`}>
           <span className="map-feature-kicker">Wyznaczona trasa</span>
           <strong>[{routeDistanceLabel(route.distanceM)}]</strong>
           <div className="map-route-sequence">
@@ -455,7 +450,7 @@ export default function MapView() {
         </section>
       )}
 
-      <section className="map-route-controls">
+      {routeOpen && <section className="map-route-controls">
         <div className="map-controls-heading">
           <div><span className="map-feature-kicker">Routing po stoku</span><strong>{routeMode === "idle" ? "Wybierz początek i cel" : routeMode === "start" ? "Wskaż początek na mapie" : "Wskaż cel na mapie"}</strong></div>
           {(start || destination) && <button className="map-card-close" type="button" onClick={clearRoute} aria-label="Wyczyść punkty"><Icon name="refresh" size={16} /></button>}
@@ -476,7 +471,7 @@ export default function MapView() {
             {routing ? <><span className="spinner spinner-light" /> Liczę…</> : "Wyznacz trasę"}
           </button>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
