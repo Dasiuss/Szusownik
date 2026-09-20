@@ -7,7 +7,7 @@ import platterUrl from "../assets/lift-icons/platter.png";
 import ropeTowUrl from "../assets/lift-icons/rope-tow.png";
 import tBarUrl from "../assets/lift-icons/t-bar.png";
 
-// Icons cut from ikonki.png (repo root, colorful icons on black background)
+// Icons cut from docs/assets/ikonki.png (colorful icons on black background)
 // into 64x64 transparent PNGs. They are bundled as data URLs, so the map and
 // the React UI always work offline.
 const LIFT_URL_BY_IMAGE_ID: Record<string, string> = {

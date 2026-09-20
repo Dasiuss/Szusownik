@@ -162,7 +162,7 @@ Etykiety:
 
 Ikony wyciągów:
 
-- źródło: `ikonki.png` w katalogu głównym, wycięte do przezroczystych PNG
+- źródło: `docs/assets/ikonki.png`, wycięte do przezroczystych PNG
   64x64 w `web/src/assets/lift-icons/` (bundlowane jako data URL, działają offline);
 - mapowanie `aerialway` (definicja: `web/src/components/LiftIcon.tsx`):
   `chair_lift`, `gondola`, `cable_car`, `t-bar`, `platter`, `rope_tow`,
