@@ -98,6 +98,7 @@ export interface RouteSequenceItem {
   label: string;
   kind: "piste" | "lift";
   color: string;
+  aerialway: string;
 }
 
 export interface RouteResult {
@@ -108,7 +109,18 @@ export interface RouteResult {
     type: "FeatureCollection";
     features: Array<{
       type: "Feature";
-      properties: { kind: "piste" | "lift" | "connection"; color: string; label?: string };
+      properties: {
+        kind: "piste" | "lift" | "connection";
+        color: string;
+        uid?: string;
+        label?: string;
+        aerialway?: string;
+        liftCount?: number;
+        downhillLiftCount?: number;
+        ungroomedDistance?: number;
+        blackDistance?: number;
+        transferDistance?: number;
+      };
       geometry: { type: "LineString"; coordinates: Position[] };
     }>;
   };
@@ -287,6 +299,157 @@ export function snapToPiste(features: SkiLineFeature[], coordinate: Position, li
   }
 
   return snap;
+}
+
+export interface SnappedRoutePosition {
+  coordinate: Position;
+  alongM: number;
+  offsetM: number;
+}
+
+function routePolyline(route: RouteResult): { coordinates: Position[]; cumulative: number[] } {
+  const coordinates: Position[] = [];
+  const cumulative: number[] = [];
+  let distance = 0;
+  for (const feature of route.segments.features) {
+    for (const point of feature.geometry.coordinates) {
+      const previous = coordinates[coordinates.length - 1];
+      if (previous && previous[0] === point[0] && previous[1] === point[1]) continue;
+      if (previous) distance += coordinateDistance(previous, point);
+      coordinates.push(point);
+      cumulative.push(distance);
+    }
+  }
+  return { coordinates, cumulative };
+}
+
+export function snapToRoute(route: RouteResult, position: Position): SnappedRoutePosition | null {
+  const { coordinates, cumulative } = routePolyline(route);
+  if (coordinates.length < 2) return null;
+  const lngScale = longitudeScale(position[1]);
+  let bestDistanceSquared = Infinity;
+  let bestCoordinate = coordinates[0];
+  let bestAlong = 0;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const start = coordinates[index - 1];
+    const end = coordinates[index];
+    const ax = (start[0] - position[0]) * lngScale;
+    const ay = (start[1] - position[1]) * METERS_PER_DEGREE;
+    const bx = (end[0] - position[0]) * lngScale;
+    const by = (end[1] - position[1]) * METERS_PER_DEGREE;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const segmentLengthSquared = dx * dx + dy * dy;
+    const projection = segmentLengthSquared === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / segmentLengthSquared));
+    const closestX = ax + dx * projection;
+    const closestY = ay + dy * projection;
+    const distanceSquared = closestX * closestX + closestY * closestY;
+
+    if (distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestCoordinate = [
+        start[0] + (end[0] - start[0]) * projection,
+        start[1] + (end[1] - start[1]) * projection,
+      ];
+      bestAlong = cumulative[index - 1] + (cumulative[index] - cumulative[index - 1]) * projection;
+    }
+  }
+
+  return { coordinate: bestCoordinate, alongM: bestAlong, offsetM: Math.sqrt(bestDistanceSquared) };
+}
+
+function lineLength(coordinates: Position[]): number {
+  let length = 0;
+  for (let index = 1; index < coordinates.length; index += 1) length += coordinateDistance(coordinates[index - 1], coordinates[index]);
+  return length;
+}
+
+function sliceLineFrom(coordinates: Position[], cutM: number): Position[] {
+  if (cutM <= 0) return coordinates;
+  let travelled = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const segmentLength = coordinateDistance(coordinates[index - 1], coordinates[index]);
+    if (travelled + segmentLength < cutM) {
+      travelled += segmentLength;
+      continue;
+    }
+    const ratio = segmentLength === 0 ? 0 : (cutM - travelled) / segmentLength;
+    const cut: Position = [
+      coordinates[index - 1][0] + (coordinates[index][0] - coordinates[index - 1][0]) * ratio,
+      coordinates[index - 1][1] + (coordinates[index][1] - coordinates[index - 1][1]) * ratio,
+    ];
+    return [cut, ...coordinates.slice(index)];
+  }
+  return [coordinates[coordinates.length - 1]];
+}
+
+export function trimRoute(route: RouteResult, alongM: number): RouteResult | null {
+  const spans: Array<{ feature: RouteResult["segments"]["features"][number]; startM: number; endM: number }> = [];
+  let cursor = 0;
+  for (const feature of route.segments.features) {
+    const length = lineLength(feature.geometry.coordinates);
+    spans.push({ feature, startM: cursor, endM: cursor + length });
+    cursor += length;
+  }
+
+  const features: RouteResult["segments"]["features"] = [];
+  let distanceM = 0;
+  let downhillLiftCount = 0;
+  let liftCount = 0;
+  let ungroomedDistance = 0;
+  let blackDistance = 0;
+  let transferDistance = 0;
+  // Koszt per krawędź jest zapisany w properties, więc po przycięciu można go
+  // przeliczyć od nowa. Dystanse skalujemy proporcjonalnie do pozostałej części
+  // krawędzi, a licznik przejazdów wyciągiem zostaje, gdy z krawędzi coś zostało
+  // (przycięcie w połowie wyciągu to nadal jeden przejazd).
+  const addSpanCost = (properties: RouteResult["segments"]["features"][number]["properties"], remainingLength: number, fullLength: number): void => {
+    const fraction = fullLength > 0 ? remainingLength / fullLength : 1;
+    downhillLiftCount += properties.downhillLiftCount ?? 0;
+    liftCount += properties.liftCount ?? 0;
+    ungroomedDistance += (properties.ungroomedDistance ?? 0) * fraction;
+    blackDistance += (properties.blackDistance ?? 0) * fraction;
+    transferDistance += (properties.transferDistance ?? 0) * fraction;
+  };
+  for (const span of spans) {
+    const fullLength = span.endM - span.startM;
+    if (span.endM <= alongM) continue;
+    if (span.startM >= alongM) {
+      features.push(span.feature);
+      distanceM += fullLength;
+      addSpanCost(span.feature.properties, fullLength, fullLength);
+      continue;
+    }
+    const coordinates = sliceLineFrom(span.feature.geometry.coordinates, alongM - span.startM);
+    if (coordinates.length < 2) continue;
+    const remainingLength = lineLength(coordinates);
+    features.push({ ...span.feature, geometry: { type: "LineString", coordinates } });
+    distanceM += remainingLength;
+    addSpanCost(span.feature.properties, remainingLength, fullLength);
+  }
+  if (features.length === 0 || distanceM < 1) return null;
+
+  const sequenceByUid = new Map(route.sequence.map((item) => [item.uid, item]));
+  const sequence: RouteSequenceItem[] = [];
+  const seen = new Set<string>();
+  for (const feature of features) {
+    const uid = feature.properties.uid;
+    if (!uid || seen.has(uid)) continue;
+    const item = sequenceByUid.get(uid);
+    if (!item) continue;
+    seen.add(uid);
+    sequence.push(item);
+  }
+
+  return {
+    distanceM,
+    cost: [downhillLiftCount, liftCount, ungroomedDistance, blackDistance, transferDistance, distanceM],
+    sequence,
+    segments: { type: "FeatureCollection", features },
+    start: features[0].geometry.coordinates[0],
+    end: route.end,
+  };
 }
 
 function pointOnSegment(point: XY, start: XY, end: XY): { ratio: number; point: XY } {
@@ -787,6 +950,7 @@ export async function findRoute(
       label: feature.properties.label || feature.properties.name || (feature.kind === "lift" ? "Wyciąg" : "Trasa"),
       kind: feature.kind,
       color: feature.kind === "lift" ? "#7c3aed" : feature.properties.difficultyColor,
+      aerialway: feature.kind === "lift" ? feature.properties.aerialway : "",
     });
   }
 
@@ -799,7 +963,14 @@ export async function findRoute(
         properties: {
           kind: edge.kind,
           color: edge.kind === "lift" ? "#7c3aed" : edge.kind === "piste" ? feature?.properties.difficultyColor ?? "#1557b0" : "#1557b0",
+          ...(feature ? { uid: feature.properties.uid } : {}),
           ...(feature && edge.kind !== "connection" ? { label: feature.properties.name || feature.properties.ref || undefined } : {}),
+          ...(feature?.kind === "lift" ? { aerialway: feature.properties.aerialway } : {}),
+          liftCount: edge.liftCount,
+          downhillLiftCount: edge.downhillLiftCount,
+          ungroomedDistance: edge.ungroomedDistance,
+          blackDistance: edge.blackDistance,
+          transferDistance: edge.transferDistance,
         },
         geometry: { type: "LineString" as const, coordinates: edge.geometry },
       };

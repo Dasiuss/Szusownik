@@ -133,14 +133,18 @@ Podstawowy zestaw obejmuje:
 4. `pistes-casing` - biała obwódka linii.
 5. `pistes-line` - linia w kolorze trudności.
 6. `pistes-warning-stripe` - paski ostrzegawcze.
-7. `pistes-labels` - numer/nazwa wzdłuż trasy.
-8. `pistes-hit-line` - niewidoczna linia klikana, szerokość 18 px.
-9. `lifts-line` - czerwona przerywana linia wyciągu.
-10. `lifts-labels` - nazwa wyciągu pośrodku.
-11. `lifts-hit` - niewidoczna linia klikana, szerokość 18 px.
+7. `pistes-hit` - niewidoczna linia klikana, szerokość 18 px.
+8. `lifts-line` - czerwona przerywana linia wyciągu.
+9. `lifts-hit` - niewidoczna linia klikana, szerokość 18 px.
+10. `route-casing` / `route-piste` / `route-lift` - wstęga wyznaczonej trasy.
+11. `pistes-labels` - numer/nazwa wzdłuż trasy.
+12. `lifts-icons-line` - ikony wyciągów kafelkowane wzdłuż linii.
+13. `lifts-names` - nazwa wyciągu pośrodku linii.
+14. `route-piste-labels` / `route-lift-labels` - etykiety wyznaczonej trasy.
 
 Warstwy są dodawane po pobraniu danych. Kolejność dodawania jest kolejnością
-rysowania. `feature-state` reaguje na `selected`: wybrany element dostaje
+rysowania. Wszystkie etykiety leżą POWYŻEJ wstęgi trasy, żeby ta ich nie
+zamalowywała. `feature-state` reaguje na `selected`: wybrany element dostaje
 żółty obrys i większą szerokość/opacity. Grupa może obejmować wiele odcinków
 tej samej trasy.
 
@@ -148,7 +152,24 @@ Etykiety:
 
 - trasy: `symbol-placement: line`, `symbol-spacing: 150`, Noto Sans Bold 11,
   białe halo, brak overlap;
-- wyciągi: `symbol-placement: line-center`, ciemnoczerwony tekst, białe halo.
+- wyciągi: ikony i nazwy na osobnych warstwach. Ikony (`lifts-icons-line`,
+  `symbol-placement: line`, `symbol-spacing: 75`, `icon-keep-upright: true`)
+  renderują się zawsze (`icon-allow-overlap` + `icon-ignore-placement`),
+  więc długa nazwa nie jest w stanie ich przykryć. Nazwy (`lifts-names`,
+  `symbol-placement: line-center`) chowają się przy kolizji;
+- aktywna trasa: obiekty wchodzące w trasę są wykluczane z bazowych warstw
+  etykiet po `uid` (`!in`), żeby bazowa i trasowa etykieta się nie dublowały.
+
+Ikony wyciągów:
+
+- źródło: `ikonki.png` w katalogu głównym, wycięte do przezroczystych PNG
+  64x64 w `web/src/assets/lift-icons/` (bundlowane jako data URL, działają offline);
+- mapowanie `aerialway` (definicja: `web/src/components/LiftIcon.tsx`):
+  `chair_lift`, `gondola`, `cable_car`, `t-bar`, `platter`, `rope_tow`,
+  `magic_carpet` mają własne ikony; `j-bar` i `drag_lift` używają talerzyka,
+  `mixed_lift` używa gondoli;
+- `zip_line` i nieznane typy celowo nie mają ikony (decyzja użytkownika) —
+  karta wyciągu pokazuje wtedy sam typ tekstowo z `AERIALWAY_LABELS`.
 
 Niewidoczne hit-area są ważne na telefonie. Nie zmniejszać ich tylko po to, aby
 warstwy wyglądały bardziej minimalistycznie.
@@ -356,9 +377,61 @@ W referencyjnym `MapyTest` nie ma:
 W Szusowniku bieżąca pozycja mapy pochodzi bezpośrednio z telefonu przez
 `navigator.geolocation.watchPosition` i jest rysowana jako niebieska kropka.
 Domyślnie bieżąca pozycja telefonu jest początkiem nawigacji z karty elementu.
-Przy braku GPS nawigacja z karty zaczyna się ze stałego markera domu.
-Ręczny routing zaczyna się przyciskiem i wymaga dwóch kliknięć na mapie.
+Przy braku GPS nawigacja z karty zaczyna się ze stałego markera domu. Ręczny
+routing zaczyna się przyciskiem i wymaga dwóch kliknięć na mapie.
 Odmowa uprawnień lub brak sygnału GPS nie blokuje mapy ani ręcznego routingu.
+
+GPS jest używany jako start tylko wtedy, gdy mieści się w `SOLDEN_BOUNDS`
+(tych samych, co limity pobierania kafelków i DEM). Pozycja poza obszarem
+Sölden jest traktowana jak brak GPS i nawigacja startuje z markera domu.
+Dzięki temu testy z domu nie próbują wyznaczać trasy z lokalizacji poza
+ośrodkiem.
+
+`SOLDEN_BOUNDS` to prostokąt pokrycia danych, a nie granica ośrodka. Jest
+szerszy niż same stoki, więc dopuszcza pozycję w dolinie lub na okolicznym
+szczycie. To celowo tania, pierwsza bramka: jeśli GPS przejdzie prostokąt, ale
+jest dalej niż `ROUTE_SNAP_RADIUS_M = 100 m` od trasy, `findRoute` zwróci
+czytelny błąd zamiast wyznaczać trasę z domu. Twardsza bramka (snap do trasy
+albo osobny polygon ośrodka) to ewentualne rozszerzenie, jeśli okaże się, że
+prostokąt przepuszcza zbyt wiele punktów.
+
+Nawigacja rozpoczęta z żywego GPS jest odświeżana:
+
+- co `NAVIGATION_REFRESH_MS = 5000` — jest to minimalny odstęp; faktyczne
+  odświeżenie następuje przy kolejnym fixie z `watchPosition`. `maximumAge:
+  5000` w `watchPosition` steruje wiekiem cache pozycji, nie częstotliwością
+  callbacków, dlatego kod nie zakłada sztywnego cyklu 5 s;
+- tylko gdy pozycja przesunęła się o co najmniej
+  `NAVIGATION_MOVE_THRESHOLD_M = 15` od ostatniego startu trasy (żeby nie
+  przeliczać na szumie GPS w miejscu);
+- po przekroczeniu `NAVIGATION_ARRIVAL_M = 30 m` od celu trasa jest czyszczona;
+  sprawdzenie przybycia działa na każdym fixie, niezależnie od odstępu i progu
+  ruchu, więc oscylujący GPS nie trzyma trasy w nieskończoność.
+
+Fixy z dokładnością gorszą niż `NAVIGATION_MAX_ACCURACY_M = 50 m` są pomijane w
+tej iteracji (bez przycinania i bez routingu od nowa), żeby słaby sygnał nie
+przyciął trasy do złego fragmentu.
+
+Odświeżanie jest zoptymalizowane przez przycinanie zamiast pełnego routingu.
+Jeśli nowa pozycja leży na zaplanowanej trasie (offset do polilinii nie większy
+niż `max(dokładność GPS, NAVIGATION_ON_ROUTE_M = 25 m)`), `snapToRoute` liczy
+postęp wzdłuż trasy, a `trimRoute` odcina przebytą część i zachowuje kolejność
+oraz etykiety pozostałych odcinków. Pełny `findRoute` jest uruchamiany dopiero,
+gdy pozycja zjedzie z trasy. To ważne, bo `findRoute` przy każdym wywołaniu
+synchronicznie normalizuje geometrie i buduje graf Dijkstry na głównym wątku;
+odpalenie go co 5 s powodowałoby zacięcia. Nawigacja z markera domu i routing
+ręczny nie są odświeżane cyklicznie.
+
+`trimRoute` przelicza cały koszt trasy, nie tylko dystans. Każda krawędź trasy
+niesie w `properties` swój wkład (`liftCount`, `downhillLiftCount`,
+`ungroomedDistance`, `blackDistance`, `transferDistance`), więc po przycięciu
+liczniki i dystanse są sumowane od nowa. Dystanse skaluje się proporcjonalnie do
+pozostałej części krawędzi, a przejazd wyciągiem liczy się, dopóki z krawędzi
+coś zostało (przycięcie w połowie wyciągu to nadal jeden przejazd).
+
+`calculateRouteFor` używa tokenu generacji. Wyczyszczenie trasy albo nowy cel
+podczas routingu unieważnia wynik, więc spóźniony `setRoute` nie może ponownie
+pokazać starej trasy.
 
 Mapa pokazuje również zapisany ślad z ostatnich pięciu minut czasu telefonu.
 Są to próbki z plików, których timestamp mieści się w przedziale od `now - 5 min`

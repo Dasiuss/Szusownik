@@ -3,9 +3,10 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "../components/Icon.tsx";
+import { LiftIcon, LIFT_EMPTY_IMAGE_ID, LIFT_ICON_IMAGE_EXPRESSION, LIFT_MAP_IMAGES } from "../components/LiftIcon.tsx";
 import { getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
-import { findRoute, snapToPiste, type RouteResult } from "../lib/mapRouting.ts";
+import { findRoute, snapToPiste, snapToRoute, trimRoute, type RouteResult } from "../lib/mapRouting.ts";
 import {
   AERIALWAY_LABELS,
   DIFFICULTY_COLORS,
@@ -63,6 +64,7 @@ interface MapItem {
   ids: string[];
   label: string;
   displayLabel: string;
+  aerialway: string;
   site: string | null;
   color: string;
   kind: "trasa" | "wyciąg";
@@ -72,10 +74,19 @@ interface MapItem {
 type RouteMode = "idle" | "start" | "end";
 
 const HOME_COORDINATES: Position = [11.0095, 46.9726];
+const NAVIGATION_REFRESH_MS = 5000;
+const NAVIGATION_MOVE_THRESHOLD_M = 15;
+const NAVIGATION_ON_ROUTE_M = 25;
+const NAVIGATION_ARRIVAL_M = 30;
+const NAVIGATION_MAX_ACCURACY_M = 50;
 const EMPTY_COLLECTION: GeoJsonLineCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_POINTS: GeoJsonPointCollection = { type: "FeatureCollection", features: [] };
 const LINE_GEOMETRY_FILTER = ["==", ["geometry-type"], "LineString"] as never;
 const POLYGON_GEOMETRY_FILTER = ["==", ["geometry-type"], "Polygon"] as never;
+// Base label filters so the route effect can rebuild them with exclusions.
+const PISTES_LABEL_CONDITIONS: unknown[] = [LINE_GEOMETRY_FILTER, ["has", "label"]];
+const LIFTS_ICON_CONDITIONS: unknown[] = [["has", "uid"]];
+const LIFTS_LABEL_CONDITIONS: unknown[] = [["has", "name"], ["!=", ["get", "name"], ""]];
 const WARNING_COLOR_EXPRESSION = [
   "match",
   ["get", "difficulty"],
@@ -144,6 +155,25 @@ function emptyMapData(): SkiData {
 function sourceData(map: maplibregl.Map, id: string, data: unknown): void {
   const source = map.getSource(id) as GeoJSONSource | undefined;
   if (source) source.setData(data as Parameters<GeoJSONSource["setData"]>[0]);
+}
+
+async function addLiftImages(map: maplibregl.Map, isCancelled: () => boolean = () => false): Promise<void> {
+  if (isCancelled()) return;
+  if (!map.hasImage(LIFT_EMPTY_IMAGE_ID)) {
+    map.addImage(LIFT_EMPTY_IMAGE_ID, { width: 1, height: 1, data: new Uint8Array(4) });
+  }
+  await Promise.all(LIFT_MAP_IMAGES.map(async ({ imageId, url }) => {
+    if (isCancelled() || map.hasImage(imageId)) return;
+
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error(`Nie udało się wczytać ikonki ${imageId}.`));
+      image.src = url;
+    });
+    if (isCancelled() || map.hasImage(imageId)) return;
+    map.addImage(imageId, image, { pixelRatio: 2 });
+  }));
 }
 
 function pointCollection(position: DevicePosition | null): GeoJsonPointCollection {
@@ -287,12 +317,12 @@ function mapItemsFor(data: SkiData): MapItem[] {
     }
     const isLift = source === "lifts";
     const label = rawLabel || (isLift ? "Wyciąg" : "Trasa (bez nazwy)");
-    const typeLabel = feature.properties.aerialway ? AERIALWAY_LABELS[feature.properties.aerialway] ?? feature.properties.aerialway : "nieznany";
     groups.set(key, {
       source,
       ids: [feature.properties.uid],
       label,
-      displayLabel: isLift ? `${label} (${typeLabel})` : label,
+      displayLabel: label,
+      aerialway: isLift ? feature.properties.aerialway : "",
       site: feature.properties.site,
       color: isLift ? "#7c3aed" : feature.properties.difficultyColor,
       kind: isLift ? "wyciąg" : "trasa",
@@ -330,6 +360,9 @@ export default function MapView() {
   const hasCenteredOnPosition = useRef(false);
   const routeModeRef = useRef<RouteMode>("idle");
   const autoRouteRef = useRef(false);
+  const navigationFromGpsRef = useRef(false);
+  const lastNavigationRefreshRef = useRef(0);
+  const routeGenerationRef = useRef(0);
   const blinkRef = useRef(0);
   const [mapData, setMapData] = useState<SkiData>(emptyMapData);
   const [mapReady, setMapReady] = useState(false);
@@ -349,14 +382,17 @@ export default function MapView() {
   const [samples, setSamples] = useState<Sample[]>([]);
   const device = useDevice();
 
-  const deviceStart = position?.coordinate ?? null;
+  const deviceStart = position && withinBounds(position.coordinate) ? position.coordinate : null;
   const start = manualStart ?? deviceStart;
   const trace = useMemo(() => recentTrace(samples, now), [samples, now]);
   const mapItems = useMemo(() => mapItemsFor(mapData), [mapData]);
   const filteredMapItems = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pl");
     if (!query) return mapItems;
-    return mapItems.filter((item) => item.displayLabel.toLocaleLowerCase("pl").includes(query));
+    return mapItems.filter((item) => {
+      const typeLabel = item.aerialway ? AERIALWAY_LABELS[item.aerialway] ?? item.aerialway : "";
+      return `${item.displayLabel} ${typeLabel}`.toLocaleLowerCase("pl").includes(query);
+    });
   }, [mapItems, search]);
   const featureIndex = useMemo(() => {
     const index = new Map<string, SkiFeature>();
@@ -462,29 +498,42 @@ export default function MapView() {
       selectHome();
     });
     const homeMarker = new maplibregl.Marker({ element: homeMarkerElement, anchor: "bottom" }).setLngLat(HOME_COORDINATES).addTo(map);
-    map.on("load", () => {
-      map.addSource("pistes", { type: "geojson", data: mapData.pistes as never, promoteId: "uid" });
-      map.addSource("lifts", { type: "geojson", data: mapData.lifts as never, promoteId: "uid" });
-      map.addSource("recent-trace", { type: "geojson", data: EMPTY_COLLECTION as never });
-      map.addSource("map-points", { type: "geojson", data: EMPTY_POINTS as never });
-      map.addSource("route-result", { type: "geojson", data: EMPTY_COLLECTION as never });
-      map.addLayer({ id: "pistes-area-fill", type: "fill", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, paint: { "fill-color": COLOR_EXPRESSION, "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.5, 0.26] as never } });
-      map.addLayer({ id: "pistes-area-outline", type: "line", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", COLOR_EXPRESSION] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 3, 1.5] as never } });
-      map.addLayer({ id: "pistes-casing", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#ffffff"] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 10, 6] as never } });
-      map.addLayer({ id: "pistes-line", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR_EXPRESSION, "line-width": 3, "line-opacity": 0.95 } });
-      map.addLayer({ id: "pistes-warning-stripe", type: "line", source: "pistes", filter: ["all", LINE_GEOMETRY_FILTER, ["get", "warning"]] as never, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": WARNING_COLOR_EXPRESSION, "line-width": 3, "line-dasharray": [2, 10] } });
-      map.addLayer({ id: "pistes-labels", type: "symbol", source: "pistes", filter: ["all", LINE_GEOMETRY_FILTER, ["has", "label"]] as never, layout: { "symbol-placement": "line", "symbol-spacing": 150, "text-field": ["get", "label"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": false, "text-optional": true }, paint: { "text-color": "#ffffff", "text-halo-color": "#17363b", "text-halo-width": 1.5 } });
-      map.addLayer({ id: "pistes-hit", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, paint: { "line-color": "rgba(0, 0, 0, 0)", "line-width": 18 } });
-      map.addLayer({ id: "lifts-line", type: "line", source: "lifts", layout: { "line-cap": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#dc2626"] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 5, 2.5] as never, "line-dasharray": [2, 1.5] } });
-      map.addLayer({ id: "lifts-labels", type: "symbol", source: "lifts", filter: ["has", "name"], layout: { "symbol-placement": "line-center", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 0.6], "text-allow-overlap": false }, paint: { "text-color": "#7f1d1d", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
-      map.addLayer({ id: "lifts-hit", type: "line", source: "lifts", paint: { "line-color": "rgba(0, 0, 0, 0)", "line-width": 18 } });
+    let cancelled = false;
+     map.on("load", async () => {
+       try {
+         await addLiftImages(map, () => cancelled);
+       } catch (error: unknown) {
+         if (cancelled) return;
+         setMapError(error instanceof Error ? error.message : String(error));
+         return;
+       }
+       if (cancelled) return;
+       map.addSource("pistes", { type: "geojson", data: mapData.pistes as never, promoteId: "uid" });
+       map.addSource("lifts", { type: "geojson", data: mapData.lifts as never, promoteId: "uid" });
+       map.addSource("recent-trace", { type: "geojson", data: EMPTY_COLLECTION as never });
+       map.addSource("map-points", { type: "geojson", data: EMPTY_POINTS as never });
+       map.addSource("route-result", { type: "geojson", data: EMPTY_COLLECTION as never });
+       map.addLayer({ id: "pistes-area-fill", type: "fill", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, paint: { "fill-color": COLOR_EXPRESSION, "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.5, 0.26] as never } });
+       map.addLayer({ id: "pistes-area-outline", type: "line", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", COLOR_EXPRESSION] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 3, 1.5] as never } });
+       map.addLayer({ id: "pistes-casing", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#ffffff"] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 10, 6] as never } });
+       map.addLayer({ id: "pistes-line", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR_EXPRESSION, "line-width": 3, "line-opacity": 0.95 } });
+       map.addLayer({ id: "pistes-warning-stripe", type: "line", source: "pistes", filter: ["all", LINE_GEOMETRY_FILTER, ["get", "warning"]] as never, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": WARNING_COLOR_EXPRESSION, "line-width": 3, "line-dasharray": [2, 10] } });
+        map.addLayer({ id: "pistes-hit", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, paint: { "line-color": "rgba(0, 0, 0, 0)", "line-width": 18 } });
+        map.addLayer({ id: "lifts-line", type: "line", source: "lifts", layout: { "line-cap": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#dc2626"] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 5, 2.5] as never, "line-dasharray": [2, 1.5] } });
+        map.addLayer({ id: "lifts-hit", type: "line", source: "lifts", paint: { "line-color": "rgba(0, 0, 0, 0)", "line-width": 18 } });
       map.addLayer({ id: "recent-trace-casing", type: "line", source: "recent-trace", paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.8 } });
       map.addLayer({ id: "recent-trace-line", type: "line", source: "recent-trace", paint: { "line-color": "#ed7657", "line-width": 4, "line-dasharray": [1, 1.5] } });
       map.addLayer({ id: "route-casing", type: "line", source: "route-result", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9 } });
       map.addLayer({ id: "route-piste", type: "line", source: "route-result", filter: ["!=", ["get", "kind"], "lift"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#1557b0", "line-width": 6 } });
-      map.addLayer({ id: "route-lift", type: "line", source: "route-result", filter: ["==", ["get", "kind"], "lift"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#7c3aed", "line-width": 6, "line-dasharray": [2, 1.5] } });
-      map.addLayer({ id: "route-piste-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "piste"], ["has", "label"]], layout: { "symbol-placement": "line", "symbol-spacing": 260, "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#1557b0", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
-      map.addLayer({ id: "route-lift-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "lift"], ["has", "label"]], layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#5b21b6", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
+       map.addLayer({ id: "route-lift", type: "line", source: "route-result", filter: ["==", ["get", "kind"], "lift"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#7c3aed", "line-width": 6, "line-dasharray": [2, 1.5] } });
+       // All labels sit above the route ribbon so it never paints over them.
+       map.addLayer({ id: "pistes-labels", type: "symbol", source: "pistes", filter: ["all", ...PISTES_LABEL_CONDITIONS] as never, layout: { "symbol-placement": "line", "symbol-spacing": 150, "text-field": ["get", "label"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": false, "text-optional": true }, paint: { "text-color": "#ffffff", "text-halo-color": "#17363b", "text-halo-width": 1.5 } });
+       // Tiled lift icons along the line (~2x denser than piste names). They always
+       // render, so neighbours stay visible even where a name covers one of them.
+       map.addLayer({ id: "lifts-icons-line", type: "symbol", source: "lifts", filter: ["all", ...LIFTS_ICON_CONDITIONS] as never, layout: { "symbol-placement": "line", "symbol-spacing": 75, "icon-image": LIFT_ICON_IMAGE_EXPRESSION as never, "icon-size": 0.62, "icon-keep-upright": true, "icon-allow-overlap": true, "icon-ignore-placement": true }, paint: {} });
+       map.addLayer({ id: "lifts-names", type: "symbol", source: "lifts", filter: ["all", ...LIFTS_LABEL_CONDITIONS] as never, layout: { "symbol-placement": "line-center", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.8, 0], "text-allow-overlap": false }, paint: { "text-color": "#7f1d1d", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
+       map.addLayer({ id: "route-piste-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "piste"], ["has", "label"]], layout: { "symbol-placement": "line", "symbol-spacing": 260, "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#1557b0", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
+       map.addLayer({ id: "route-lift-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "lift"], ["has", "label"]], layout: { "symbol-placement": "line-center", "icon-image": LIFT_ICON_IMAGE_EXPRESSION as never, "icon-size": 0.85, "icon-anchor": "right", "icon-offset": [-6, 0], "icon-keep-upright": true, "icon-allow-overlap": true, "icon-ignore-placement": true, "text-anchor": "left", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-offset": [1.8, 0], "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#5b21b6", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
        map.addLayer({ id: "map-points", type: "circle", source: "map-points", paint: { "circle-color": "#1976d2", "circle-radius": 8, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
       map.on("click", (event) => {
         const activeRouteMode = routeModeRef.current;
@@ -549,6 +598,7 @@ export default function MapView() {
       if (errorMessage) setMapError(errorMessage);
     });
     return () => {
+      cancelled = true;
       for (const marker of Object.values(routeMarkersRef.current)) marker?.remove();
       map.remove();
       homeMarker.remove();
@@ -581,6 +631,16 @@ export default function MapView() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     sourceData(map, "route-result", route?.segments ?? EMPTY_COLLECTION);
+    // Route labels (bigger, restyled) never exactly cover base labels, so the
+    // routed features are excluded from base label layers while a route is shown.
+    const routedUids = route ? Array.from(new Set(route.sequence.map((item) => item.uid))) : [];
+    const withExclusion = (conditions: unknown[]): unknown =>
+      (routedUids.length === 0
+        ? ["all", ...conditions]
+        : ["all", ...conditions, ["!", ["in", ["get", "uid"], ["literal", routedUids]]]]) as never;
+    if (map.getLayer("pistes-labels")) map.setFilter("pistes-labels", withExclusion(PISTES_LABEL_CONDITIONS) as never);
+    if (map.getLayer("lifts-icons-line")) map.setFilter("lifts-icons-line", withExclusion(LIFTS_ICON_CONDITIONS) as never);
+    if (map.getLayer("lifts-names")) map.setFilter("lifts-names", withExclusion(LIFTS_LABEL_CONDITIONS) as never);
   }, [mapReady, route]);
 
   useEffect(() => {
@@ -591,6 +651,8 @@ export default function MapView() {
   }, [mapReady, position]);
 
   async function calculateRouteFor(routeStart: Position, routeEnd: Position) {
+    const generation = routeGenerationRef.current + 1;
+    routeGenerationRef.current = generation;
     setRouting(true);
     setRouteError(null);
     // Pozwól przeglądarce namalować markery i komunikat przed synchroniczną
@@ -602,12 +664,15 @@ export default function MapView() {
         if (!map) return null;
         return map.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] }, { exaggerated: false });
       });
+      // Wynik spóźniony (wyczyszczenie lub nowy cel) nie może nadpisać stanu.
+      if (generation !== routeGenerationRef.current) return;
       setRoute(result);
     } catch (error: unknown) {
+      if (generation !== routeGenerationRef.current) return;
       setRoute(null);
       setRouteError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRouting(false);
+      if (generation === routeGenerationRef.current) setRouting(false);
     }
   }
 
@@ -616,6 +681,43 @@ export default function MapView() {
     autoRouteRef.current = false;
     void calculateRouteFor(start, destination);
   }, [destination, start, routing]);
+
+  useEffect(() => {
+    if (!navigationFromGpsRef.current || !destination || !position || !withinBounds(position.coordinate)) return;
+    // Przybycie sprawdzamy na każdym fixie, niezależnie od odstępu odświeżania
+    // i progu ruchu, żeby oscylujący GPS nie trzymał trasy w nieskończoność.
+    if (coordinateDistance(position.coordinate, destination) <= NAVIGATION_ARRIVAL_M) {
+      clearRoute();
+      return;
+    }
+    if (routing) return;
+    const now = Date.now();
+    if (now - lastNavigationRefreshRef.current < NAVIGATION_REFRESH_MS) return;
+    const origin = routePointsRef.current.start;
+    if (origin && coordinateDistance(origin, position.coordinate) < NAVIGATION_MOVE_THRESHOLD_M) return;
+    lastNavigationRefreshRef.current = now;
+    // Zbyt słaby fix nie nadaje się ani do przycinania, ani do routingu od nowa.
+    if (position.accuracy > NAVIGATION_MAX_ACCURACY_M) return;
+    if (route) {
+      const snapped = snapToRoute(route, position.coordinate);
+      // GPS wciąż na zaplanowanej trasie: tylko przycinamy przebyty odcinek,
+      // bez przebudowy grafu (koszt liniowy, brak migotania wyniku).
+      if (snapped && snapped.offsetM <= Math.max(position.accuracy, NAVIGATION_ON_ROUTE_M) && snapped.alongM > 2) {
+        const trimmed = trimRoute(route, snapped.alongM);
+        if (trimmed) {
+          routePointsRef.current = { start: snapped.coordinate, end: destination };
+          updateRouteMarkers(routePointsRef.current);
+          setManualStart(snapped.coordinate);
+          setRoute(trimmed);
+          return;
+        }
+      }
+    }
+    routePointsRef.current = { start: position.coordinate, end: destination };
+    updateRouteMarkers(routePointsRef.current);
+    setManualStart(position.coordinate);
+    void calculateRouteFor(position.coordinate, destination);
+  }, [position, route, destination, routing]);
 
   function centerOnPosition() {
     if (!position || !mapRef.current) return;
@@ -721,7 +823,7 @@ export default function MapView() {
 
   function navigateToSelected(): void {
     if (!selected) return;
-    const navigationStart = position?.coordinate ?? HOME_COORDINATES;
+    const navigationStart = deviceStart ?? HOME_COORDINATES;
     let target = HOME_COORDINATES;
     let liftUid: string | undefined;
     if (selected.kind !== "home") {
@@ -735,6 +837,8 @@ export default function MapView() {
       setRouteError("Nie znalazłem trasy w pobliżu wybranego celu.");
       return;
     }
+    navigationFromGpsRef.current = deviceStart !== null;
+    lastNavigationRefreshRef.current = Date.now();
     routePointsRef.current = { start: navigationStart, end: snapped.coordinate };
     updateRouteMarkers(routePointsRef.current);
     autoRouteRef.current = true;
@@ -747,6 +851,10 @@ export default function MapView() {
 
   function clearRoute(): void {
     autoRouteRef.current = false;
+    navigationFromGpsRef.current = false;
+    lastNavigationRefreshRef.current = 0;
+    routeGenerationRef.current += 1;
+    setRouting(false);
     routePointsRef.current = { start: null, end: null };
     updateRouteMarkers(routePointsRef.current);
     setRoute(null);
@@ -778,12 +886,17 @@ export default function MapView() {
         <section className="map-feature-card">
           <button className="map-card-close" type="button" onClick={closeSelected} aria-label="Zamknij szczegóły"><Icon name="x" size={16} /></button>
           <span className="map-feature-kicker">{selected.kind === "lift" ? "Wyciąg" : selected.kind === "home" ? "Dom" : "Trasa"}</span>
-          <strong style={{ color: selected.color }}>{selected.label}</strong>
+           <strong className="map-feature-title" style={{ color: selected.color }}>
+             {selected.kind === "lift" && <LiftIcon aerialway={selected.aerialway} size={19} />}
+             <span>{selected.label}</span>
+           </strong>
+           {selected.kind === "lift" && (AERIALWAY_LABELS[selected.aerialway] ?? selected.aerialway) !== "" && (
+             <span className="map-feature-type">{AERIALWAY_LABELS[selected.aerialway] ?? selected.aerialway}</span>
+           )}
           {selected.kind === "piste" && <span className="map-feature-difficulty">
             <b>{selected.difficulty === "unknown" ? "Trudność nieznana" : selected.difficulty}{selected.warning ? " · ostrzeżenie" : ""}</b>
             {groomingLabel(selected.grooming) && <small>{groomingLabel(selected.grooming)}</small>}
           </span>}
-          {selected.kind === "lift" && <span>{AERIALWAY_LABELS[selected.aerialway] ?? (selected.aerialway || "Typ wyciągu nieznany")}</span>}
           {selected.kind !== "home" && <span className="map-feature-opening-hours"><small>Godziny</small><b>{selected.openingHours || "brak danych"}</b></span>}
           {selected.kind !== "home" && <div className="map-feature-metrics">
             <span title="Długość"><Icon name="ruler" size={14} /><b>{formatDistance(selected.lengthM)}</b></span>
@@ -801,7 +914,10 @@ export default function MapView() {
             {routeSequence.map((item, index) => (
               <span key={`${item.kind}:${item.label}`} className="map-route-sequence-item">
                 {index > 0 && <b>→</b>}
-                <span className="map-route-badge" style={{ background: item.kind === "lift" ? "#7c3aed" : item.color }}>{item.label}</span>
+                <span className="map-route-badge" style={{ background: item.kind === "lift" ? "#7c3aed" : item.color }}>
+                  {item.kind === "lift" && <LiftIcon aerialway={item.aerialway} size={14} />}
+                  <span>{item.label}</span>
+                </span>
               </span>
             ))}
           </div>
@@ -830,7 +946,13 @@ export default function MapView() {
                 {showSection && <div className="map-search-section">{sectionName}</div>}
                 {showKind && <div className="map-search-kind">{item.kind === "trasa" ? "Trasy" : "Wyciągi"}</div>}
                 <button className="map-search-item" type="button" onClick={() => selectMapItem(item)} onDoubleClick={() => fitMapItem(item)}>
-                  <span className="map-search-item-main"><span>{item.displayLabel}</span><small>{formatDistance(item.distanceM)}</small></span>
+                  <span className="map-search-item-main">
+                    <span className="map-search-item-name">
+                      {item.kind === "wyciąg" && <LiftIcon aerialway={item.aerialway} size={16} />}
+                      <span>{item.displayLabel}</span>
+                    </span>
+                    <small>{formatDistance(item.distanceM)}</small>
+                  </span>
                   <b style={{ background: item.color }}>{item.kind}</b>
                 </button>
               </div>
