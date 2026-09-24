@@ -79,9 +79,17 @@ export function statsFromRuns(records: StoredRun[]): DayStats {
 
 function samplesToCsv(samples: Sample[]): string {
   const rows = samples.map((sample) =>
-    [sample.t, sample.lat, sample.lon, sample.speed, sample.alt, sample.hdg].join(","),
+    [
+      sample.t,
+      sample.lat,
+      sample.lon,
+      sample.speed,
+      sample.altGps,
+      sample.hdg,
+      sample.altBaro,
+    ].join(","),
   );
-  return ["timestamp,lat,lon,speed,altitude,heading", ...rows].join("\n") + "\n";
+  return ["timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro", ...rows].join("\n") + "\n";
 }
 
 function shiftSamplesToNow(samples: Sample[]): Sample[] {

@@ -4,9 +4,9 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md.
 
-#define SZ_FW_VERSION "1.4.0-audio"
+#define SZ_FW_VERSION "1.5.0-baro"
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
-#define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude,heading"
+#define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro"
 
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
 // 50-70:3Hz, 70-80:6Hz, >=80:10Hz. Histereza +/-3 km/h.
@@ -52,6 +52,21 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_LIFT_ALT_GAIN_M 20.0f
 #define SZ_LIFT_SPEED_KMH 15.0f
 #define SZ_RUNS_PER_FILE 5
+
+// Monitoring zdrowia urzadzenia (modul Health). MVP: termika SoC.
+// ESP32-S3 NIE ma sprzetowego zabezpieczenia termicznego, wiec ochrona jest
+// programowa: sprawdzenie co SZ_HEALTH_CHECK_MS; po SZ_HEALTH_WARN_CONFIRM
+// kolejnych odczytach >= WARN kazdy kolejny odczyt >= WARN daje alarm buzzerem
+// (SZ_HEALTH_ALARM_MS). Przy >= CRIT: zamkniecie SD, ekran, alarm i deep sleep.
+// Uwaga: temperatureRead() jest slabo skalibrowany bezwzglednie — progi
+// ustawione z zapasem (CRIT 100 < junction max 125). Histereza chroni przed
+// zatrzasnieciem alarmu po ostygnięciu.
+#define SZ_HEALTH_CHECK_MS 30000UL
+#define SZ_HEALTH_TEMP_WARN_C 95.0f
+#define SZ_HEALTH_TEMP_CRIT_C 100.0f
+#define SZ_HEALTH_WARN_CONFIRM 3
+#define SZ_HEALTH_ALARM_MS 3000
+#define SZ_HEALTH_HYST_C 2.0f
 
 // HUD: SPD pokazuje max ostatniego zjazdu gdy prędkość <5 km/h.
 #define SZ_SPD_STATIC_BELOW_KMH 5.0f

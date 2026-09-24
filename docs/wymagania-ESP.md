@@ -69,7 +69,11 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 ## 6. Zapis CSV + rotacja plików
 
-- Pola: `timestamp (UTC), lat, lon, speed, altitude, heading`.
+- Pola: `timestamp (UTC), lat, lon, speed, altitude_gps, heading, altitude_baro`.
+  `altitude_baro` liczone na urządzeniu z ciśnienia BME280 (I2C, wspólna magistrala
+  z OLED) ze standardowej atmosfery (ref. 1013,25 hPa). Temperatura czujnika jest
+  wewnętrzna i służy do kompensacji ciśnienia; nie trafia do CSV, ale jest
+  logowana diagnostycznie na Serial jako `air` w linii STATUS (patrz §9).
 - Nazwa pliku od czasu startu: **`YYYYMMDD_HHMMSS.csv`** (bez `:` — FAT32 na SD).
 - **Rotacja co ~5 zjazdów** (detekcja wyciągu — patrz niżej), aby pliki nie rosły bez końca.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
@@ -78,6 +82,8 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 - Heurystyka: segment, w którym **wysokość rośnie** o próg (np. >20 m) przy **niskiej
   prędkości** (np. <15 km/h) = wyciąg. Koniec zjazdu = początek wyciągu.
+- Wysokość do detekcji pochodzi z **barometru** (`altitude_baro`) — stabilniejsza niż
+  GPS; gdy brak baro, fallback na `altitude_gps`.
 - Zliczanie granic zjazdów; po **5** → zamknij plik, otwórz nowy.
 - Dokładne progi do dostrojenia (patrz „Otwarte punkty").
 
@@ -89,7 +95,32 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   nie jest potrzebne (PWA śledzi co ma w IndexedDB).
 - Sprzątanie: gdy karta jest pełna — kasuj **najstarsze pliki** (FIFO) lub ręcznie.
 
-## 9. Otwarte punkty
+## 9. Monitoring termiki (Health)
+
+- ESP32-S3 **nie ma sprzętowego zabezpieczenia termicznego** (brak auto-shutdown
+  przy przegrzaniu), dlatego ochrona jest programowa w module `src/health/`
+  (`Health`), wołanym z głównej pętli (`millis`, bez tasków/ISR).
+- Odczyt `temperatureRead()` co **30 s** (`SZ_HEALTH_CHECK_MS`). To temperatura
+  **rdzenia (die)**, nie otoczenia, i jest słabo skalibrowana bezwzględnie —
+  traktować jako wskaźnik, progi z zapasem (junction max ~125 °C).
+- Po **3** kolejnych odczytach ≥ **95 °C** (`SZ_HEALTH_TEMP_WARN_C`) każdy kolejny
+  odczyt ≥ 95 °C wywołuje nieblokujący **alarm buzzerem** przez 3 s
+  (`SZ_HEALTH_ALARM_MS`). Histereza 2 °C (`SZ_HEALTH_HYST_C`) zeruje licznik po
+  ostygnięciu.
+- Przy ≥ **100 °C** (`SZ_HEALTH_TEMP_CRIT_C`): zamknięcie pliku SD, ekran OLED
+  „PRZEGRZANIE" z obiema temperaturami (die/air), blokujący alarm i
+  **deep sleep** (`esp_deep_sleep_start()`). Wznowienie = power-cycle/reset.
+  Buzzer po alarmie jest odpinany od LEDC i podtrzymywany w stanie LOW
+  (`gpio_hold_en`; GPIO10 = RTC-IO na S3), żeby nie trzymał dźwięku ani nie
+  łapał szumu po uśpieniu.
+- Ograniczenia: deep sleep nie odcina zasilania peryferiów — GNSS dalej pobiera
+  ~30 mA i dogrzewa obudowę (na stoku nieistotne; na biurku odnotować). W pełni
+  chłodzące odcięcie GNSS wymagałoby `UBX-RXM-PMREQ` albo load switcha na VCC
+  (roadmapa).
+- Diagnostyka: linia STATUS co 2 s niesie `die=..C air=..C` (die z SoC, air z
+  BME280) — do oceny termiki wnętrza obudowy.
+
+## 10. Otwarte punkty
 
 1. **Progi detekcji wyciągu** (Δwysokości, próg prędkości) — do ustalenia i dostrojenia.
 2. **Współbieżność** — jednoczesny zapis na SD + transfer BLE + buzzer na ESP32 (wydajność, bufory) — do weryfikacji.

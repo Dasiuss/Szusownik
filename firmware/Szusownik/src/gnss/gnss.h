@@ -29,7 +29,7 @@ class Gnss {
   uint32_t sats();
   bool timeValid();
   String utcStamp();  // YYYYMMDD_HHMMSS (nazwa pliku)
-  String csvStamp();  // YYYY-MM-DDTHH:MM:SSZ (pole CSV)
+  String csvStamp();  // YYYY-MM-DDTHH:MM:SS.mmmZ (pole CSV, ms z ESP32)
   int rateHz() const { return rateHz_; }
   unsigned long logIntervalMs() const { return logIntervalMs_; }
 
@@ -42,6 +42,8 @@ class Gnss {
   bool configured_ = false;
   unsigned long lastAttempt_ = 0;
   uint32_t ubxFails_ = 0;
+  int lastStampSec_ = -1;              // ostatnia sekunda GPS w csvStamp()
+  unsigned long stampSecAnchorMs_ = 0;  // millis() przy zmianie sekundy (kotwica ms)
   static int bandOf(float kmh);
   static unsigned long bandIntervalMs(int band);
   void updateAdaptiveRate(float kmh);

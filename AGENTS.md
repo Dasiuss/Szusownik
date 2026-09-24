@@ -38,6 +38,7 @@ wypracowanych w trzech projektach testowych:
    wymiarów bitmap, kolejności pikseli i wersji protokołu.
 6. Pinout `Szusownik` ma pierwszeństwo przed pinoutem `DisplayTest`. W finalnym
    projekcie OLED używa I2C na GPIO8/GPIO9, bo GPIO1-4 są przeznaczone dla SD.
+   Barometr BME280 (adres `0x77`) dzieli tę samą magistralę I2C.
 7. Wyniki testów, które nie były potwierdzone sprzętowo lub są znane tylko z
    implementacji testowej, oznaczaj jako niepotwierdzone.
 8. Po zmianie decyzji technicznej aktualizuj dokument referencyjny oraz ten
@@ -64,6 +65,20 @@ nie przetrwają do kolejnego wywołania `bash` — ale okno konsoli z `.cmd`
 zostaje (osobny proces systemowy), więc logi są widoczne dla użytkownika.
 
 Nie odwracać kolejności (monitor → upload kończy się błędem zajętego portu).
+
+## Termika i monitoring (Health)
+
+- ESP32-S3 **nie ma sprzętowego zabezpieczenia termicznego** — sam się nie
+  wyłączy przy przegrzaniu. Ochrona jest programowa: moduł `src/health/`
+  (`Health`) wołany z głównej pętli (`millis`, bez tasków/ISR).
+- Co 30 s (`SZ_HEALTH_CHECK_MS`) czyta `temperatureRead()` (temperatura
+  **rdzenia/die**, nie otoczenia; słabo skalibrowana). ≥95 °C po 3 kolejnych
+  potwierdzeniach → alarm buzzerem 3 s przy każdym kolejnym odczycie ≥95 °C;
+  ≥100 °C → zamknięcie SD, ekran „PRZEGRZANIE" (die/air), alarm i deep sleep.
+  Progi/histereza w `config.h` (`SZ_HEALTH_*`).
+- Diagnostyka na Serial: linia STATUS co 2 s z `die=..C air=..C`.
+- Deep sleep **nie odcina 3V3** — GNSS dalej pobiera ~30 mA i dogrzewa. Na
+  stoku nieistotne; przy testach w domu nie trzymać szczelnej obudowy.
 
 ## Aktualne ograniczenia odziedziczone z testów
 

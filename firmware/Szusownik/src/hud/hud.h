@@ -8,4 +8,7 @@ class Hud {
   bool begin();
   void draw(float speedKmh, float maxDayKmh, float totalKm, float maxLastKmh,
             bool hasFix);
+  // Ekran awaryjny przed deep sleep (Health). OLED trzyma obraz na 3V3,
+  // więc komunikat zostaje widoczny także po uśpieniu ESP.
+  void drawOverheat(float dieC, float airC);
 };

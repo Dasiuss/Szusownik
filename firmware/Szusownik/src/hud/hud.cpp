@@ -53,3 +53,22 @@ void Hud::draw(float speedKmh, float maxDayKmh, float totalKm, float maxLastKmh,
   }
   disp.display();
 }
+
+void Hud::drawOverheat(float dieC, float airC) {
+  char bDie[20], bAir[20];
+  snprintf(bDie, sizeof(bDie), "die  %.1f C", dieC);
+  snprintf(bAir, sizeof(bAir), "air  %.1f C", airC);
+
+  disp.clearDisplay();
+  disp.setTextColor(SSD1306_WHITE);
+  disp.setTextSize(1);
+  disp.setCursor(1, 0);
+  disp.print(F("!! PRZEGRZANIE !!"));
+  disp.setCursor(1, 18);
+  disp.print(bDie);
+  disp.setCursor(1, 30);
+  disp.print(bAir);
+  disp.setCursor(1, 46);
+  disp.print(F("-> deep sleep"));
+  disp.display();
+}

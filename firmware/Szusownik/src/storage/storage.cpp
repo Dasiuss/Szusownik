@@ -32,12 +32,12 @@ bool Storage::openLog(const String& stampOrEmpty) {
   return true;
 }
 
-void Storage::writeSample(const String& utc, double lat, double lon, float kmh, float alt,
-                          float hdg) {
+void Storage::writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
+                          float hdg, float altBaro) {
   if (!fileOpen_) return;
-  char line[128];
-  snprintf(line, sizeof(line), "%s,%.6f,%.6f,%.1f,%.1f,%.0f", utc.c_str(), lat, lon, kmh,
-           alt, hdg);
+  char line[160];
+  snprintf(line, sizeof(line), "%s,%.6f,%.6f,%.1f,%.1f,%.0f,%.1f", utc.c_str(), lat, lon, kmh,
+           altGps, hdg, altBaro);
   logFile.println(line);
 }
 

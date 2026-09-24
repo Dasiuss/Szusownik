@@ -19,6 +19,12 @@ class Beeper {
   void tick(float kmh, unsigned long nowMs);
   void playBoot();  // blokujące, setup: sygnał 120 (1 długi + 2 krótkie)
                     // przy głośności 60. Wywołać PO begin().
+  // Alarm termiczny (Health): nieblokujący, ciągły ton na maks. głośności
+  // przez ms; ma priorytet nad wzorcem prędkości (patrz tick()).
+  void alarm(uint16_t ms);
+  // Blokujący sygnał przed deep sleep: ciągły ton przez SZ_HEALTH_ALARM_MS.
+  // Wolany tuż przed uśpieniem, więc blokada jest akceptowalna.
+  void playOverheat();
   // Ustawienia z PWA (0..100, zapis do NVS + feedback one-shot).
   // Zwracają przyjętą wartość po clamp.
   uint8_t setVolLow(int v);
@@ -56,6 +62,7 @@ class Beeper {
   uint8_t seqIdx_ = 0;
   unsigned long stepEnd_ = 0;
   unsigned long nextTick_ = 0;
+  unsigned long alarmUntil_ = 0;  // 0 = brak alarmu; >0 = ton trzymany do tego czasu
   bool toneOn_ = false;
   bool patternLoaded_ = false;
   bool oneShot_ = false;

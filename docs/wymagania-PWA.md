@@ -42,7 +42,8 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 - Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **zmierzona wysokość**.
 - Wykres wysokości pokazuje wygładzoną wysokość w metrach, dzięki czemu spadki wysokości
-  wizualnie odpowiadają zjazdom stoku.
+  wizualnie odpowiadają zjazdom stoku. Wysokość to **fuzja barometru i GPS** (patrz §6),
+  używana też do nachylenia i cięcia zjazdów.
 - Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
   jednocześnie.
 - Na osi X stosować czytelne, zaokrąglone przedziały dystansu: co 250 m dla tras poniżej
@@ -71,7 +72,10 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 Surowe dane GPS są zaszumione — bez wygładzania wykres nachylenia będzie „iglasty".
 Przyjęte wartości domyślne (konfigurowalne):
 
-- **Wysokość:** średnia ruchoma, okno ~5 próbek.
+- **Wysokość (fuzja baro+GPS):** filtr komplementarny — barometr daje kształt (zmiany),
+  GPS powoli kotwiczy wartość absolutną. Stała czasowa `tau = 10 s`, waga liczona
+  z rzeczywistego odstępu czasu próbek (`alpha = tau/(tau+dt)`), więc działa przy
+  zmiennym tempie 0,5–10 Hz. Wynik dodatkowo wygładzany średnią ruchomą (okno ~5 próbek).
 - **Nachylenie:** liczone na oknie ~15 m skumulowanego dystansu; wynik dodatkowo wygładzony
   średnią ruchomą (okno ~3 próbek).
 - **Prędkość:** średnia ruchoma, okno ~3 próbek (redukuje pojedyncze skoki, zachowując max).
@@ -93,7 +97,8 @@ na nagraniach z auta defaulty wystarczą.
 
 - Plik **CSV nagrany urządzeniem** (np. przejazd autem) wpięty jako fixture
   do developmentu PWA — **nie generujemy syntetycznego mocka**.
-- Format pól zgodny z urządzeniem: `timestamp, lat, lon, speed, altitude, heading`.
+- Format pól zgodny z urządzeniem:
+  `timestamp, lat, lon, speed, altitude_gps, heading, altitude_baro`.
 - Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
   rozdzielający).
 

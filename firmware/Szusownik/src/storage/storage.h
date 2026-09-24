@@ -7,8 +7,8 @@ class Storage {
  public:
   bool begin();
   bool openLog(const String& stampOrEmpty);
-  void writeSample(const String& utc, double lat, double lon, float kmh, float alt,
-                   float hdg);
+  void writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
+                   float hdg, float altBaro);
   void sync();
   void close();
   bool isOpen() const { return fileOpen_; }

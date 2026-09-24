@@ -13,8 +13,12 @@ Podmiana fixture (development):
 Plik musi mieć nagłówek i pola urządzenia:
 
 ```text
-timestamp,lat,lon,speed,altitude,heading
+timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro
 ```
+
+Uwaga: obecny `ride.csv` to nagranie **sprzed barometru** — kolumna
+`altitude_baro` jest w nim wypełniona syntetycznie (wygładzona wysokość GPS),
+żeby demo działało. Docelowo podmienić na rzeczywisty przejazd z BME280.
 
 Fixture powinien zawierać co najmniej **2 zjazdy** (jazda + postój/wolny
 odcinek rozdzielający), żeby było widać cięcie i listę.

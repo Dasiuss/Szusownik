@@ -124,8 +124,11 @@ CSV      HUD             |
 Aktualna koncepcja Szusownika zakłada pola CSV:
 
 ```text
-timestamp, lat, lon, speed, altitude, heading
+timestamp, lat, lon, speed, altitude_gps, heading, altitude_baro
 ```
+
+(`altitude_baro` od firmware 1.5 — barometr BME280; schemat ewolucyjny, walidowany
+po nagłówku, zmiany wymagają jednoczesnej aktualizacji PWA.)
 
 To jest lepszy kontrakt dla wersji finalnej niż testowy NMEA z `BleTest`. NMEA
 może pozostać formatem wejściowym na etapie diagnostyki, ale plik przeznaczony

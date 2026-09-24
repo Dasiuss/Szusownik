@@ -14,4 +14,8 @@ static const int PIN_OLED_SDA = 8;
 static const int PIN_OLED_SCL = 9;
 static const uint8_t OLED_I2C_ADDR = 0x3C;
 
+// Barometr BME280/BMP280 dzieli magistrale I2C z OLED (adres wykrywany: 0x76/0x77).
+static const int PIN_BARO_SDA = 8;
+static const int PIN_BARO_SCL = 9;
+
 static const int PIN_BUZZER = 10;  // pasywny piezo

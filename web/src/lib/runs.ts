@@ -25,8 +25,39 @@ export interface DayStats {
   runs: Run[];
 }
 
-/** Wzbogaca próbki: dystanse + wygładzanie (wysokość MA5, prędkość MA3,
- *  nachylenie na oknie ~15 m + MA3). Surowe pola zostają nietknięte. */
+const ALT_TAU_S = 10; // stała czasowa dosuwania baro do GPS (filtr komplementarny)
+
+/**
+ * Filtr komplementarny wysokości: barometr daje precyzyjny kształt (zmiany),
+ * GPS powoli kotwiczy wartość absolutną (korekta dryfu baro). alpha liczona
+ * z rzeczywistego odstępu czasu, więc działa przy zmiennym tempie 0,5–10 Hz.
+ * Gdy altBaro = 0 (brak barometru), baroStep = 0 i wynik zbiega do GPS.
+ */
+function fuseAltitude(samples: Sample[]): number[] {
+  const out = new Array<number>(samples.length).fill(0);
+  if (samples.length === 0) return out;
+  let fused = samples[0].altGps;
+  out[0] = fused;
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (Date.parse(samples[i].t) - Date.parse(samples[i - 1].t)) / 1000;
+    const baroStep = samples[i].altBaro - samples[i - 1].altBaro;
+    if (!(dt > 0)) {
+      // Ten sam znacznik czasu (np. >1 Hz przy sekundowej rozdzielczości):
+      // nie znamy odstępu, więc propagujemy barometr bez korekty GPS (nie reset).
+      fused = fused + baroStep;
+    } else if (dt >= 3600) {
+      fused = samples[i].altGps; // długa przerwa w danych — reset do GPS
+    } else {
+      const alpha = ALT_TAU_S / (ALT_TAU_S + dt);
+      fused = alpha * (fused + baroStep) + (1 - alpha) * samples[i].altGps;
+    }
+    out[i] = fused;
+  }
+  return out;
+}
+
+/** Wzbogaca próbki: dystanse + wygładzanie (wysokość MA5 z fuzji baro+GPS,
+ *  prędkość MA3, nachylenie na oknie ~15 m + MA3). Surowe pola zostają nietknięte. */
 export function enrich(samples: Sample[]): EnrichedSample[] {
   const distM = new Array<number>(samples.length).fill(0);
   const cum: number[] = new Array<number>(samples.length).fill(0);
@@ -35,7 +66,7 @@ export function enrich(samples: Sample[]): EnrichedSample[] {
     distM[i] = d < 200 ? d : 0; // odrzuć skoki (tunel / zgubiony fix)
     cum[i] = cum[i - 1] + distM[i];
   }
-  const altSm = movingAvg(samples.map((s) => s.alt), 5);
+  const altSm = movingAvg(fuseAltitude(samples), 5);
   const speedSm = movingAvg(samples.map((s) => s.speed), 3);
   const gradeSm = movingAvg(gradeDeg(altSm, cum, 15), 3);
   return samples.map((s, i) => ({

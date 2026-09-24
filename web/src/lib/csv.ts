@@ -5,11 +5,20 @@ export interface Sample {
   lat: number;
   lon: number;
   speed: number; // km/h (Doppler z urządzenia)
-  alt: number; // m
+  altGps: number; // m (wysokość z GPS)
   hdg: number; // stopnie
+  altBaro: number; // m (wysokość barometryczna, standardowa atmosfera)
 }
 
-const HEADER = ["timestamp", "lat", "lon", "speed", "altitude", "heading"];
+const HEADER = [
+  "timestamp",
+  "lat",
+  "lon",
+  "speed",
+  "altitude_gps",
+  "heading",
+  "altitude_baro",
+];
 
 function num(v: unknown, name: string): number {
   const n = typeof v === "string" ? Number(v) : NaN;
@@ -38,8 +47,9 @@ export function parseDeviceCsv(text: string): Sample[] {
       lat: num(row.lat, "lat"),
       lon: num(row.lon, "lon"),
       speed: num(row.speed, "speed"),
-      alt: num(row.altitude, "altitude"),
+      altGps: num(row.altitude_gps, "altitude_gps"),
       hdg: num(row.heading, "heading"),
+      altBaro: num(row.altitude_baro, "altitude_baro"),
     };
   });
 }

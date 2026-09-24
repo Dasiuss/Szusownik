@@ -10,13 +10,17 @@
 #include "src/storage/storage.h"
 #include "src/audio/audio.h"
 #include "src/hud/hud.h"
+#include "src/baro/baro.h"
 #include "src/ble/ble.h"
+#include "src/health/health.h"
 
 static Gnss gnss;
 static Storage storage;
 static Beeper beeper;
 static Hud hud;
+static Baro baro;
 static BleFiles ble;
+static Health health;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
@@ -53,10 +57,19 @@ void setup() {
   if (!hud.begin()) {
     szLog("OLED: blad init");
   }
+  if (!baro.begin()) {
+    szLog("BARO: blad init");
+  } else if (baro.read()) {
+    szLogf("BARO: %s @0x%02X P=%.1f Pa T=%.1f C alt=%.1f m", baro.typeName(), baro.address(),
+           baro.pressurePa(), baro.tempC(), baro.altitudeM());
+  } else {
+    szLogf("BARO: %s @0x%02X (odczyt blad)", baro.typeName(), baro.address());
+  }
   beeper.begin();
   beeper.playBoot();  // sygnał 120 (1 długi + 2 krótkie) przy głośności 60
   ble.setBeeper(&beeper);
   ble.begin(&storage);
+  health.begin(&storage, &beeper, &hud, &baro);
   szLog("boot ok");
 }
 
@@ -89,14 +102,21 @@ void loop() {
   if (now >= nextLog) {
     nextLog = now + gnss.logIntervalMs();
     if (gnss.hasFix()) {
+      // baro.read() aktualizuje cache; przy chwilowym bledzie zostaje ostatni
+      // poprawny odczyt (bez zera w CSV i bez falszywego skoku dla rotacji).
+      if (baro.present()) baro.read();
+      bool baroOk = baro.present() && baro.valid();
+      float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
       if (!storage.isOpen()) storage.openLog(gnss.utcStamp());
       storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
-                          gnss.headingDeg());
-      storage.noteSample(kmh, gnss.altM());
+                          gnss.headingDeg(), baroAlt);
+      // Rotacja/cięcie zjazdów na wysokości barometrycznej (stabilniejsza niż GPS);
+      // GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
+      storage.noteSample(kmh, baroOk ? baroAlt : gnss.altM());
       sampleCount++;
       totalSamples++;
 #if SZ_DEBUG_SAMPLES
-      szLogf("SAMPLE spd=%.1f sats=%lu", kmh, (unsigned long)gnss.sats());
+      szLogf("SAMPLE spd=%.1f altBaro=%.1f sats=%lu", kmh, baroAlt, (unsigned long)gnss.sats());
 #endif
     }
   }
@@ -114,13 +134,16 @@ void loop() {
     gnss.dumpStatus();
     unsigned long dt = now - rateWindowStart;
     float hz = dt ? (sampleCount * 1000.0f / (float)dt) : 0.0f;
-    szLogf("LOG: samples=%lu rate=%.2fHz total=%lu", (unsigned long)sampleCount, hz,
-           (unsigned long)totalSamples);
+    float airC = 0.0f;
+    if (baro.present() && baro.read()) airC = baro.tempC();
+    szLogf("LOG: samples=%lu rate=%.2fHz total=%lu die=%.1fC air=%.1fC", (unsigned long)sampleCount,
+           hz, (unsigned long)totalSamples, temperatureRead(), airC);
     sampleCount = 0;
     rateWindowStart = now;
   }
 #endif
 
   beeper.tick(kmh, now);
+  health.tick(now);  // termika: alarm >95C, deep sleep >100C
   ble.poll();  // callback BLE tylko ustawia flagi (poll czyta CTRL); bez blokowania SD
 }

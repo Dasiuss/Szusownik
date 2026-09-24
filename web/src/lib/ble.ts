@@ -398,7 +398,7 @@ export class SzusownikBle {
       }
       const text = new TextDecoder().decode(flat);
       const header = text.slice(0, text.indexOf("\n")).trim();
-      if (header !== "timestamp,lat,lon,speed,altitude,heading") {
+      if (header !== "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro") {
         throw new Error(`Zły nagłówek CSV: ${header}`);
       }
       if (lines < 2) throw new Error("Plik bez próbek");

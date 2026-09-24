@@ -65,9 +65,20 @@ String Gnss::utcStamp() {
 
 String Gnss::csvStamp() {
   if (!timeValid()) return String("");
-  char b[24];
-  snprintf(b, sizeof(b), "%04d-%02d-%02dT%02d:%02d:%02dZ", gps_.date.year(), gps_.date.month(),
-           gps_.date.day(), gps_.time.hour(), gps_.time.minute(), gps_.time.second());
+  // NMEA podaje czas z dokładnością do sekundy, a logujemy do 10 Hz — dokładamy
+  // milisekundy z zegara ESP32 zakotwiczone w sekundach GPS (re-anchor przy każdej
+  // zmianie sekundy). Daje to monotoniczny czas i poprawne odstępy między próbkami.
+  unsigned long now = millis();
+  uint8_t sec = gps_.time.second();
+  if ((int)sec != lastStampSec_) {
+    lastStampSec_ = (int)sec;
+    stampSecAnchorMs_ = now;
+  }
+  unsigned long sub = now - stampSecAnchorMs_;
+  if (sub > 999) sub = 999;  // ochrona przy nieświeżym czasie (brak nowej sekundy)
+  char b[32];
+  snprintf(b, sizeof(b), "%04d-%02d-%02dT%02d:%02d:%02d.%03luZ", gps_.date.year(),
+           gps_.date.month(), gps_.date.day(), gps_.time.hour(), gps_.time.minute(), sec, sub);
   return String(b);
 }
 

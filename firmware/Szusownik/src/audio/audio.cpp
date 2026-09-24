@@ -1,5 +1,6 @@
 #include "audio.h"
 #include <Preferences.h>
+#include "driver/gpio.h"
 #include "../config/pins.h"
 #include "../config/config.h"
 
@@ -31,6 +32,7 @@ void Beeper::begin() {
     signalGapMs_ = SZ_BEEP_INTERVAL_DEFAULT_MS;
   if (minBeepKmh_ < SZ_BEEP_MIN_KMH_MIN || minBeepKmh_ > SZ_BEEP_MIN_KMH_MAX)
     minBeepKmh_ = SZ_BEEP_MIN_KMH_DEFAULT;
+  gpio_hold_dis((gpio_num_t)PIN_BUZZER);  // zwolnij hold z poprzedniego deep sleep
   pinMode(PIN_BUZZER, OUTPUT);
   ledcAttach(PIN_BUZZER, freqShort_, 8);
   ledcWrite(PIN_BUZZER, 0);
@@ -233,7 +235,42 @@ void Beeper::playBoot() {
   ledcWrite(PIN_BUZZER, 0);
 }
 
+void Beeper::alarm(uint16_t ms) {
+  // Nieblokujący alarm termiczny: ciągły ton na maks. głośności, priorytet
+  // nad wzorcem prędkości. Anuluje trwający wzorzec; tick() dogasi po ms.
+  ledcWriteTone(PIN_BUZZER, freqLong_);
+  ledcWrite(PIN_BUZZER, dutyFromVol(100));
+  toneOn_ = false;
+  patternLoaded_ = false;
+  seqIdx_ = 0;
+  alarmUntil_ = millis() + ms;
+}
+
+void Beeper::playOverheat() {
+  // Blokujące (tuż przed deep sleep): ciągły ton na maks. głośności. Po nim
+  // pewna cisza — odpinamy LEDC i podtrzymujemy pin w stanie LOW przez deep
+  // sleep (GPIO10 jest RTC-IO na S3), żeby piezo nie trzymało dźwięku ani nie
+  // łapało szumu z pływającego pinu po uśpieniu.
+  ledcWriteTone(PIN_BUZZER, freqLong_);
+  ledcWrite(PIN_BUZZER, dutyFromVol(100));
+  delay(SZ_HEALTH_ALARM_MS);
+  ledcWrite(PIN_BUZZER, 0);
+  ledcDetach(PIN_BUZZER);
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, LOW);
+  gpio_hold_en((gpio_num_t)PIN_BUZZER);
+}
+
 void Beeper::tick(float kmh, unsigned long nowMs) {
+  if (alarmUntil_ != 0) {
+    if (nowMs < alarmUntil_) return;  // alarm trzyma ton — pomiń wzorzec
+    ledcWrite(PIN_BUZZER, 0);         // alarm się skończył
+    toneOn_ = false;
+    alarmUntil_ = 0;
+    patternLoaded_ = false;
+    seqIdx_ = 0;
+    nextTick_ = nowMs + signalGapMs_;
+  }
   if (toneOn_ && nowMs >= stepEnd_) {
     ledcWrite(PIN_BUZZER, 0);
     toneOn_ = false;
