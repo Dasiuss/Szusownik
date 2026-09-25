@@ -17,6 +17,8 @@ export const SZ_BLE_HEADER = 4;
 export const SZ_BLE_PAYLOAD = 240;
 export const SZ_BLE_ACK_BLOCK = 32;
 const TRANSFER_TIMEOUT_MS = 120000;
+const SETTINGS_TIMEOUT_MS = 2000;
+const SETTINGS_POLL_MS = 50;
 
 export interface FileMeta {
   name: string;
@@ -122,6 +124,7 @@ export class SzusownikBle {
   private info: BluetoothRemoteGATTCharacteristic | null = null;
   private data: BluetoothRemoteGATTCharacteristic | null = null;
   private stat: BluetoothRemoteGATTCharacteristic | null = null;
+  private settingsLock: Promise<unknown> = Promise.resolve();
 
   async connect(): Promise<DeviceInfo> {
     if (!navigator.bluetooth) {
@@ -202,6 +205,33 @@ export class SzusownikBle {
     return new TextDecoder().decode(dvBytes(v));
   }
 
+  // Firmware konsumuje komendy w poll() w głównej pętli i dopiero wtedy
+  // nadpisuje STATUS, więc odczyt zaraz po writeCtrl może zwrócić odpowiedź
+  // poprzedniej komendy. Czekamy na status pasujący do wzorca danej komendy.
+  private async pollStatus(pattern: RegExp): Promise<string> {
+    const deadline = Date.now() + SETTINGS_TIMEOUT_MS;
+    let status = "";
+    for (;;) {
+      status = await this.readStatus();
+      if (pattern.test(status) || status.startsWith("err:")) return status;
+      if (Date.now() >= deadline) return status;
+      await new Promise((resolve) => setTimeout(resolve, SETTINGS_POLL_MS));
+    }
+  }
+
+  private settingStatus(cmd: string, pattern: RegExp): Promise<string> {
+    const run = async () => {
+      await this.writeCtrl(cmd);
+      return this.pollStatus(pattern);
+    };
+    const result = this.settingsLock.then(run, run);
+    this.settingsLock = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
   private static parseVolume(status: string): Volume {
     const m = /vol low=(\d+) high=(\d+)/.exec(status);
     if (!m) throw new Error(`Zła odpowiedź głośności: ${status}`);
@@ -215,8 +245,11 @@ export class SzusownikBle {
    */
   async setVolume(which: "low" | "high", value: number): Promise<Volume> {
     const v = Math.max(0, Math.min(100, Math.round(value)));
-    await this.writeCtrl(which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`);
-    return SzusownikBle.parseVolume(await this.readStatus());
+    const status = await this.settingStatus(
+      which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`,
+      /vol low=\d+ high=\d+/,
+    );
+    return SzusownikBle.parseVolume(status);
   }
 
   private static parseFreq(status: string): Freq {
@@ -244,8 +277,11 @@ export class SzusownikBle {
    */
   async setFrequency(which: "short" | "long", value: number): Promise<Freq> {
     const v = Math.max(SZ_FREQ_MIN_HZ, Math.min(SZ_FREQ_MAX_HZ, Math.round(value)));
-    await this.writeCtrl(which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`);
-    return SzusownikBle.parseFreq(await this.readStatus());
+    const status = await this.settingStatus(
+      which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`,
+      /freq short=\d+ long=\d+/,
+    );
+    return SzusownikBle.parseFreq(status);
   }
 
   /**
@@ -268,15 +304,18 @@ export class SzusownikBle {
       gap: "SETTIMING:GAP",
       interval: "SETTIMING:INTERVAL",
     }[which];
-    await this.writeCtrl(`${command}:${v}`);
-    return SzusownikBle.parseTiming(await this.readStatus());
+    const status = await this.settingStatus(
+      `${command}:${v}`,
+      /timing short=\d+ long=\d+ gap=\d+ interval=\d+/,
+    );
+    return SzusownikBle.parseTiming(status);
   }
 
   /** Minimalna prędkość pikania (firmware 1.4+); wzór dla danej prędkości pozostaje bez zmian. */
   async setMinBeepKmh(value: number): Promise<number> {
     const v = Math.max(SZ_MIN_BEEP_KMH, Math.min(SZ_MAX_BEEP_KMH, Math.round(value)));
-    await this.writeCtrl(`SETMINBEEP:${v}`);
-    return SzusownikBle.parseMinBeep(await this.readStatus());
+    const status = await this.settingStatus(`SETMINBEEP:${v}`, /beep min=\d+/);
+    return SzusownikBle.parseMinBeep(status);
   }
 
   /**
