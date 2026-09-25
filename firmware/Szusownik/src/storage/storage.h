@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "../gnss/gnss.h"
 
 // Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja co ~5 zjazdów
 // (heurystyka wyciągu) oraz na żądanie sync z PWA. Bez kasowania po wysyłce.
@@ -8,7 +9,7 @@ class Storage {
   bool begin();
   bool openLog(const String& stampOrEmpty);
   void writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
-                   float hdg, float altBaro);
+                   float hdg, float altBaro, const GnssSampleQuality& quality);
   void sync();
   void close();
   bool isOpen() const { return fileOpen_; }

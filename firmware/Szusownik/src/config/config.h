@@ -2,11 +2,11 @@
 #include <Arduino.h>
 
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
-// docs/wymagania-ESP.md, docs/ble-transfer.md.
+// docs/wymagania-ESP.md, docs/ble-transfer.md, docs/jakosc-danych.md.
 
-#define SZ_FW_VERSION "1.5.0-baro"
+#define SZ_FW_VERSION "1.6.0-gnss-quality"
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
-#define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro"
+#define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro,gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms"
 
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
 // 50-70:3Hz, 70-80:6Hz, >=80:10Hz. Histereza +/-3 km/h.

@@ -1,9 +1,10 @@
 import { db, type StoredFile, type StoredRun } from "./db.ts";
-import { parseDeviceCsv, type Sample } from "./csv.ts";
-import { analyzeDay, type DayStats, type Run } from "./runs.ts";
+import { parseDeviceCsvDocument, serializeDeviceCsvV2, type Sample } from "./csv.ts";
+import { addSyntheticDemoQuality } from "./demo.ts";
+import { analyzeDay, QUALITY_ANALYSIS_VERSION, type DayStats, type Run } from "./runs.ts";
 
 export const DEMO_SOURCE_FILE = "demo-LOG_1605.csv";
-const DEMO_SEEDED_KEY = "demo-seeded-v1";
+const DEMO_SEEDED_KEY = "demo-seeded-v2";
 
 export function localDayKey(iso: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -64,32 +65,25 @@ export function toRun(record: StoredRun): Run {
     endT: record.endT,
     samples: record.samples,
     distanceM: record.distanceM,
-    maxSpeed: record.maxSpeed,
+    rawMaxSpeed: record.rawMaxSpeed,
+    rawMaxSampleIndex: record.rawMaxSampleIndex,
+    rawMaxQuality: record.rawMaxQuality,
+    confirmedMaxSpeed: record.confirmedMaxSpeed,
+    confirmedSampleIndex: record.confirmedSampleIndex,
+    confirmedQuality: record.confirmedQuality,
     maxGradeDown: record.maxGradeDown,
   };
 }
 
 export function statsFromRuns(records: StoredRun[]): DayStats {
+  const confirmedSpeeds = records.flatMap((run) =>
+    run.confirmedMaxSpeed === null ? [] : [run.confirmedMaxSpeed],
+  );
   return {
     downhillM: records.reduce((sum, run) => sum + run.distanceM, 0),
-    maxSpeed: records.reduce((max, run) => Math.max(max, run.maxSpeed), 0),
+    confirmedMaxSpeed: confirmedSpeeds.length > 0 ? Math.max(...confirmedSpeeds) : null,
     runs: records.map(toRun),
   };
-}
-
-function samplesToCsv(samples: Sample[]): string {
-  const rows = samples.map((sample) =>
-    [
-      sample.t,
-      sample.lat,
-      sample.lon,
-      sample.speed,
-      sample.altGps,
-      sample.hdg,
-      sample.altBaro,
-    ].join(","),
-  );
-  return ["timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro", ...rows].join("\n") + "\n";
 }
 
 function shiftSamplesToNow(samples: Sample[]): Sample[] {
@@ -107,7 +101,9 @@ function recordsFromAnalysis(
   analysis: DayStats,
   receivedAt: string,
   demo: boolean,
+  previousRuns: StoredRun[],
 ): StoredRun[] {
+  const previousLabels = new Map(previousRuns.map((run) => [run.sourceIndex, run.label]));
   return analysis.runs.map((run, sourceIndex) => ({
     id: `${sourceFile}::${sourceIndex}`,
     sourceFile,
@@ -116,27 +112,40 @@ function recordsFromAnalysis(
     startT: run.startT,
     endT: run.endT,
     distanceM: run.distanceM,
-    maxSpeed: run.maxSpeed,
+    analysisVersion: QUALITY_ANALYSIS_VERSION,
+    rawMaxSpeed: run.rawMaxSpeed,
+    rawMaxSampleIndex: run.rawMaxSampleIndex,
+    rawMaxQuality: run.rawMaxQuality,
+    confirmedMaxSpeed: run.confirmedMaxSpeed,
+    confirmedSampleIndex: run.confirmedSampleIndex,
+    confirmedQuality: run.confirmedQuality,
     maxGradeDown: run.maxGradeDown,
     samples: run.samples,
-    ...(demo ? { label: "Demo" } : {}),
+    ...(previousLabels.get(sourceIndex)
+      ? { label: previousLabels.get(sourceIndex) }
+      : demo ? { label: "Demo" } : {}),
     ...(demo ? { demo: true } : {}),
     receivedAt,
   }));
 }
 
-export async function materializeFile(file: StoredFile): Promise<StoredRun[]> {
+export async function materializeFile(file: StoredFile, force = false): Promise<StoredRun[]> {
   const existing = await db.runs.where("sourceFile").equals(file.name).toArray();
-  if (existing.length > 0) return existing;
+  const parsed = parseDeviceCsvDocument(file.raw);
+  if (parsed.version !== 2) return [];
+  if (!force && existing.length > 0 && existing.every((run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION)) {
+    return existing;
+  }
 
-  const samples = parseDeviceCsv(file.raw);
-  const analysis = analyzeDay(samples);
+  const analysis = analyzeDay(parsed.samples);
   const records = recordsFromAnalysis(
     file.name,
     analysis,
     file.receivedAt,
     file.name === DEMO_SOURCE_FILE,
+    existing,
   );
+  if (existing.length > 0) await db.runs.bulkDelete(existing.map((run) => run.id));
   if (records.length > 0) await db.runs.bulkPut(records);
   return records;
 }
@@ -144,14 +153,19 @@ export async function materializeFile(file: StoredFile): Promise<StoredRun[]> {
 export async function ensureLocalData(): Promise<void> {
   await db.open();
   const seeded = await db.meta.get(DEMO_SEEDED_KEY);
+  const reseededDemo = !seeded;
   if (!seeded) {
     const response = await fetch(`${import.meta.env.BASE_URL}fixtures/ride.csv`);
     if (!response.ok) {
       throw new Error("Nie udało się wczytać danych demonstracyjnych.");
     }
     const source = await response.text();
-    const shifted = shiftSamplesToNow(parseDeviceCsv(source));
-    const raw = samplesToCsv(shifted);
+    const sourceCsv = parseDeviceCsvDocument(source);
+    const demoSamples = sourceCsv.version === 1
+      ? addSyntheticDemoQuality(sourceCsv.samples)
+      : sourceCsv.samples;
+    const shifted = shiftSamplesToNow(demoSamples);
+    const raw = serializeDeviceCsvV2(shifted);
     const receivedAt = new Date().toISOString();
     await db.files.put({
       name: DEMO_SOURCE_FILE,
@@ -164,7 +178,9 @@ export async function ensureLocalData(): Promise<void> {
   }
 
   const files = await db.files.toArray();
-  for (const file of files) await materializeFile(file);
+  for (const file of files) {
+    await materializeFile(file, reseededDemo && file.name === DEMO_SOURCE_FILE);
+  }
 }
 
 export async function materializeFiles(names: string[]): Promise<void> {
@@ -175,17 +191,24 @@ export async function materializeFiles(names: string[]): Promise<void> {
 }
 
 export async function getAllRuns(): Promise<StoredRun[]> {
-  const runs = await db.runs.toArray();
+  const runs = (await db.runs.toArray()).filter(
+    (run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION,
+  );
   return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
 }
 
 export async function getAllStoredSamples(): Promise<Sample[]> {
   const files = await db.files.toArray();
-  return files.flatMap((file) => parseDeviceCsv(file.raw));
+  return files.flatMap((file) => {
+    const parsed = parseDeviceCsvDocument(file.raw);
+    return parsed.version === 2 ? parsed.samples : [];
+  });
 }
 
 export async function getRunsForDay(dayKey: string): Promise<StoredRun[]> {
-  const runs = await db.runs.where("dayKey").equals(dayKey).toArray();
+  const runs = (await db.runs.where("dayKey").equals(dayKey).toArray()).filter(
+    (run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION,
+  );
   return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
 }
 

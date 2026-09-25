@@ -61,7 +61,11 @@ export default function DaySummaryView() {
   );
   const segments = useMemo(() => buildRunSegments(chronologicalRuns), [chronologicalRuns]);
   const chartData = useMemo(() => buildChartData(chronologicalRuns), [chronologicalRuns]);
-  const maxSpeed = runs.reduce((max, run) => Math.max(max, run.maxSpeed), 0);
+  const confirmedSpeeds = runs.flatMap((run) =>
+    run.confirmedMaxSpeed === null ? [] : [run.confirmedMaxSpeed],
+  );
+  const maxConfirmedSpeed = confirmedSpeeds.length > 0 ? Math.max(...confirmedSpeeds) : null;
+  const maxRawSpeed = runs.reduce((max, run) => Math.max(max, run.rawMaxSpeed), 0);
   const distanceM = runs.reduce((sum, run) => sum + run.distanceM, 0);
   const maxGradeDown = runs.reduce((max, run) => Math.max(max, run.maxGradeDown), 0);
 
@@ -77,7 +81,7 @@ export default function DaySummaryView() {
     );
   }
 
-  const yMax = maxSpeed > 100 ? 150 : 100;
+  const yMax = maxRawSpeed > 100 ? 150 : 100;
   const altitudeDomain = getAltitudeDomain(chartData);
   const distanceAxis = getDistanceAxis((segments.at(-1)?.endD ?? 0));
   const startT = chronologicalRuns[0]?.startT ?? runs[0].startT;
@@ -99,7 +103,7 @@ export default function DaySummaryView() {
       </header>
 
       <section className="detail-metrics">
-        <div><span>Max prędkość</span><strong>{maxSpeed.toFixed(0)}<small> km/h</small></strong></div>
+        <div><span>Max prędkość</span><strong>{maxConfirmedSpeed === null ? "—" : maxConfirmedSpeed.toFixed(0)}<small> km/h</small></strong></div>
         <div><span>Dystans</span><strong>{formatDistance(distanceM)}</strong></div>
         <div><span>Max nachylenie</span><strong>{maxGradeDown.toFixed(0)}<small>°</small></strong></div>
       </section>

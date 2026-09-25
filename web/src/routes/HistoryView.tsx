@@ -50,7 +50,9 @@ export default function HistoryView() {
         <div className="history-list">
           {groups.map(([dayKey, dayRuns], index) => {
             const stats = statsFromRuns(dayRuns);
-            const best = [...dayRuns].sort((a, b) => b.maxSpeed - a.maxSpeed)[0];
+            const best = dayRuns
+              .filter((run) => run.confirmedMaxSpeed !== null)
+              .sort((a, b) => b.confirmedMaxSpeed! - a.confirmedMaxSpeed!)[0];
             return (
               <Link className="day-card" key={dayKey} to={`/dzien/${dayKey}`}>
                 <div className="day-card-header">
@@ -61,7 +63,7 @@ export default function HistoryView() {
                   <Icon name="chevron" size={20} />
                 </div>
                 <div className="day-card-summary">
-                  <span><b>{stats.maxSpeed.toFixed(0)}</b> km/h max</span>
+                  <span><b>{stats.confirmedMaxSpeed === null ? "—" : stats.confirmedMaxSpeed.toFixed(0)}</b> km/h max</span>
                   <span><b>{formatDistance(stats.downhillM)}</b> w dół</span>
                   <span><b>{dayRuns.length}</b> {dayRuns.length === 1 ? "zjazd" : "zjazdów"}</span>
                 </div>

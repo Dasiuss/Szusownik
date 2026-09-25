@@ -12,9 +12,11 @@ import {
   YAxis,
 } from "recharts";
 import { Icon } from "../components/Icon.tsx";
+import { QualityIndicators } from "../components/QualityIndicators.tsx";
 import { getDistanceAxis } from "../lib/chart.ts";
 import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, renameRun } from "../lib/data.ts";
 import { db, type StoredRun } from "../lib/db.ts";
+import { QUALITY_ANALYSIS_VERSION } from "../lib/runs.ts";
 
 export default function RunView() {
   const { runId } = useParams();
@@ -33,7 +35,7 @@ export default function RunView() {
     }
     db.runs.get(decodedRunId).then((stored) => {
       if (!active) return;
-      setRun(stored ?? null);
+      setRun(stored?.analysisVersion === QUALITY_ANALYSIS_VERSION ? stored : null);
       setLabel(stored?.label ?? "");
       setLoading(false);
     });
@@ -78,7 +80,7 @@ export default function RunView() {
     );
   }
 
-  const yMax = run.maxSpeed > 100 ? 150 : 100;
+  const yMax = run.rawMaxSpeed > 100 ? 150 : 100;
   const altitudeDomain = getAltitudeDomain(chartData);
   const distanceAxis = getDistanceAxis(run.distanceM / 1000);
 
@@ -111,10 +113,24 @@ export default function RunView() {
       </div>
 
       <section className="detail-metrics">
-        <div><span>Max prędkość</span><strong>{run.maxSpeed.toFixed(0)}<small> km/h</small></strong></div>
+        <div className="confirmed-speed-metric">
+          <span>Max prędkość</span>
+          <strong>{run.confirmedMaxSpeed === null ? "—" : <>{run.confirmedMaxSpeed.toFixed(0)}<small> km/h</small></>}</strong>
+          {run.confirmedQuality && <QualityIndicators quality={run.confirmedQuality} />}
+        </div>
         <div><span>Dystans</span><strong>{formatDistance(run.distanceM)}</strong></div>
         <div><span>Max nachylenie</span><strong>{run.maxGradeDown.toFixed(0)}<small>°</small></strong></div>
       </section>
+
+      {(run.confirmedMaxSpeed === null || run.rawMaxSpeed > run.confirmedMaxSpeed) && (
+        <section className="raw-peak-card" aria-label="Surowe maksimum prędkości">
+          <div>
+            <span>Surowe maksimum</span>
+            <strong>{run.rawMaxSpeed.toFixed(0)}<small> km/h</small></strong>
+          </div>
+          <QualityIndicators quality={run.rawMaxQuality} />
+        </section>
+      )}
 
       <section className="chart-card">
         <div className="chart-heading">

@@ -130,6 +130,10 @@ timestamp, lat, lon, speed, altitude_gps, heading, altitude_baro
 (`altitude_baro` od firmware 1.5 — barometr BME280; schemat ewolucyjny, walidowany
 po nagłówku, zmiany wymagają jednoczesnej aktualizacji PWA.)
 
+CSV v2 rozszerza te pola o metryki jakości GNSS z NMEA (ważność/wiek fixa,
+satelity i ich wiek, HDOP i jego wiek). Definicje oraz kryteria potwierdzania
+rekordu są w `docs/jakosc-danych.md`.
+
 To jest lepszy kontrakt dla wersji finalnej niż testowy NMEA z `BleTest`. NMEA
 może pozostać formatem wejściowym na etapie diagnostyki, ale plik przeznaczony
 do codziennej synchronizacji powinien mieć stabilny schemat CSV i nagłówek.

@@ -2,6 +2,20 @@
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
 
+struct GnssSampleQuality {
+  bool fixValid = false;
+  bool fixAgeValid = false;
+  uint32_t fixAgeMs = 0;
+  bool satellitesValid = false;
+  uint32_t satellites = 0;
+  bool satellitesAgeValid = false;
+  uint32_t satellitesAgeMs = 0;
+  bool hdopValid = false;
+  float hdop = 0.0f;
+  bool hdopAgeValid = false;
+  uint32_t hdopAgeMs = 0;
+};
+
 // GNSS u-blox (NEO-M8N) po UART0. Prędkość z Dopplera (odbiornik liczy ją sam,
 // my tylko odczytujemy gps.speed). Moduł wydzielony pod przyszłe IMU.
 //
@@ -21,6 +35,7 @@ class Gnss {
   bool setRateMs(uint16_t ms);  // ręczna zmiana meas rate (też do testów)
   void dumpStatus();            // jedna linia statusu na Serial
   bool hasFix();
+  GnssSampleQuality sampleQuality();
   float speedKmh();
   double lat();
   double lon();
@@ -32,6 +47,8 @@ class Gnss {
   String csvStamp();  // YYYY-MM-DDTHH:MM:SS.mmmZ (pole CSV, ms z ESP32)
   int rateHz() const { return rateHz_; }
   unsigned long logIntervalMs() const { return logIntervalMs_; }
+  // true raz na nową epokę GNSS (commit RMC = świeża para pozycja+prędkość).
+  bool consumeNewSample();
 
  private:
   TinyGPSPlus gps_;
@@ -40,6 +57,7 @@ class Gnss {
   unsigned long logIntervalMs_ = 2000;
   long baud_ = 9600;
   bool configured_ = false;
+  bool newSample_ = false;
   unsigned long lastAttempt_ = 0;
   uint32_t ubxFails_ = 0;
   int lastStampSec_ = -1;              // ostatnia sekunda GPS w csvStamp()

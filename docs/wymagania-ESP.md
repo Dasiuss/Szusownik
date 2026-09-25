@@ -14,6 +14,12 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 - **GPS (u-blox, ≥10 Hz)** po UART: pozycja, prędkość (Doppler), wysokość, heading, czas UTC.
 - **Adaptacyjne próbkowanie** (tabela + histereza ±3 km/h, patrz `docs/koncepcja.md`).
+- **Wyzwalacz zapisu = próbka, nie zegar pętli.** Wiersz CSV powstaje na nadejście
+  nowej epoki GNSS (commit RMC, `Gnss::consumeNewSample()`), z bramką `hasFix()`.
+  Gwarantuje to `1 wiersz = 1 pomiar` i eliminuje duplikaty oraz cichy hold pozycji,
+  które dawał osobny zegar `nextLog` przy dudnieniu z meas rate odbiornika. Tempo
+  zapisu podąża za faktycznym wyjściem modułu (0,5–10 Hz); jeśli w jednym przebiegu
+  `poll()` dotrze kilka epok, zapisana zostanie tylko ostatnia (bez fabrykowania danych).
 - **IMU** — na roadmapę (moduł pomiarowy wydzielony w kodzie, stabilny interfejs).
 - Zapis **surowych** danych (bez filtrowania) na SD — pełna wierność do analizy i FIT.
 
@@ -74,6 +80,9 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   z OLED) ze standardowej atmosfery (ref. 1013,25 hPa). Temperatura czujnika jest
   wewnętrzna i służy do kompensacji ciśnienia; nie trafia do CSV, ale jest
   logowana diagnostycznie na Serial jako `air` w linii STATUS (patrz §9).
+- Nagłówek CSV v2 dodaje metryki fixa, liczby satelitów, HDOP oraz wiek tych pól;
+  bieżące źródło prędkości pozostaje RMC/NMEA. Szczegółowy schemat i świeżość
+  opisano w `docs/jakosc-danych.md`.
 - Nazwa pliku od czasu startu: **`YYYYMMDD_HHMMSS.csv`** (bez `:` — FAT32 na SD).
 - **Rotacja co ~5 zjazdów** (detekcja wyciągu — patrz niżej), aby pliki nie rosły bez końca.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.

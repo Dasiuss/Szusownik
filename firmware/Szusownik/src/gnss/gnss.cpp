@@ -15,14 +15,24 @@ void Gnss::poll() {
   while (Serial0.available()) {
     gps_.encode((char)Serial0.read());
   }
-  if (gps_.speed.isUpdated() || gps_.location.isUpdated()) {
+  // Wyzwalaczem jest commit RMC: TinyGPS++ commituje tam jednocześnie pozycję
+  // i prędkość (VTG nie jest parsowane), więc para jest spójna z jednej epoki.
+  // Odczyt speedKmh() konsumuje flagę isUpdated (jednorazowa).
+  if (gps_.speed.isUpdated()) {
     float kmh = speedKmh();
+    newSample_ = true;
 #if SZ_DEBUG_FIX
     szLogf("FIX ok=%d spd=%.1f sats=%lu lat=%.6f lon=%.6f alt=%.1f hdg=%.0f", hasFix() ? 1 : 0,
            kmh, (unsigned long)sats(), lat(), lon(), altM(), headingDeg());
 #endif
     updateAdaptiveRate(kmh);
   }
+}
+
+bool Gnss::consumeNewSample() {
+  bool s = newSample_;
+  newSample_ = false;
+  return s;
 }
 
 void Gnss::maintain(unsigned long nowMs) {
@@ -41,6 +51,28 @@ bool Gnss::hasFix() {
   if (gps_.location.age() > maxAge) return false;
   if (!gps_.satellites.isValid() || gps_.satellites.value() < 3) return false;
   return true;
+}
+
+GnssSampleQuality Gnss::sampleQuality() {
+  GnssSampleQuality quality;
+  quality.fixValid = hasFix();
+  quality.fixAgeValid = gps_.location.isValid();
+  if (quality.fixAgeValid) quality.fixAgeMs = gps_.location.age();
+
+  quality.satellitesValid = gps_.satellites.isValid();
+  if (quality.satellitesValid) {
+    quality.satellites = gps_.satellites.value();
+    quality.satellitesAgeValid = true;
+    quality.satellitesAgeMs = gps_.satellites.age();
+  }
+
+  quality.hdopValid = gps_.hdop.isValid();
+  if (quality.hdopValid) {
+    quality.hdop = (float)gps_.hdop.hdop();
+    quality.hdopAgeValid = true;
+    quality.hdopAgeMs = gps_.hdop.age();
+  }
+  return quality;
 }
 
 float Gnss::speedKmh() {

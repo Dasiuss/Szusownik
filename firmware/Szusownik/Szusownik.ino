@@ -30,7 +30,6 @@ static double prevLat = 0.0, prevLon = 0.0;
 static bool havePrev = false;
 static bool runActive = false;
 
-static unsigned long nextLog = 0;
 static unsigned long nextHud = 0;
 static unsigned long nextSync = 0;
 static unsigned long nextGpsLog = 0;
@@ -98,27 +97,26 @@ void loop() {
     }
   }
 
-  // Zapis wg adaptacyjnego interwału z GNSS (0.5-10 Hz).
-  if (now >= nextLog) {
-    nextLog = now + gnss.logIntervalMs();
-    if (gnss.hasFix()) {
-      // baro.read() aktualizuje cache; przy chwilowym bledzie zostaje ostatni
-      // poprawny odczyt (bez zera w CSV i bez falszywego skoku dla rotacji).
-      if (baro.present()) baro.read();
-      bool baroOk = baro.present() && baro.valid();
-      float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
-      if (!storage.isOpen()) storage.openLog(gnss.utcStamp());
-      storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
-                          gnss.headingDeg(), baroAlt);
-      // Rotacja/cięcie zjazdów na wysokości barometrycznej (stabilniejsza niż GPS);
-      // GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
-      storage.noteSample(kmh, baroOk ? baroAlt : gnss.altM());
-      sampleCount++;
-      totalSamples++;
+  // Zapis na nadejście nowej próbki GNSS (commit RMC), nie na zegarze pętli.
+  // Gwarantuje 1 wiersz = 1 pomiar i brak duplikatów przy dudnieniu zegarów.
+  if (gnss.consumeNewSample() && gnss.hasFix()) {
+    // baro.read() aktualizuje cache; przy chwilowym bledzie zostaje ostatni
+    // poprawny odczyt (bez zera w CSV i bez falszywego skoku dla rotacji).
+    if (baro.present()) baro.read();
+    bool baroOk = baro.present() && baro.valid();
+    float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
+    if (!storage.isOpen()) storage.openLog(gnss.utcStamp());
+    const GnssSampleQuality quality = gnss.sampleQuality();
+    storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
+                        gnss.headingDeg(), baroAlt, quality);
+    // Rotacja/cięcie zjazdów na wysokości barometrycznej (stabilniejsza niż GPS);
+    // GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
+    storage.noteSample(kmh, baroOk ? baroAlt : gnss.altM());
+    sampleCount++;
+    totalSamples++;
 #if SZ_DEBUG_SAMPLES
-      szLogf("SAMPLE spd=%.1f altBaro=%.1f sats=%lu", kmh, baroAlt, (unsigned long)gnss.sats());
+    szLogf("SAMPLE spd=%.1f altBaro=%.1f sats=%lu", kmh, baroAlt, (unsigned long)gnss.sats());
 #endif
-    }
   }
   if (now >= nextSync) {
     nextSync = now + 5000;

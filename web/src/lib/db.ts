@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import type { EnrichedSample } from "./runs.ts";
+import type { EnrichedSample, PeakQuality } from "./runs.ts";
 
 export interface StoredFile {
   name: string; // klucz: nazwa pliku z urządzenia (sync po nazwie)
@@ -17,7 +17,13 @@ export interface StoredRun {
   startT: string;
   endT: string;
   distanceM: number;
-  maxSpeed: number;
+  analysisVersion: number;
+  rawMaxSpeed: number;
+  rawMaxSampleIndex: number;
+  rawMaxQuality: PeakQuality;
+  confirmedMaxSpeed: number | null;
+  confirmedSampleIndex: number | null;
+  confirmedQuality: PeakQuality | null;
   maxGradeDown: number;
   samples: EnrichedSample[];
   label?: string;
@@ -43,6 +49,11 @@ class SzusownikDb extends Dexie {
       files: "name, receivedAt, userId",
     });
     this.version(2).stores({
+      files: "name, receivedAt, userId",
+      runs: "id, dayKey, startT, sourceFile, label, demo",
+      meta: "key",
+    });
+    this.version(3).stores({
       files: "name, receivedAt, userId",
       runs: "id, dayKey, startT, sourceFile, label, demo",
       meta: "key",

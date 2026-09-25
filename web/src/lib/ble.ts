@@ -1,4 +1,5 @@
 import { db } from "./db.ts";
+import { DEVICE_CSV_V1_HEADER, DEVICE_CSV_V2_HEADER } from "./csv.ts";
 
 // BLE v1 Szusownika — transfer plików (faza C).
 // Kontrakt z firmware/src/config/config.h i docs/ble-transfer.md:
@@ -398,7 +399,7 @@ export class SzusownikBle {
       }
       const text = new TextDecoder().decode(flat);
       const header = text.slice(0, text.indexOf("\n")).trim();
-      if (header !== "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro") {
+      if (header !== DEVICE_CSV_V1_HEADER && header !== DEVICE_CSV_V2_HEADER) {
         throw new Error(`Zły nagłówek CSV: ${header}`);
       }
       if (lines < 2) throw new Error("Plik bez próbek");

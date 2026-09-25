@@ -56,7 +56,7 @@ export default function DayView() {
           <section className="stats-section" aria-label="Podsumowanie aktywności">
             <div className="speed-card">
               <div className="card-kicker"><Icon name="gauge" size={17} /> Najlepszy wynik</div>
-              <div className="speed-value">{stats.maxSpeed.toFixed(0)}<small>km/h</small></div>
+              <div className="speed-value">{stats.confirmedMaxSpeed === null ? "—" : stats.confirmedMaxSpeed.toFixed(0)}<small>km/h</small></div>
               <div className="speed-caption">Najwyższa prędkość w tej aktywności</div>
             </div>
             <div className="metrics-grid">
@@ -81,7 +81,7 @@ export default function DayView() {
                     <div className="day-summary-copy"><span className="eyebrow">Podsumowanie</span><strong>Cały dzień</strong><p>Połączone wykresy wszystkich zjazdów</p></div>
                     <Icon name="chevron" size={20} />
                   </div>
-                  <div className="day-summary-stats"><span><b>{stats.runs.length}</b> zjazdów</span><span><b>{formatDistance(stats.downhillM)}</b> w dół</span><span><b>{stats.maxSpeed.toFixed(0)}</b> km/h max</span></div>
+                  <div className="day-summary-stats"><span><b>{stats.runs.length}</b> zjazdów</span><span><b>{formatDistance(stats.downhillM)}</b> w dół</span><span><b>{stats.confirmedMaxSpeed === null ? "—" : stats.confirmedMaxSpeed.toFixed(0)}</b> km/h max</span></div>
                 </Link>
                 <div className="run-list">
                 {stats.runs.map((run, index) => {
@@ -198,7 +198,7 @@ function RunCard({ run, stored, index }: { run: Run; stored: StoredRun; index: n
         <Icon name="chevron" size={19} />
       </div>
       <div className="run-card-stats">
-        <span><b>{run.maxSpeed.toFixed(0)}</b> km/h</span>
+        <span><b>{run.confirmedMaxSpeed === null ? "—" : run.confirmedMaxSpeed.toFixed(0)}</b> km/h</span>
         <span><b>{formatDistance(run.distanceM)}</b></span>
         <span><b>{run.maxGradeDown.toFixed(0)}°</b> nachyl.</span>
       </div>

@@ -93,12 +93,13 @@ na nagraniach z auta defaulty wystarczą.
 - IndexedDB przechowuje surowe CSV jako archiwum oraz osobno zmaterializowane zjazdy do
   szybkiego wyświetlania i edycji. Usunięcie zjazdu nie usuwa pliku źródłowego.
 
-## 8. Dane testowe (rzeczywiste nagranie, nie mock)
+## 8. Dane testowe (rzeczywisty ślad, metryki GNSS testowe)
 
 - Plik **CSV nagrany urządzeniem** (np. przejazd autem) wpięty jako fixture
-  do developmentu PWA — **nie generujemy syntetycznego mocka**.
-- Format pól zgodny z urządzeniem:
-  `timestamp, lat, lon, speed, altitude_gps, heading, altitude_baro`.
+  do developmentu PWA. Bieżący plik v1 dostaje przy seedowaniu syntetyczne
+  metryki GNSS wyłącznie do testowania wskaźników; nie są dowodem jakości sprzętu.
+- Plik v2 z urządzenia zachowuje rzeczywiste metryki GNSS; jego nagłówek i
+  semantykę pól opisuje `docs/jakosc-danych.md`.
 - Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
   rozdzielający).
 
@@ -106,7 +107,7 @@ na nagraniach z auta defaulty wystarczą.
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
-- **Dexie.js 4** — IndexedDB, schemat v2 (surowe pliki + zjazdy + metadane).
+- **Dexie.js 4** — IndexedDB, schemat v3 (surowe pliki + wersjonowane zjazdy + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
 - **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa

@@ -266,10 +266,9 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 
 - `FILE_INFO:<nazwa>` niepotrzebne — INFO zwraca od razu pełną listę z rozmiarami.
 - Lista zawiera nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
-  Schemat CSV jest **ewolucyjny** (projekt w fazie rozwoju) i walidowany po
-  nagłówku. Aktualny (od firmware 1.5, barometr BME280):
-  `timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro`. Dodanie/usunięcie
-  kolumny wymaga jednoczesnej zmiany PWA (nagłówek sprawdzany w `ble.ts`).
+  Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje CSV v1
+  oraz v2; obecny nagłówek v2 i metryki GNSS opisuje `docs/jakosc-danych.md`.
+  Zmiana schematu wymaga jednoczesnej aktualizacji firmware i walidatora PWA.
 - CRC32 liczone w locie podczas streamingu (nie przy zamykaniu pliku);
   wynik w STATUS `done`; PWA porównuje z własnym CRC po dekompresji.
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.

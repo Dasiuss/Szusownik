@@ -21,11 +21,13 @@ wypracowanych w trzech projektach testowych:
 - `docs/koncepcja.md` - wizja produktu i zakres funkcjonalny.
 - `docs/wymagania-ESP.md` - wymagania sprzętu i firmware.
 - `docs/wymagania-PWA.md` - wymagania PWA, analiza zjazdów i widoki.
+- `docs/jakosc-danych.md` - przepływ pól jakości GNSS, algorytm potwierdzania
+  rekordów, miejsca implementacji i aktualny status weryfikacji.
 
 ## Zasady pracy
 
-1. Przed zmianą protokołu, layoutu OLED lub algorytmu routingu przeczytaj
-   odpowiedni dokument referencyjny.
+1. Przed zmianą protokołu, layoutu OLED, algorytmu routingu lub analizy jakości
+   GNSS i rekordów prędkości przeczytaj odpowiedni dokument referencyjny.
 2. Nie zmieniaj potwierdzonego profilu BLE `244 B / 240 B payload / 128 ramek /
    ACK co 32 / pacing 4 ms` bez osobnego benchmarku na rzeczywistym ESP32 i
    Androidzie.
@@ -43,6 +45,11 @@ wypracowanych w trzech projektach testowych:
    implementacji testowej, oznaczaj jako niepotwierdzone.
 8. Po zmianie decyzji technicznej aktualizuj dokument referencyjny oraz ten
    plik, jeśli zmiana wpływa na zasady pracy kolejnych sesji.
+9. Zapis próbki GPS na SD jest wyzwalany **nadejściem nowej epoki GNSS**
+   (`Gnss::consumeNewSample()`), a nie zegarem pętli (`nextLog`). Nie wracaj do
+   zapisu sterowanego osobnym interwałem `millis()` — powodował duplikaty i cichy
+   hold pozycji przy dudnieniu z meas rate odbiornika. Szczegóły w
+   `docs/wymagania-ESP.md`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
