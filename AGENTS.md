@@ -55,6 +55,8 @@ wypracowanych w trzech projektach testowych:
     urządzenia PWA czyta wprost z INFO (odświeżanego po każdym `SET*`); komendy
     `GETVOL/GETFREQ/GETTIMING/GETMINBEEP` zostały usunięte z firmware. Nie
     przywracaj fallbacków wersji ani komend `GET*`.
+11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo. Build weryfikuje
+    sam użytkownik i zgłasza, jeśli coś się nie powiodło.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
