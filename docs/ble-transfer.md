@@ -236,18 +236,14 @@ START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
 STOP                  — przerwij transfer
 ACK:<next>            — skumulowane potwierdzenie (mam 0..next-1)
 NACK:<expected>       — retransmisja od pierwszej brakującej
-GETVOL                — STATUS "vol low=.. high=.."
 SETVOL:LOW:<0-100>    — głośność przy 60 km/h (NVS) + feedback: sygnał 60
 SETVOL:HIGH:<0-100>   — głośność przy 120 km/h (NVS) + feedback: sygnał 120
-GETFREQ               — STATUS "freq short=.. long=.." (firmware 1.2+)
 SETFREQ:SHORT:<600-1500> — ton krótki w Hz (NVS) + feedback: 1 długi + 2 krótkie
 SETFREQ:LONG:<600-1500>  — ton długi w Hz (NVS) + feedback: 1 długi + 2 krótkie
-GETTIMING              — STATUS "timing short=.. long=.. gap=.. interval=.." (firmware 1.3+)
 SETTIMING:SHORT:<20-200>       — długość krótkiego tonu w ms (NVS) + 3 sygnały 120
 SETTIMING:LONG:<40-500>        — długość długiego tonu w ms (NVS) + 3 sygnały 120
 SETTIMING:GAP:<0-500>          — przerwa między tonami wzoru w ms (NVS) + 3 sygnały 120
 SETTIMING:INTERVAL:<100-5000>  — przerwa między wzorami w ms (NVS) + 3 sygnały 120
-GETMINBEEP                     — STATUS "beep min=.." (firmware 1.4+)
 SETMINBEEP:<60-120>            — minimalna prędkość pikania w km/h (NVS) + 3 sygnały 120
 ```
 
@@ -256,11 +252,25 @@ odtwarza feedback. `SETTIMING` odtwarza trzy pełne wzory 120 km/h, aby można b
 ocenić długości i odstępy. Firmware konsumuje komendę po odczycie, więc identyczna
 komenda może zostać wysłana ponownie bez dodatkowego numeru.
 
-INFO niesie też `volLow/volHigh` (firmware 1.1+), `freqShort/freqLong`
-(firmware 1.2+), `beepShortMs/beepLongMs/beepGapMs/signalGapMs`
-(firmware 1.3+) oraz `minBeepKmh` (firmware 1.4+), żeby PWA ustawiła suwaki bez dodatkowego odpytywania
-(fallback do GETVOL/GETFREQ/GETTIMING/GETMINBEEP, gdy pól nie ma). Transport ramek
+INFO niesie `volLow/volHigh`, `freqShort/freqLong`,
+`beepShortMs/beepLongMs/beepGapMs/signalGapMs` oraz `minBeepKmh`. PWA nie odpytuje
+urządzenia przez `GET*` (komendy usunięte z firmware) — bieżące ustawienia czyta
+wprost z INFO po połączeniu, a INFO jest odświeżane po każdym `SET*`. PWA nie
+sprawdza wersji firmware ani nie bramkuje sekcji ustawień. Transport ramek
 (244/240/128/ACK32/pacing 4 ms) bez zmian — profil zamrożony.
+
+Reklamowanie (advertising) — doprecyzowane 2026-09-25 (NimBLE-Arduino 2.5.1):
+
+- `NimBLEServer::advertiseOnDisconnect(true)` jest **wymagane**. W NimBLE 2.x
+  domyślna wartość to `false`, więc po rozłączeniu centrala firmware przestawał
+  reklamować i urządzenie znikało z wyboru do momentu restartu ESP.
+- `enableScanResponse(true)` przed `setName()`. 128-bitowy UUID usługi
+  (18 B) + flagi (3 B) nie zostawiają miejsca na pełną nazwę w pakiecie
+  advertising (limit 31 B), a `NimBLEAdvertising::setName()` w tej sytuacji
+  zwraca `false` i nazwa nie trafia nigdzie — Android pokazuje wtedy
+  „unrecognized device". Nazwa musi iść w scan response.
+- Service UUID pozostaje w pakiecie advertising, więc filtr
+  `filters: [{ services: [SZ_UUID_SVC] }]` w Web Bluetooth nadal działa.
 
 Decyzje względem pierwotnej granicy funkcjonalnej:
 

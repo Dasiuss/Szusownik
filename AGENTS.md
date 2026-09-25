@@ -50,6 +50,11 @@ wypracowanych w trzech projektach testowych:
    zapisu sterowanego osobnym interwałem `millis()` — powodował duplikaty i cichy
    hold pozycji przy dudnieniu z meas rate odbiornika. Szczegóły w
    `docs/wymagania-ESP.md`.
+10. PWA **nie bramkuje funkcji po wersji firmware** (żadnych „To urządzenie wymaga
+    firmware X+"). Dystrybucja zawsze dostarcza najnowszy FW. Bieżące ustawienia
+    urządzenia PWA czyta wprost z INFO (odświeżanego po każdym `SET*`); komendy
+    `GETVOL/GETFREQ/GETTIMING/GETMINBEEP` zostały usunięte z firmware. Nie
+    przywracaj fallbacków wersji ani komend `GET*`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

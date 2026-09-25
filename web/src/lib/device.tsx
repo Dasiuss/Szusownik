@@ -23,13 +23,9 @@ interface DeviceContextValue {
   connectAndCheck: () => Promise<void>;
   downloadPending: () => Promise<void>;
   disconnect: () => void;
-  getVolume: () => Promise<Volume>;
   setVolume: (which: "low" | "high", value: number) => Promise<Volume>;
-  getFrequency: () => Promise<Freq>;
   setFrequency: (which: "short" | "long", value: number) => Promise<Freq>;
-  getTiming: () => Promise<Timing>;
   setTiming: (which: keyof Timing, value: number) => Promise<Timing>;
-  getMinBeepKmh: () => Promise<number>;
   setMinBeepKmh: (value: number) => Promise<number>;
 }
 
@@ -145,32 +141,16 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return client;
   }
 
-  async function getVolume(): Promise<Volume> {
-    return requireClient().getVolume();
-  }
-
   async function setVolume(which: "low" | "high", value: number): Promise<Volume> {
     return requireClient().setVolume(which, value);
-  }
-
-  async function getFrequency(): Promise<Freq> {
-    return requireClient().getFrequency();
   }
 
   async function setFrequency(which: "short" | "long", value: number): Promise<Freq> {
     return requireClient().setFrequency(which, value);
   }
 
-  async function getTiming(): Promise<Timing> {
-    return requireClient().getTiming();
-  }
-
   async function setTiming(which: keyof Timing, value: number): Promise<Timing> {
     return requireClient().setTiming(which, value);
-  }
-
-  async function getMinBeepKmh(): Promise<number> {
-    return requireClient().getMinBeepKmh();
   }
 
   async function setMinBeepKmh(value: number): Promise<number> {
@@ -195,13 +175,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         connectAndCheck,
         downloadPending,
         disconnect,
-        getVolume,
         setVolume,
-        getFrequency,
         setFrequency,
-        getTiming,
         setTiming,
-        getMinBeepKmh,
         setMinBeepKmh,
       }}
     >

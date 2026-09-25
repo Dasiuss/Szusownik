@@ -40,8 +40,8 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   (1 długi na każde 50 km/h, reszta dziesiątek krótkimi — np. 120 = 1 długi
   + 2 krótkie, max 3 długie). Sygnał co **1 s**, nieblokujący scheduler.
 - Czasy: krótki 56 ms, długi 140 ms, przerwa 60 ms. Częstotliwości: ton krótki
-  i długi niezależnie ustawialne z PWA (`SETFREQ:SHORT:` / `SETFREQ:LONG:`,
-  też `GETFREQ`; odpowiedź STATUS `freq short=.. long=..`), trzymane w NVS
+  i długi niezależnie ustawialne z PWA (`SETFREQ:SHORT:` / `SETFREQ:LONG:`;
+  odpowiedź STATUS `freq short=.. long=..`), trzymane w NVS
   (`szusownik/freqShort/freqLong`), defaulty 880/1100 Hz, zakres 600-1500 Hz.
   Stałe `SZ_FREQ_*` w `config.h`. Krótki może być >= długi (pełna swoboda
   użytkownika, bez ostrzeżeń). Ponowne `SETFREQ` z tą samą wartością odtwarza
@@ -53,7 +53,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   (kwadratowe mapowanie poziomu na duty, max 50%).
 - **Głośność adaptacyjna**: kotwice volLow @60 km/h i volHigh @120 km/h
   (0..100, domyślnie 20/70), pomiędzy liniowo, powyżej 120 wartość ze 120.
-- Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`, też `GETVOL`; odpowiedź
+- Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`; odpowiedź
   STATUS `vol low=.. high=..`), trzymane w NVS (`szusownik/volLow/volHigh`).
   INFO niesie `volLow/volHigh` oraz `freqShort/freqLong` dla PWA. Każde SETVOL gra feedback
   (LOW → sygnał 60, HIGH → sygnał 120); każde SETFREQ gra podgląd
@@ -61,7 +61,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 - Sygnał startowy (setup): identyczny do 120 (1 długi + 2 krótkie),
   ale przy głośności 60.
 - Czasy wzoru są konfigurowalne z PWA przez `SETTIMING:SHORT/LONG/GAP/INTERVAL`,
-  odpowiedź `GETTIMING` ma postać `timing short=.. long=.. gap=.. interval=..`.
+  odpowiedź STATUS ma postać `timing short=.. long=.. gap=.. interval=..`.
   Wartości są trzymane w NVS (`beepShort/beepLong/beepGap/signalGap`):
   odpowiednio 20..200 ms, 40..500 ms, 0..500 ms i 100..5000 ms.
   Po każdej zmianie firmware odtwarza trzy wzory 120 km/h. Przerwa `GAP` jest
@@ -69,7 +69,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 - Mapowanie głośności na duty LEDC jest kwadratowe zamiast liniowego, aby niskie
   poziomy były praktycznie cichsze; przy ustawieniu 1% duty wynosi 0 w 8-bitowej
   skali. Wartość ustawienia pozostaje logicznym procentem 0..100.
-- Minimalna prędkość pikania jest konfigurowalna z PWA przez `SETMINBEEP` / `GETMINBEEP`,
+- Minimalna prędkość pikania jest konfigurowalna z PWA przez `SETMINBEEP`,
   trzymana w NVS jako `minBeep`, zakres 60..120 km/h, domyślnie 60 km/h. Próg tylko
   wycisza niższe prędkości; nie zmienia liczby tonów dla prędkości, która już pika.
 
@@ -83,7 +83,10 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 - Nagłówek CSV v2 dodaje metryki fixa, liczby satelitów, HDOP oraz wiek tych pól;
   bieżące źródło prędkości pozostaje RMC/NMEA. Szczegółowy schemat i świeżość
   opisano w `docs/jakosc-danych.md`.
-- Nazwa pliku od czasu startu: **`YYYYMMDD_HHMMSS.csv`** (bez `:` — FAT32 na SD).
+- Nazwa pliku od czasu startu: **`YYYYMMDD_HHMMSS.csv`** (bez `:` — FAT32 na SD),
+  z realnego UTC z GNSS. Plik powstaje dopiero, gdy odbiornik poda poprawną datę
+  i godzinę — wcześniej nie zapisujemy na SD (brak fallbacku `LOG_<millis>.csv`).
+  Próbki z fixem, ale jeszcze bez poprawnego UTC, są pomijane.
 - **Rotacja co ~5 zjazdów** (detekcja wyciągu — patrz niżej), aby pliki nie rosły bez końca.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
 

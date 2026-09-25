@@ -24,18 +24,17 @@ export interface FileMeta {
 }
 
 export interface DeviceInfo {
-  proto: string;
   fw: string;
   files: FileMeta[];
-  volLow?: number;
-  volHigh?: number;
-  freqShort?: number;
-  freqLong?: number;
-  beepShortMs?: number;
-  beepLongMs?: number;
-  beepGapMs?: number;
-  signalGapMs?: number;
-  minBeepKmh?: number;
+  volLow: number;
+  volHigh: number;
+  freqShort: number;
+  freqLong: number;
+  beepShortMs: number;
+  beepLongMs: number;
+  beepGapMs: number;
+  signalGapMs: number;
+  minBeepKmh: number;
 }
 
 export interface Volume {
@@ -174,12 +173,26 @@ export class SzusownikBle {
     await this.ctrl!.writeValueWithResponse(new TextEncoder().encode(cmd));
   }
 
+  private static readonly INFO_NUMBER_FIELDS = [
+    "volLow",
+    "volHigh",
+    "freqShort",
+    "freqLong",
+    "beepShortMs",
+    "beepLongMs",
+    "beepGapMs",
+    "signalGapMs",
+    "minBeepKmh",
+  ] as const;
+
   async readInfo(): Promise<DeviceInfo> {
     const v = await this.info!.readValue();
     const info = JSON.parse(new TextDecoder().decode(dvBytes(v))) as DeviceInfo;
     if (!Array.isArray(info.files)) throw new Error("Zły format INFO z urządzenia");
-    if (typeof info.proto === "string" && !info.proto.startsWith("szusownik/ble-file-")) {
-      throw new Error(`Niezgodny protokół urządzenia: ${info.proto}`);
+    for (const field of SzusownikBle.INFO_NUMBER_FIELDS) {
+      if (typeof info[field] !== "number") {
+        throw new Error(`Brak pola ${field} w INFO urządzenia`);
+      }
     }
     return info;
   }
@@ -200,11 +213,6 @@ export class SzusownikBle {
    * 0..100, pomiędzy liniowo. Każde SETVOL gra feedback na urządzeniu
    * (low → sygnał 60, high → sygnał 120).
    */
-  async getVolume(): Promise<Volume> {
-    await this.writeCtrl("GETVOL");
-    return SzusownikBle.parseVolume(await this.readStatus());
-  }
-
   async setVolume(which: "low" | "high", value: number): Promise<Volume> {
     const v = Math.max(0, Math.min(100, Math.round(value)));
     await this.writeCtrl(which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`);
@@ -234,11 +242,6 @@ export class SzusownikBle {
    * 600..1500 Hz. Każdy SETFREQ gra podgląd na urządzeniu
    * (1× długi + 2× krótkie nowymi częstotliwościami).
    */
-  async getFrequency(): Promise<Freq> {
-    await this.writeCtrl("GETFREQ");
-    return SzusownikBle.parseFreq(await this.readStatus());
-  }
-
   async setFrequency(which: "short" | "long", value: number): Promise<Freq> {
     const v = Math.max(SZ_FREQ_MIN_HZ, Math.min(SZ_FREQ_MAX_HZ, Math.round(value)));
     await this.writeCtrl(which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`);
@@ -250,11 +253,6 @@ export class SzusownikBle {
    * między tonami jednego wzoru oraz przerwa między pełnymi wzorami 120 km/h.
    * Każde SETTIMING zapisuje wartość w NVS i odtwarza trzy wzory testowe.
    */
-  async getTiming(): Promise<Timing> {
-    await this.writeCtrl("GETTIMING");
-    return SzusownikBle.parseTiming(await this.readStatus());
-  }
-
   async setTiming(which: keyof Timing, value: number): Promise<Timing> {
     const limits = {
       short: [SZ_TIMING_SHORT_MIN_MS, SZ_TIMING_SHORT_MAX_MS],
@@ -275,11 +273,6 @@ export class SzusownikBle {
   }
 
   /** Minimalna prędkość pikania (firmware 1.4+); wzór dla danej prędkości pozostaje bez zmian. */
-  async getMinBeepKmh(): Promise<number> {
-    await this.writeCtrl("GETMINBEEP");
-    return SzusownikBle.parseMinBeep(await this.readStatus());
-  }
-
   async setMinBeepKmh(value: number): Promise<number> {
     const v = Math.max(SZ_MIN_BEEP_KMH, Math.min(SZ_MAX_BEEP_KMH, Math.round(value)));
     await this.writeCtrl(`SETMINBEEP:${v}`);

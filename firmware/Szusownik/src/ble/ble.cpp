@@ -27,7 +27,12 @@ void BleFiles::begin(Storage* storage) {
   refreshInfo();
   setStatus("ok");
   svc->start();
+  srv->advertiseOnDisconnect(true);  // NimBLE 2.x domyślnie NIE wznawia reklamowania
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  // 128-bit service UUID zajmuje prawie cały pakiet (31 B), więc nazwa nie mieści się
+  // w adv i setName() cicho zawodzi -> telefon pokazuje "unrecognized device".
+  // Scan response daje osobny pakiet na nazwę.
+  adv->enableScanResponse(true);
   adv->addServiceUUID(SZ_UUID_SVC);
   adv->setName(SZ_BLE_NAME);
   adv->start();
@@ -162,8 +167,6 @@ void BleFiles::handleCommand(const String& cmd) {
     onAck((uint32_t)cmd.substring(4).toInt());
   } else if (cmd.startsWith("NACK:")) {
     onNack((uint32_t)cmd.substring(5).toInt());
-  } else if (cmd.startsWith("GETVOL")) {
-    reportVolume();
   } else if (cmd.startsWith("SETVOL:LOW:")) {
     if (beeper_) {
       beeper_->setVolLow(cmd.substring(11).toInt());  // feedback: sygnał 60
@@ -178,8 +181,6 @@ void BleFiles::handleCommand(const String& cmd) {
     } else {
       setStatus("err:no-beeper");
     }
-  } else if (cmd.startsWith("GETFREQ")) {
-    reportFreq();
   } else if (cmd.startsWith("SETFREQ:SHORT:")) {
     if (beeper_) {
       beeper_->setFreqShort(cmd.substring(14).toInt());  // feedback: 1 długi + 2 krótkie
@@ -194,8 +195,6 @@ void BleFiles::handleCommand(const String& cmd) {
     } else {
       setStatus("err:no-beeper");
     }
-  } else if (cmd.startsWith("GETTIMING")) {
-    reportTiming();
   } else if (cmd.startsWith("SETTIMING:SHORT:")) {
     if (beeper_) {
       beeper_->setBeepShortMs(cmd.substring(16).toInt());  // feedback: 3 x sygnał 120
@@ -224,8 +223,6 @@ void BleFiles::handleCommand(const String& cmd) {
     } else {
       setStatus("err:no-beeper");
     }
-  } else if (cmd.startsWith("GETMINBEEP")) {
-    reportMinBeep();
   } else if (cmd.startsWith("SETMINBEEP:")) {
     if (beeper_) {
       beeper_->setMinBeepKmh(cmd.substring(11).toInt());

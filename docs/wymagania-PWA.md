@@ -119,32 +119,33 @@ na nagraniach z auta defaulty wystarczą.
 
 ## 10. Ekran urządzenia (`#/urzadzenie`, alias `#/ustawienia`, niezależny od dnia)
 
+PWA nie sprawdza wersji firmware ani nie bramkuje żadnej sekcji — zakłada
+najnowsze wydanie i czyta bieżące ustawienia wprost z INFO po połączeniu.
+
 - Sekcja **„Głośność pikania"**: dwa suwaki 0..100 — „Wolno (60 km/h)"
   i „Szybko (120 km/h)" (pomiędzy liniowo, powyżej 120 wartość ze 120).
-  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`,
-  fallback `GETVOL`), wysyłka `SETVOL` z debounce; każde ustawienie gra feedback
+  Połączenie BLE osobne od sync, wartości startowe z INFO (`volLow/volHigh`),
+  wysyłka `SETVOL` z debounce; każde ustawienie gra feedback
   na urządzeniu. Przycisk Reset przywraca 20%/70%, a kliknięcie suwaka bez
   przesunięcia ponownie wysyła `SETVOL` z bieżącą wartością.
-- Sekcja **„Częstotliwość pikania"** (firmware 1.2+, inaczej komunikat o wymaganym
-  FW): dwa suwaki 600..1500 Hz krok 25 — „Ton krótki" i „Ton długi"
-  (niezależne, krótki może być >= długi). Wspólne połączenie BLE z głośnością,
-  wartości startowe z INFO (`freqShort/freqLong`, fallback `GETFREQ`), wysyłka
-  `SETFREQ` z debounce; każde ustawienie gra podgląd na urządzeniu
+- Sekcja **„Częstotliwość pikania"**: dwa suwaki 600..1500 Hz krok 25 —
+  „Ton krótki" i „Ton długi" (niezależne, krótki może być >= długi). Wspólne
+  połączenie BLE z głośnością, wartości startowe z INFO (`freqShort/freqLong`),
+  wysyłka `SETFREQ` z debounce; każde ustawienie gra podgląd na urządzeniu
   (1 długi + 2 krótkie nowymi częstotliwościami). Przycisk Reset przywraca
   880/1100 Hz, a kliknięcie suwaka bez przesunięcia ponownie wysyła `SETFREQ`
   z bieżącą wartością.
-- Sekcja **„Czasy sygnału"** (firmware 1.3+, inaczej komunikat o wymaganym FW):
-  cztery suwaki: krótkie piknięcie 20..200 ms krok 5, długie piknięcie
-  40..500 ms krok 5, przerwa w sygnale 0..500 ms krok 5 oraz przerwa między
-  sygnałami 100..5000 ms krok 50. Wartości startowe są pobierane z INFO
-  (`beepShortMs/beepLongMs/beepGapMs/signalGapMs`, fallback `GETTIMING`),
-  wysyłka `SETTIMING` działa z debounce i każde ustawienie odtwarza trzy pełne
-  sygnały 120 km/h. Reset przywraca 56/140/60/1000 ms, a kliknięcie bez
-  przesunięcia ponownie wysyła bieżącą wartość.
-- Sekcja **„Minimalna prędkość pikania"** (firmware 1.4+, inaczej komunikat o wymaganym FW):
-  suwak 60..120 km/h krok 1, domyślnie 60 km/h. Poniżej ustawionego progu jest cisza,
-  ale wzór sygnału dla prędkości powyżej progu pozostaje bez zmian. Wysyłka `SETMINBEEP`
-  działa z debounce, a Reset przywraca 60 km/h.
+- Sekcja **„Czasy sygnału"**: cztery suwaki: krótkie piknięcie 20..200 ms
+  krok 5, długie piknięcie 40..500 ms krok 5, przerwa w sygnale 0..500 ms
+  krok 5 oraz przerwa między sygnałami 100..5000 ms krok 50. Wartości startowe
+  są pobierane z INFO (`beepShortMs/beepLongMs/beepGapMs/signalGapMs`), wysyłka
+  `SETTIMING` działa z debounce i każde ustawienie odtwarza trzy pełne sygnały
+  120 km/h. Reset przywraca 56/140/60/1000 ms, a kliknięcie bez przesunięcia
+  ponownie wysyła bieżącą wartość.
+- Sekcja **„Minimalna prędkość pikania"**: suwak 60..120 km/h krok 1, domyślnie
+  60 km/h. Poniżej ustawionego progu jest cisza, ale wzór sygnału dla prędkości
+  powyżej progu pozostaje bez zmian. Wartość startowa z INFO (`minBeepKmh`),
+  wysyłka `SETMINBEEP` działa z debounce, a Reset przywraca 60 km/h.
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

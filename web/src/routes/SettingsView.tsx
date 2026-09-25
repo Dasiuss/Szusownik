@@ -52,55 +52,19 @@ export default function SettingsView() {
   const minBeepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (device.state !== "connected") {
+    const info = device.info;
+    if (device.state !== "connected" || !info) {
       setVolume(null);
       setFrequency(null);
       setTiming(null);
       setMinBeepKmh(null);
       return;
     }
-    let active = true;
-    setSettingsBusy(true);
     setSettingsError(null);
-    async function loadSettings() {
-      const nextVolume = await device.getVolume();
-      let nextFrequency: Freq | null = null;
-      let nextTiming: Timing | null = null;
-      let nextMinBeepKmh: number | null = null;
-      try {
-        nextFrequency = await device.getFrequency();
-      } catch {
-        nextFrequency = null;
-      }
-      try {
-        nextTiming = await device.getTiming();
-      } catch {
-        nextTiming = null;
-      }
-      try {
-        nextMinBeepKmh = await device.getMinBeepKmh();
-      } catch {
-        nextMinBeepKmh = null;
-      }
-      return { nextVolume, nextFrequency, nextTiming, nextMinBeepKmh };
-    }
-    loadSettings()
-      .then(({ nextVolume, nextFrequency, nextTiming, nextMinBeepKmh }) => {
-        if (!active) return;
-        setVolume(nextVolume);
-        setFrequency(nextFrequency);
-        setTiming(nextTiming);
-        setMinBeepKmh(nextMinBeepKmh);
-      })
-      .catch((caught) => {
-        if (active) setSettingsError(caught instanceof Error ? caught.message : String(caught));
-      })
-      .finally(() => {
-        if (active) setSettingsBusy(false);
-      });
-    return () => {
-      active = false;
-    };
+    setVolume({ low: info.volLow, high: info.volHigh });
+    setFrequency({ short: info.freqShort, long: info.freqLong });
+    setTiming({ short: info.beepShortMs, long: info.beepLongMs, gap: info.beepGapMs, interval: info.signalGapMs });
+    setMinBeepKmh(info.minBeepKmh);
   }, [device.state, device.info]);
 
   function changeVolume(which: "low" | "high", value: number) {
@@ -293,7 +257,7 @@ export default function SettingsView() {
       {(settingsError || device.error) && <div className="alert-card alert-card-error"><Icon name="x" size={18} /><span>{settingsError ?? device.error}</span></div>}
 
       <section className="settings-section">
-        <div className="section-heading"><div><span className="eyebrow">Feedback na stoku</span><h2>Dźwięk</h2></div><span className="section-status">{settingsBusy ? "Wczytuję…" : connected ? "Zapisuje się automatycznie" : "Połącz urządzenie"}</span></div>
+        <div className="section-heading"><div><span className="eyebrow">Feedback na stoku</span><h2>Dźwięk</h2></div><span className="section-status">{settingsBusy ? "Zapisuję…" : connected ? "Zapisuje się automatycznie" : "Połącz urządzenie"}</span></div>
         <div className="settings-card">
          <div className="settings-card-heading"><div className="settings-icon settings-icon-coral"><Icon name="gauge" size={19} /></div><div><h3>Głośność pikania</h3><p>Ustaw poziom dla wolnej i szybkiej jazdy.</p></div><button className="button button-ghost settings-reset" disabled={!volume || settingsBusy} onClick={() => void resetVolume()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
          {volume ? <div className="sliders">
@@ -307,7 +271,7 @@ export default function SettingsView() {
          {frequency ? <div className="sliders">
              <SoundSlider label="Ton krótki" hint="podgląd na urządzeniu" value={frequency.short} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("short", value)} onPreview={(value) => testFrequency("short", value)} suffix=" Hz" />
              <SoundSlider label="Ton długi" hint="podgląd na urządzeniu" value={frequency.long} min={SZ_FREQ_MIN_HZ} max={SZ_FREQ_MAX_HZ} step={SZ_FREQ_STEP_HZ} onChange={(value) => changeFrequency("long", value)} onPreview={(value) => testFrequency("long", value)} suffix=" Hz" />
-           </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.2+, żeby ustawiać częstotliwość." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+           </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
          </div>
 
          <div className="settings-card">
@@ -317,14 +281,14 @@ export default function SettingsView() {
               <SoundSlider label="Długie piknięcie" hint="długość tonu" value={timing.long} min={SZ_TIMING_LONG_MIN_MS} max={SZ_TIMING_LONG_MAX_MS} step={SZ_TIMING_LONG_STEP_MS} onChange={(value) => changeTiming("long", value)} onPreview={(value) => testTiming("long", value)} suffix=" ms" />
               <SoundSlider label="Przerwa w sygnale" hint="między piknięciami" value={timing.gap} min={SZ_TIMING_GAP_MIN_MS} max={SZ_TIMING_GAP_MAX_MS} step={SZ_TIMING_GAP_STEP_MS} onChange={(value) => changeTiming("gap", value)} onPreview={(value) => testTiming("gap", value)} suffix=" ms" />
               <SoundSlider label="Przerwa między sygnałami" hint="między wzorami 120 km/h" value={timing.interval} min={SZ_TIMING_INTERVAL_MIN_MS} max={SZ_TIMING_INTERVAL_MAX_MS} step={SZ_TIMING_INTERVAL_STEP_MS} onChange={(value) => changeTiming("interval", value)} onPreview={(value) => testTiming("interval", value)} suffix=" ms" />
-           </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.3+, żeby ustawiać czasy sygnału." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+           </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
           </div>
 
           <div className="settings-card">
            <div className="settings-card-heading"><div className="settings-icon settings-icon-green"><Icon name="gauge" size={19} /></div><div><h3>Minimalna prędkość pikania</h3><p>Poniżej wybranego progu urządzenie zachowuje ciszę.</p></div><button className="button button-ghost settings-reset" disabled={minBeepKmh === null || settingsBusy} onClick={() => void resetMinBeepKmh()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
            {minBeepKmh !== null ? <div className="sliders">
                <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_MIN_BEEP_KMH} max={SZ_MAX_BEEP_KMH} step={SZ_MIN_BEEP_STEP_KMH} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
-            </div> : <p className="settings-locked">{connected ? "To urządzenie wymaga firmware 1.4+, żeby ustawiać minimalną prędkość pikania." : "Suwaki pojawią się po połączeniu z urządzeniem."}</p>}
+            </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
           </div>
         </section>
 
