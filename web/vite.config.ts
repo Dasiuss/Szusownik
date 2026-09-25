@@ -3,9 +3,16 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Czas builda: jedna chwila na cały build, wstrzykiwana do apki i do cacheId.
+const buildTime = new Date().toISOString();
+const cacheId = `szusownik-${buildTime.replace(/[:.]/g, "-")}`;
+
 export default defineConfig({
   // GitHub Pages (project site): https://dasiuss.github.io/Szusownik/
   base: "/Szusownik/",
+  define: {
+    __BUILD_TIME__: JSON.stringify(buildTime),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -24,9 +31,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Wersja cache = wersja apki. Przy zmianie formatu danych / query
-        // podbij też klucze cache (docs/ustalenia-z-projektow-testowych.md §6).
-        cacheId: "szusownik-v1",
+        // Wersja cache = wersja apki. Czas builda wymusza świeży cache przy
+        // każdym wydaniu; przy zmianie formatu danych / query podbij też klucze
+        // cache (docs/ustalenia-z-projektow-testowych.md §6).
+        cacheId,
       },
     }),
   ],

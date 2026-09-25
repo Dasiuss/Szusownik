@@ -21,7 +21,10 @@ Struktura `src/`:
 - `routes/HistoryView.tsx` — historia aktywności pogrupowana po lokalnych dniach.
 - `routes/RunView.tsx` — nazwa, usuwanie i wykresy prędkość/wysokość vs dystans.
 - `routes/DaySummaryView.tsx` — połączone statystyki i wykresy całego dnia.
-- `routes/SettingsView.tsx` — status urządzenia oraz ustawienia dźwięku.
+- `routes/SettingsView.tsx` — status urządzenia, ustawienia dźwięku i widoczna
+  wersja PWA (czas builda) w sekcji „Dane aplikacji".
+- `lib/version.ts` — odczyt `__BUILD_TIME__` (wstrzykiwany w `vite.config.ts`)
+  i formatowanie czasu builda w `pl-PL`.
 
 Komendy (katalog `web/`):
 

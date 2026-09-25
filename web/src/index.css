@@ -199,6 +199,8 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .section-status { color: #89a09e; font-size: 10px; font-weight: 700; }
 .settings-card { padding: 16px; border: 1px solid #dbe9e6; border-radius: 20px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
 .settings-danger-section { margin-top: 10px; }
+.settings-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 4px; color: #82979a; font-size: 11px; }
+.settings-meta b { color: #365d60; font-size: 12px; }
 .settings-danger-card { border-color: #f0cfc6; background: #fffaf8; }
 .settings-icon-danger { color: #b45e4b; background: #fff0eb; }
 .settings-danger-button { margin-top: 17px; color: #a84f3e; background: #ffe9e2; }

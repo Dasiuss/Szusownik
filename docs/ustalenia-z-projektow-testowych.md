@@ -238,6 +238,15 @@ wersji. Zmiana formatu danych mapowych lub zapytania Overpass wymaga podbicia
 wersji klucza cache. Dane użytkownika w IndexedDB muszą mieć wersję schematu,
 aby migracja nie zależała od ręcznego czyszczenia przeglądarki.
 
+Wersja widoczna PWA to czas builda (data i godzina), a nie numer semantyczny.
+`vite.config.ts` liczy jedną chwilę (`new Date().toISOString()`) przy starcie
+builda i wstrzykuje ją przez `define` (`__BUILD_TIME__`). Ta sama chwila tworzy
+`cacheId` Workbox (prefiks `szusownik-` plus znacznik ISO z dwukropkami
+i kropkami zamienionymi na myślniki), więc każde wydanie ma świeży cache. Wartość jest prezentowana na ekranie Urządzenie →
+sekcja „Dane aplikacji" (`settings-meta`, etykieta „Wersja PWA") w formacie
+`pl-PL` w lokalnej strefie urządzenia. W `npm run dev` znacznik odpowiada
+startowi serwera dev.
+
 ## 7. Ryzyka do rozwiązania przed wersją finalną
 
 ### BLE

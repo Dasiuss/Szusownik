@@ -33,6 +33,7 @@ import {
 import { useDevice } from "../lib/device.tsx";
 import type { Freq, Timing, Volume } from "../lib/ble.ts";
 import { clearPwaData } from "../lib/reset.ts";
+import { formatBuildTime, PWA_BUILD_TIME } from "../lib/version.ts";
 
 export default function SettingsView() {
   const device = useDevice();
@@ -329,6 +330,7 @@ export default function SettingsView() {
 
         <section className="settings-section settings-danger-section">
           <div className="section-heading"><div><span className="eyebrow">Dane aplikacji</span><h2>Reset PWA</h2></div></div>
+          <div className="settings-meta"><span>Wersja PWA</span><b>{formatBuildTime(PWA_BUILD_TIME)}</b></div>
           <div className="settings-card settings-danger-card">
             <div className="settings-card-heading"><div className="settings-icon settings-icon-danger"><Icon name="trash" size={19} /></div><div><h3>Wyczyść dane PWA</h3><p>Usuwa zapisane pliki, zjazdy, cache mapy i ustawienia tej aplikacji.</p></div></div>
             {!resetArmed ? (
