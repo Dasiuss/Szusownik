@@ -414,7 +414,7 @@ export class SzusownikBle {
         if (failed) throw failed;
       }
       // Walidacja end-to-end: rozmiar (INFO), CRC (STATUS done), schemat CSV.
-      const status = await this.readStatus();
+      const status = await this.pollStatus(/crc=[0-9A-Fa-f]{8}/);
       const mCrc = /crc=([0-9A-Fa-f]{8})/.exec(status);
       const gotCrc = (crc ^ 0xffffffff) >>> 0;
       if (!mCrc || parseInt(mCrc[1], 16) >>> 0 !== gotCrc) {
