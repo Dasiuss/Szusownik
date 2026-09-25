@@ -13,14 +13,12 @@ bool Storage::begin() {
   return SD.begin(PIN_SD_CS, SPI, 20000000);
 }
 
-bool Storage::openLog(const String& stampOrEmpty) {
+bool Storage::openLog(const String& stamp) {
+  // Bez poprawnego czasu GNSS nie ma jak nazwać pliku — nie logujemy.
+  if (!stamp.length()) return false;
   ensureFreeSpace();
   char name[32];
-  if (stampOrEmpty.length()) {
-    snprintf(name, sizeof(name), "/%s.csv", stampOrEmpty.c_str());
-  } else {
-    snprintf(name, sizeof(name), "/LOG_%lu.csv", (unsigned long)millis());
-  }
+  snprintf(name, sizeof(name), "/%s.csv", stamp.c_str());
   currentName_ = String(name);
   logFile = SD.open(currentName_, FILE_APPEND);
   if (!logFile) return false;

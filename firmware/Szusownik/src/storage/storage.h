@@ -7,7 +7,7 @@
 class Storage {
  public:
   bool begin();
-  bool openLog(const String& stampOrEmpty);
+  bool openLog(const String& stamp);  // stamp = YYYYMMDD_HHMMSS; pusty => nie tworzy pliku
   void writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                    float hdg, float altBaro, const GnssSampleQuality& quality);
   void sync();
