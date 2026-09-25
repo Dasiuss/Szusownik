@@ -4,7 +4,7 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md, docs/jakosc-danych.md.
 
-#define SZ_FW_VERSION "1.6.0-gnss-quality"
+#define SZ_FW_VERSION "1.7.0-per-run-file"
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
 #define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro,gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms"
 
@@ -48,10 +48,12 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_VOL_LOW_DEFAULT 20
 #define SZ_VOL_HIGH_DEFAULT 70
 
-// Detekcja wyciągu do rotacji (progi do strojenia, wymagania-ESP.md).
-#define SZ_LIFT_ALT_GAIN_M 20.0f
-#define SZ_LIFT_SPEED_KMH 15.0f
-#define SZ_RUNS_PER_FILE 5
+// Rotacja: jeden plik na wykryty podjazd (wymagania-ESP.md). Progi kumulacyjne,
+// bez progu prędkości: wzrost >= SZ_UPHILL_CUT_GAIN_M od najniższego punktu
+// zamyka plik; ponowne uzbrojenie dopiero po zjechaniu >= tej samej wartości od
+// szczytu. Odporne na szum baro, wolne tempo i długie wyciągi (1 plik/wyciąg).
+// Wartość testowa do strojenia.
+#define SZ_UPHILL_CUT_GAIN_M 5.0f
 
 // Monitoring zdrowia urzadzenia (modul Health). MVP: termika SoC.
 // ESP32-S3 NIE ma sprzetowego zabezpieczenia termicznego, wiec ochrona jest

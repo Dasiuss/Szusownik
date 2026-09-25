@@ -5,7 +5,7 @@ Aplikacja web (PWA) do prezentacji i analizy przejazdów.
 - Stack: React 19 + TypeScript + Vite 6 (+ vite-plugin-pwa, Recharts, Dexie,
   papaparse, react-router-dom, Tailwind v4).
 - Dane: **rzeczywiste nagranie z urządzenia** jako demo fixture
-  (`public/fixtures/ride.csv`, skopiowane z `test data/LOG_1605.csv`),
+  (`public/fixtures/ride.csv`, skopiowane z `test data/LOG_1641.csv`),
   docelowo transfer BLE z urządzenia (faza C) + Supabase (faza D). Bez syntetycznych mocków.
 
 Struktura `src/`:

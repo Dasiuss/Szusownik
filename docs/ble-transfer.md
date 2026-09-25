@@ -276,9 +276,10 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 
 - `FILE_INFO:<nazwa>` niepotrzebne — INFO zwraca od razu pełną listę z rozmiarami.
 - Lista zawiera nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
-  Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje CSV v1
-  oraz v2; obecny nagłówek v2 i metryki GNSS opisuje `docs/jakosc-danych.md`.
-  Zmiana schematu wymaga jednoczesnej aktualizacji firmware i walidatora PWA.
+  Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje
+  wyłącznie CSV v2; obecny nagłówek v2 i metryki GNSS opisuje
+  `docs/jakosc-danych.md`. Zmiana schematu wymaga jednoczesnej aktualizacji
+  firmware i walidatora PWA.
 - CRC32 liczone w locie podczas streamingu (nie przy zamykaniu pliku);
   wynik w STATUS `done`; PWA porównuje z własnym CRC po dekompresji.
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.

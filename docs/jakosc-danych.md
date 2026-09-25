@@ -52,8 +52,8 @@ Ustalony model wyniku:
 
 ### PWA
 
-- `web/src/lib/csv.ts` parsuje CSV v1/v2; v1 pozostaje archiwum bez analizy,
-  a puste pola jakości v2 stają się `null`.
+- `web/src/lib/csv.ts` parsuje wyłącznie CSV v2; puste pola jakości stają się
+  `null`.
 - `web/src/lib/runs.ts` liczy dodatnie przyspieszenie, jakość GNSS i odporny
   kształt piku. MA3 nadal służy tylko do wykresu.
 - `DayView`, `DaySummaryView` i `HistoryView` pokazują wyłącznie potwierdzone
@@ -270,22 +270,16 @@ odczytu.
 
 ## 7. CSV i zgodność danych
 
-- Firmware zapisuje nowy nagłówek v2 z polami GNSS z §3. `Gnss::consumeNewSample()`
+- Firmware zapisuje nagłówek v2 z polami GNSS z §3. `Gnss::consumeNewSample()`
   nadal wyzwala jeden zapis na nową epokę GNSS; nie wracamy do timera pętli.
-- PWA parsuje pola v2 jako opcjonalne wartości, z pustymi polami mapowanymi na
-  `null`, i liczy wiek/tempo z zapisanych timestampów bez przebudowy ich formatu.
-- Istniejące pliki i zmaterializowane wyniki sprzed wdrożenia traktujemy w nowym
-  systemie tak, jakby nie istniały: nie wchodzą do analiz, potwierdzonych
-  maksimów, widoków rekordu ani warstwy śladów. Surowe archiwum pozostaje
-  zachowane. Nie odtwarzamy brakującej jakości GNSS i nie przypisujemy im
-  zielonych ikon. Parser może odczytać CSV v1 do archiwum, ale nie materializuje
-  z niego zjazdów.
-- Surowe archiwalne CSV nie są modyfikowane. Fixture PWA pozostaje w użyciu:
-  przy seedowaniu PWA dopisuje do niego syntetyczne pola v2 (`fix=1`, `8`
-  satelitów, `HDOP=0,9`, wiek pól `100 ms`) wyłącznie do testowania interfejsu i
-  analizy. Nie jest to pomiar jakości sprzętu; rzadkie timestampy obecnego
-  śladu mogą nie spełnić lokalnego okna i pozostawić maksimum niepotwierdzone.
-  Po teście fixture należy zastąpić nagraniem v2 wykonanym na urządzeniu.
+- PWA parsuje wyłącznie CSV v2; pola jakości są opcjonalne, puste mapują się na
+  `null`, a wiek/tempo liczymy z zapisanych timestampów bez przebudowy formatu.
+  Nagłówek v1 nie jest już obsługiwany — firmware zawsze zapisuje v2.
+- Fixture PWA (`public/fixtures/ride.csv`) to rzeczywiste nagranie v2 z karty SD
+  urządzenia (`test data/LOG_1641.csv`), z prawdziwą wysokością barometryczną i
+  metrykami GNSS. PWA nie dopisuje żadnych syntetycznych pomiarów; przy
+  seedowaniu jedynie przesuwa timestampy do bieżącego czasu i zapisuje plik jako
+  `demo-ride.csv`. Osierocone pliki `demo-*` są usuwane.
 - `materializeFile()` musi rozróżniać nową wersję analizy i nie może zwracać
   starych, zmaterializowanych rekordów jako potwierdzonych. Etykiety użytkownika
   nie mogą być kasowane przy rematerializacji.
@@ -304,10 +298,10 @@ odczytu.
 
 ### PWA
 
-- `web/src/lib/csv.ts` — parser CSV v1/v2, kontrola liczb oraz wartości
-  opcjonalnych; CSV v1 pozostaje surowym archiwum bez analizy.
-- Walidator nagłówka pliku w ścieżce importu akceptuje v1 i v2; v1 nie jest
-  materializowany.
+- `web/src/lib/csv.ts` — parser CSV v2, kontrola liczb oraz wartości
+  opcjonalnych.
+- Walidator nagłówka pliku w ścieżce importu (`web/src/lib/ble.ts`) akceptuje
+  wyłącznie v2.
 - `web/src/lib/runs.ts` — analiza trzech kryteriów, lokalne dopasowanie,
   kandydaci i najwyższa próbka potwierdzona.
 - `web/src/lib/db.ts` oraz `web/src/lib/data.ts` — przechowywanie wyników,

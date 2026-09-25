@@ -127,8 +127,8 @@ Aktualna koncepcja Szusownika zakłada pola CSV:
 timestamp, lat, lon, speed, altitude_gps, heading, altitude_baro
 ```
 
-(`altitude_baro` od firmware 1.5 — barometr BME280; schemat ewolucyjny, walidowany
-po nagłówku, zmiany wymagają jednoczesnej aktualizacji PWA.)
+(`altitude_baro` od firmware 1.5 — barometr BME280; firmware zapisuje wyłącznie
+nagłówek v2, a zmiany schematu wymagają jednoczesnej aktualizacji PWA.)
 
 CSV v2 rozszerza te pola o metryki jakości GNSS z NMEA (ważność/wiek fixa,
 satelity i ich wiek, HDOP i jego wiek). Definicje oraz kryteria potwierdzania
@@ -144,7 +144,7 @@ Urządzenie powinno:
 2. zwrócić listę plików: nazwa, rozmiar i czas startu;
 3. pozwolić PWA porównać nazwy z IndexedDB;
 4. nie kasować plików po udanym transferze;
-5. rotować pliki po około pięciu zjazdach oraz na żądanie pobrania;
+5. rotować pliki po każdym wykrytym podjeździe (jeden zjazd na plik) oraz na żądanie pobrania;
 6. usuwać najstarsze pliki dopiero przy braku miejsca na karcie.
 
 ### Przetwarzanie zjazdów

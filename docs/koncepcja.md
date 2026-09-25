@@ -96,7 +96,7 @@ Dwa główne elementy:
 ### Dane i transfer
 - Pola CSV: timestamp (UTC z GPS), lat/lon, prędkość, wysokość GPS, heading,
   wysokość barometryczna (BME280).
-- **Rotacja plików** na urządzeniu co ~5 zjazdów oraz przy żądaniu pobrania; PWA pobiera
+- **Rotacja plików** na urządzeniu: jeden plik na wykryty podjazd oraz przy żądaniu pobrania; PWA pobiera
   pliki po nazwie (lista + porównanie), bez kasowania danych z karty.
 - **Cięcie trasy przy kliknięciu w PWA**: aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia. Ograniczenie: maksymalnie **bieżący dzień** — jeśli poprzednie cięcie było

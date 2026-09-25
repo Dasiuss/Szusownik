@@ -16,17 +16,8 @@ export interface Sample {
   gnssHdopAgeMs: number | null;
 }
 
-export type DeviceCsvVersion = 1 | 2;
-
-export const DEVICE_CSV_V1_HEADER =
-  "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro";
 export const DEVICE_CSV_V2_HEADER =
-  `${DEVICE_CSV_V1_HEADER},gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms`;
-
-export interface ParsedDeviceCsv {
-  version: DeviceCsvVersion;
-  samples: Sample[];
-}
+  "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro,gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms";
 
 function requiredNumber(value: unknown, name: string): number {
   const raw = typeof value === "string" ? value.trim() : "";
@@ -53,8 +44,8 @@ function optionalBoolean(value: unknown, name: string): boolean | null {
   throw new Error(`Złe pole ${name}: ${String(value)}`);
 }
 
-/** Parsuje i waliduje surowe CSV v1/v2; puste metryki GNSS pozostają null. */
-export function parseDeviceCsvDocument(text: string): ParsedDeviceCsv {
+/** Parsuje i waliduje surowy CSV v2; puste metryki GNSS pozostają null. */
+export function parseDeviceCsv(text: string): Sample[] {
   const result = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
@@ -64,11 +55,11 @@ export function parseDeviceCsvDocument(text: string): ParsedDeviceCsv {
   }
 
   const header = (result.meta.fields ?? []).map((field) => field.trim()).join(",");
-  const version: DeviceCsvVersion | null =
-    header === DEVICE_CSV_V1_HEADER ? 1 : header === DEVICE_CSV_V2_HEADER ? 2 : null;
-  if (!version) throw new Error(`Nieobsługiwany nagłówek CSV: ${header}`);
+  if (header !== DEVICE_CSV_V2_HEADER) {
+    throw new Error(`Nieobsługiwany nagłówek CSV: ${header}`);
+  }
 
-  const samples = result.data.map((row, index): Sample => {
+  return result.data.map((row, index): Sample => {
     const t = (row.timestamp ?? "").trim();
     if (!t) throw new Error(`Wiersz ${index + 2}: pusty timestamp`);
     return {
@@ -79,20 +70,14 @@ export function parseDeviceCsvDocument(text: string): ParsedDeviceCsv {
       altGps: requiredNumber(row.altitude_gps, "altitude_gps"),
       hdg: requiredNumber(row.heading, "heading"),
       altBaro: requiredNumber(row.altitude_baro, "altitude_baro"),
-      gnssFixValid: version === 2 ? optionalBoolean(row.gnss_fix_valid, "gnss_fix_valid") : null,
-      gnssFixAgeMs: version === 2 ? optionalNumber(row.gnss_fix_age_ms, "gnss_fix_age_ms", true) : null,
-      gnssSatellites: version === 2 ? optionalNumber(row.gnss_satellites, "gnss_satellites", true) : null,
-      gnssSatellitesAgeMs: version === 2 ? optionalNumber(row.gnss_satellites_age_ms, "gnss_satellites_age_ms", true) : null,
-      gnssHdop: version === 2 ? optionalNumber(row.gnss_hdop, "gnss_hdop") : null,
-      gnssHdopAgeMs: version === 2 ? optionalNumber(row.gnss_hdop_age_ms, "gnss_hdop_age_ms", true) : null,
+      gnssFixValid: optionalBoolean(row.gnss_fix_valid, "gnss_fix_valid"),
+      gnssFixAgeMs: optionalNumber(row.gnss_fix_age_ms, "gnss_fix_age_ms", true),
+      gnssSatellites: optionalNumber(row.gnss_satellites, "gnss_satellites", true),
+      gnssSatellitesAgeMs: optionalNumber(row.gnss_satellites_age_ms, "gnss_satellites_age_ms", true),
+      gnssHdop: optionalNumber(row.gnss_hdop, "gnss_hdop"),
+      gnssHdopAgeMs: optionalNumber(row.gnss_hdop_age_ms, "gnss_hdop_age_ms", true),
     };
   });
-
-  return { version, samples };
-}
-
-export function parseDeviceCsv(text: string): Sample[] {
-  return parseDeviceCsvDocument(text).samples;
 }
 
 export function serializeDeviceCsvV2(samples: Sample[]): string {

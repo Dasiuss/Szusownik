@@ -1,10 +1,9 @@
 import { db, type StoredFile, type StoredRun } from "./db.ts";
-import { parseDeviceCsvDocument, serializeDeviceCsvV2, type Sample } from "./csv.ts";
-import { addSyntheticDemoQuality } from "./demo.ts";
+import { parseDeviceCsv, serializeDeviceCsvV2, type Sample } from "./csv.ts";
 import { analyzeDay, QUALITY_ANALYSIS_VERSION, type DayStats, type Run } from "./runs.ts";
 
-export const DEMO_SOURCE_FILE = "demo-LOG_1605.csv";
-const DEMO_SEEDED_KEY = "demo-seeded-v2";
+export const DEMO_SOURCE_FILE = "demo-ride.csv";
+const DEMO_SEEDED_KEY = "demo-seeded-v3";
 
 export function localDayKey(iso: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -131,13 +130,12 @@ function recordsFromAnalysis(
 
 export async function materializeFile(file: StoredFile, force = false): Promise<StoredRun[]> {
   const existing = await db.runs.where("sourceFile").equals(file.name).toArray();
-  const parsed = parseDeviceCsvDocument(file.raw);
-  if (parsed.version !== 2) return [];
+  const samples = parseDeviceCsv(file.raw);
   if (!force && existing.length > 0 && existing.every((run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION)) {
     return existing;
   }
 
-  const analysis = analyzeDay(parsed.samples);
+  const analysis = analyzeDay(samples);
   const records = recordsFromAnalysis(
     file.name,
     analysis,
@@ -150,8 +148,19 @@ export async function materializeFile(file: StoredFile, force = false): Promise<
   return records;
 }
 
+async function purgeStaleDemoData(): Promise<void> {
+  const stale = (await db.files.toArray()).filter(
+    (file) => file.name.startsWith("demo-") && file.name !== DEMO_SOURCE_FILE,
+  );
+  for (const file of stale) {
+    await db.runs.where("sourceFile").equals(file.name).delete();
+    await db.files.delete(file.name);
+  }
+}
+
 export async function ensureLocalData(): Promise<void> {
   await db.open();
+  await purgeStaleDemoData();
   const seeded = await db.meta.get(DEMO_SEEDED_KEY);
   const reseededDemo = !seeded;
   if (!seeded) {
@@ -160,11 +169,7 @@ export async function ensureLocalData(): Promise<void> {
       throw new Error("Nie udało się wczytać danych demonstracyjnych.");
     }
     const source = await response.text();
-    const sourceCsv = parseDeviceCsvDocument(source);
-    const demoSamples = sourceCsv.version === 1
-      ? addSyntheticDemoQuality(sourceCsv.samples)
-      : sourceCsv.samples;
-    const shifted = shiftSamplesToNow(demoSamples);
+    const shifted = shiftSamplesToNow(parseDeviceCsv(source));
     const raw = serializeDeviceCsvV2(shifted);
     const receivedAt = new Date().toISOString();
     await db.files.put({
@@ -199,10 +204,7 @@ export async function getAllRuns(): Promise<StoredRun[]> {
 
 export async function getAllStoredSamples(): Promise<Sample[]> {
   const files = await db.files.toArray();
-  return files.flatMap((file) => {
-    const parsed = parseDeviceCsvDocument(file.raw);
-    return parsed.version === 2 ? parsed.samples : [];
-  });
+  return files.flatMap((file) => parseDeviceCsv(file.raw));
 }
 
 export async function getRunsForDay(dayKey: string): Promise<StoredRun[]> {

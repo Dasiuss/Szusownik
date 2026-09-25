@@ -99,7 +99,7 @@ arduino-cli monitor -p COMx -c baudrate=115200
 
 Struktura: `Szusownik.ino` + `src/config/` (piny, stałe, UUID BLE v1),
 `src/gnss/` (NEO-M8N, NMEA, adaptacyjne próbkowanie ±3 km/h),
-`src/storage/` (surowe CSV, rotacja ~5 zjazdów + na sync),
+`src/storage/` (surowe CSV, rotacja: 1 plik/podjazd + na sync),
 `src/audio/` (buzzer, sygnał co 1 s), `src/hud/` (OLED: SPD/MAX/TOTAL),
 `src/baro/` (BME280: wysokość barometryczna),
 `src/health/` (termika SoC: alarm + deep sleep),

@@ -24,9 +24,10 @@ bool Storage::openLog(const String& stamp) {
   if (!logFile) return false;
   if (logFile.size() == 0) logFile.println(SZ_CSV_HEADER);
   fileOpen_ = true;
-  runsInFile_ = 0;
-  climbAcc_ = 0.0f;
+  // Stan per plik zerujemy; armed_ celowo przeżywa roll (ciągłość podjazdu).
   haveLastAlt_ = false;
+  minAlt_ = 0.0f;
+  maxAlt_ = 0.0f;
   return true;
 }
 
@@ -67,19 +68,29 @@ void Storage::close() {
   }
 }
 
-void Storage::noteSample(float kmh, float altM) {
-  // Heurystyka wyciągu: wspinaczka przy niskiej prędkości. Progi do strojenia.
-  if (haveLastAlt_ && kmh < SZ_LIFT_SPEED_KMH && altM > lastAlt_) {
-    climbAcc_ += altM - lastAlt_;
-  } else if (kmh >= SZ_LIFT_SPEED_KMH) {
-    climbAcc_ = 0.0f;
+void Storage::noteSample(float altM) {
+  // Rotacja jednego pliku na podjazd, wyłącznie na progach kumulacyjnych
+  // (bez progu prędkości i bez progu pojedynczej próbki). armed_ = false to
+  // zatrzask po rolce; puszcza dopiero po skumulowanym zjeździe od szczytu.
+  if (!haveLastAlt_) {
+    minAlt_ = altM;
+    maxAlt_ = altM;
+    haveLastAlt_ = true;
+    return;
   }
-  lastAlt_ = altM;
-  haveLastAlt_ = true;
-  if (climbAcc_ >= SZ_LIFT_ALT_GAIN_M) {
-    climbAcc_ = 0.0f;
-    runsInFile_++;
-    if (runsInFile_ >= SZ_RUNS_PER_FILE) close();  // main otworzy nowy sam
+  if (armed_) {
+    if (altM < minAlt_) minAlt_ = altM;
+    if (altM - minAlt_ >= SZ_UPHILL_CUT_GAIN_M) {
+      armed_ = false;
+      maxAlt_ = altM;
+      close();  // main otworzy nowy plik przy kolejnej próbce
+    }
+  } else {
+    if (altM > maxAlt_) maxAlt_ = altM;
+    if (maxAlt_ - altM >= SZ_UPHILL_CUT_GAIN_M) {
+      armed_ = true;
+      minAlt_ = altM;
+    }
   }
 }
 

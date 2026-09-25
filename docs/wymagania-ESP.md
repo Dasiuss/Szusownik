@@ -87,17 +87,22 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   z realnego UTC z GNSS. Plik powstaje dopiero, gdy odbiornik poda poprawną datę
   i godzinę — wcześniej nie zapisujemy na SD (brak fallbacku `LOG_<millis>.csv`).
   Próbki z fixem, ale jeszcze bez poprawnego UTC, są pomijane.
-- **Rotacja co ~5 zjazdów** (detekcja wyciągu — patrz niżej), aby pliki nie rosły bez końca.
+- **Rotacja: jeden plik na wykryty podjazd** (detekcja niżej), aby pliki nie rosły bez końca.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
 
-## 7. Detekcja wyciągu (do rotacji)
+## 7. Detekcja podjazdu (do rotacji)
 
-- Heurystyka: segment, w którym **wysokość rośnie** o próg (np. >20 m) przy **niskiej
-  prędkości** (np. <15 km/h) = wyciąg. Koniec zjazdu = początek wyciągu.
+- Algorytm w pełni kumulacyjny, bez progu prędkości i bez progu pojedynczej próbki:
+  - Najniższy punkt od uzbrojenia (`minAlt`) śledzi dno; gdy bieżąca wysokość wzrośnie
+    o `SZ_UPHILL_CUT_GAIN_M` (na razie 5 m, testowo) → zamknij plik i uzbrój zatrzask.
+  - Zatrzask trzyma szczyt (`maxAlt`); ponowne uzbrojenie dopiero po zjechaniu
+    `SZ_UPHILL_CUT_GAIN_M` od szczytu. Dzięki temu na monotonnie rosnącym wyciągu
+    powstaje **dokładnie jeden plik**, odpornie na szum barometru i dowolnie wolne tempo.
 - Wysokość do detekcji pochodzi z **barometru** (`altitude_baro`) — stabilniejsza niż
   GPS; gdy brak baro, fallback na `altitude_gps`.
-- Zliczanie granic zjazdów; po **5** → zamknij plik, otwórz nowy.
-- Dokładne progi do dostrojenia (patrz „Otwarte punkty").
+- Zapis trwa cały czas; roll to tylko `close()` — żadna próbka nie ginie.
+- Brak wykrytego podjazdu (np. pierwszy/ostatni zjazd dnia) → brak cięcia.
+- Progi do dostrojenia (patrz „Otwarte punkty").
 
 ## 8. Transfer BLE + sprzątanie
 
@@ -134,6 +139,6 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 ## 10. Otwarte punkty
 
-1. **Progi detekcji wyciągu** (Δwysokości, próg prędkości) — do ustalenia i dostrojenia.
+1. **Próg detekcji podjazdu** (`SZ_UPHILL_CUT_GAIN_M`, obecnie 5 m w obie strony) — do dostrojenia; bez progu prędkości.
 2. **Współbieżność** — jednoczesny zapis na SD + transfer BLE + buzzer na ESP32 (wydajność, bufory) — do weryfikacji.
-3. **Rozmiar pliku przy 5 zjazdach** — zweryfikować w praktyce (szacunek ~0,3–0,55 MB, patrz koncepcja).
+3. **Rozmiar pliku na jeden zjazd** — zweryfikować w praktyce (szacunek ~0,06–0,11 MB, tj. ~1/5 z ~0,3–0,55 MB dla 5 zjazdów, patrz koncepcja).

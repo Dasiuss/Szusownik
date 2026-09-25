@@ -2,8 +2,9 @@
 #include <Arduino.h>
 #include "../gnss/gnss.h"
 
-// Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja co ~5 zjazdów
-// (heurystyka wyciągu) oraz na żądanie sync z PWA. Bez kasowania po wysyłce.
+// Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: jeden plik na
+// wykryty podjazd (kumulacyjny wzrost SZ_UPHILL_CUT_GAIN_M) oraz na żądanie
+// sync z PWA. Bez kasowania po wysyłce.
 class Storage {
  public:
   bool begin();
@@ -16,8 +17,7 @@ class Storage {
   String currentName() const { return currentName_; }
   String listJsonArray() const;  // [{"name":..,"size":..},..]
   void rotateForSync() { close(); }  // nowy otworzy się przy kolejnej próbce
-  void noteSample(float kmh, float altM);
-  int runsInFile() const { return runsInFile_; }
+  void noteSample(float altM);  // rotacja: jeden plik na wykryty podjazd
   // FIFO: gdy wolne miejsce < SZ_SD_MIN_FREE_BYTES, kasuj najstarsze CSV
   // (nazwy YYYYMMDD_HHMMSS sortują się chronologicznie).
   void ensureFreeSpace();
@@ -35,8 +35,8 @@ class Storage {
   String currentName_;
   unsigned long readSize_ = 0;
   bool readOpen_ = false;
-  int runsInFile_ = 0;
-  float lastAlt_ = 0.0f;
   bool haveLastAlt_ = false;
-  float climbAcc_ = 0.0f;
+  float minAlt_ = 0.0f;   // najniższy punkt od uzbrojenia (stan armed_)
+  float maxAlt_ = 0.0f;   // szczyt od ostatniej rolki (stan zatrzasku)
+  bool armed_ = true;     // true = gotowy wykryć podjazd; false = czekam na zjazd
 };

@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  DEVICE_CSV_V1_HEADER,
   DEVICE_CSV_V2_HEADER,
-  parseDeviceCsvDocument,
-  serializeDeviceCsvV2,
+  parseDeviceCsv,
   type Sample,
 } from "./csv.ts";
-import { addSyntheticDemoQuality } from "./demo.ts";
 import { analyzeDay, evaluatePeakQuality } from "./runs.ts";
 
 const BASE_TIME = Date.parse("2026-09-15T17:23:06.000Z");
@@ -39,50 +36,36 @@ function smoothPeak(): Sample[] {
   });
 }
 
-test("CSV v1 remains readable as legacy data without invented GNSS measurements", () => {
-  const parsed = parseDeviceCsvDocument([
-    DEVICE_CSV_V1_HEADER,
-    "2026-09-15T17:23:06Z,51.05,17.03,6.4,128.1,189,128.5",
-  ].join("\n"));
-
-  assert.equal(parsed.version, 1);
-  assert.equal(parsed.samples[0].gnssFixValid, null);
-  assert.equal(parsed.samples[0].gnssHdop, null);
+test("a CSV without the v2 header is rejected", () => {
+  assert.throws(() =>
+    parseDeviceCsv([
+      "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro",
+      "2026-09-15T17:23:06Z,51.05,17.03,6.4,128.1,189,128.5",
+    ].join("\n")),
+  );
 });
 
 test("CSV v2 maps blank optional quality fields to null and keeps explicit zero", () => {
-  const parsed = parseDeviceCsvDocument([
+  const samples = parseDeviceCsv([
     DEVICE_CSV_V2_HEADER,
     "2026-09-15T17:23:06Z,51.05,17.03,6.4,128.1,189,128.5,1,0,8,100,0.9,",
   ].join("\n"));
 
-  assert.equal(parsed.version, 2);
-  assert.equal(parsed.samples[0].gnssFixAgeMs, 0);
-  assert.equal(parsed.samples[0].gnssHdopAgeMs, null);
+  assert.equal(samples[0].gnssFixAgeMs, 0);
+  assert.equal(samples[0].gnssHdopAgeMs, null);
 });
 
-test("the real demo trace is seeded as v2 with explicit test-only GNSS measurements", async () => {
+test("the real demo trace is v2 with the device's own GNSS measurements", async () => {
   const fixture = await readFile(new URL("../../public/fixtures/ride.csv", import.meta.url), "utf8");
-  const source = parseDeviceCsvDocument(fixture);
-  assert.equal(source.version, 1);
+  const samples = parseDeviceCsv(fixture);
 
-  const seeded = parseDeviceCsvDocument(serializeDeviceCsvV2(addSyntheticDemoQuality(source.samples)));
-  assert.equal(seeded.version, 2);
-  assert.deepEqual(
-    [
-      seeded.samples[0].gnssFixValid,
-      seeded.samples[0].gnssFixAgeMs,
-      seeded.samples[0].gnssSatellites,
-      seeded.samples[0].gnssSatellitesAgeMs,
-      seeded.samples[0].gnssHdop,
-      seeded.samples[0].gnssHdopAgeMs,
-    ],
-    [true, 100, 8, 100, 0.9, 100],
-  );
+  assert.ok(samples.length > 0);
+  assert.ok(samples.every((sample) => sample.gnssFixValid !== null));
 
-  const analysis = analyzeDay(seeded.samples);
+  const analysis = analyzeDay(samples);
   assert.ok(analysis.runs.length >= 2);
   assert.ok(analysis.runs.every((run) => run.rawMaxQuality.gnssOk));
+  assert.ok(analysis.runs.every((run) => run.confirmedMaxSpeed !== null));
 });
 
 test("a smooth measured peak passes all three checks", () => {

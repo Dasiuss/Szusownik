@@ -114,9 +114,9 @@ void loop() {
       const GnssSampleQuality quality = gnss.sampleQuality();
       storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
                           gnss.headingDeg(), baroAlt, quality);
-      // Rotacja/cięcie zjazdów na wysokości barometrycznej (stabilniejsza niż GPS);
-      // GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
-      storage.noteSample(kmh, baroOk ? baroAlt : gnss.altM());
+      // Rotacja pliku na wykryty podjazd z wysokości barometrycznej (stabilniejsza
+      // niż GPS); GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
+      storage.noteSample(baroOk ? baroAlt : gnss.altM());
       sampleCount++;
       totalSamples++;
 #if SZ_DEBUG_SAMPLES

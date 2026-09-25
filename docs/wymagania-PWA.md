@@ -93,13 +93,12 @@ na nagraniach z auta defaulty wystarczą.
 - IndexedDB przechowuje surowe CSV jako archiwum oraz osobno zmaterializowane zjazdy do
   szybkiego wyświetlania i edycji. Usunięcie zjazdu nie usuwa pliku źródłowego.
 
-## 8. Dane testowe (rzeczywisty ślad, metryki GNSS testowe)
+## 8. Dane testowe (rzeczywisty ślad, metryki GNSS z urządzenia)
 
 - Plik **CSV nagrany urządzeniem** (np. przejazd autem) wpięty jako fixture
-  do developmentu PWA. Bieżący plik v1 dostaje przy seedowaniu syntetyczne
-  metryki GNSS wyłącznie do testowania wskaźników; nie są dowodem jakości sprzętu.
-- Plik v2 z urządzenia zachowuje rzeczywiste metryki GNSS; jego nagłówek i
-  semantykę pól opisuje `docs/jakosc-danych.md`.
+  do developmentu PWA. Fixture to nagranie **v2** z rzeczywistymi metrykami GNSS
+  i wysokością barometryczną; PWA nie dopisuje żadnych syntetycznych pomiarów.
+- Nagłówek i semantykę pól v2 opisuje `docs/jakosc-danych.md`.
 - Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
   rozdzielający).
 
