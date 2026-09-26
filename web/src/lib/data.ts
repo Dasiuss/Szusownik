@@ -1,18 +1,25 @@
 import { db, type StoredFile, type StoredRun } from "./db.ts";
 import { parseDeviceCsv, serializeDeviceCsvV2, type Sample } from "./csv.ts";
-import { analyzeDay, QUALITY_ANALYSIS_VERSION, type DayStats, type Run } from "./runs.ts";
+import {
+  analyzeDay,
+  analyzeMergedSamples,
+  localDayKey,
+  mergeSamples,
+  QUALITY_ANALYSIS_VERSION,
+  type DayStats,
+  type Run,
+} from "./runs.ts";
+
+export { localDayKey };
 
 export const DEMO_SOURCE_FILE = "demo-ride.csv";
 const DEMO_SEEDED_KEY = "demo-seeded-v3";
+const MATERIALIZED_KEY = "materialized-v1";
 
-export function localDayKey(iso: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(iso));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+/** Stabilny identyfikator zjazdu: lokalny dzień + czas startu. Przeżywa
+ *  scalenie plików i ponowną analizę (etykiety i tombstone'y kluczują się nim). */
+export function stableRunId(dayKey: string, startT: string): string {
+  return `${dayKey}::${startT}`;
 }
 
 export function formatDayLabel(dayKey: string, includeYear = false): string {
@@ -95,19 +102,44 @@ function shiftSamplesToNow(samples: Sample[]): Sample[] {
   }));
 }
 
-function recordsFromAnalysis(
-  sourceFile: string,
-  analysis: DayStats,
+function parseFileSamples(file: StoredFile): Sample[] {
+  try {
+    return parseDeviceCsv(file.raw);
+  } catch (error) {
+    // Uszkodzony plik nie może wywalić całej analizy.
+    console.error(`[data] pomijam nieparsowalny plik ${file.name}`, error);
+    return [];
+  }
+}
+
+function hashSignature(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+/** Podpis zbioru plików + wersja analizy. Zmiana któregokolwiek wymusza
+ *  jednorazowe przeliczenie całości; bez zmian materializacja jest pomijana. */
+function filesSignature(files: StoredFile[]): string {
+  const parts = files
+    .map((file) => `${file.name}\u0001${file.size}\u0001${file.receivedAt}`)
+    .sort();
+  return `v${QUALITY_ANALYSIS_VERSION}:${files.length}:${hashSignature(parts.join("\u0002"))}`;
+}
+
+function storedRun(
+  run: Run,
+  dayKey: string,
   receivedAt: string,
   demo: boolean,
-  previousRuns: StoredRun[],
-): StoredRun[] {
-  const previousLabels = new Map(previousRuns.map((run) => [run.sourceIndex, run.label]));
-  return analysis.runs.map((run, sourceIndex) => ({
-    id: `${sourceFile}::${sourceIndex}`,
-    sourceFile,
-    sourceIndex,
-    dayKey: localDayKey(run.startT),
+  label: string | undefined,
+): StoredRun {
+  return {
+    id: stableRunId(dayKey, run.startT),
+    dayKey,
     startT: run.startT,
     endT: run.endT,
     distanceM: run.distanceM,
@@ -120,42 +152,71 @@ function recordsFromAnalysis(
     confirmedQuality: run.confirmedQuality,
     maxGradeDown: run.maxGradeDown,
     samples: run.samples,
-    ...(previousLabels.get(sourceIndex)
-      ? { label: previousLabels.get(sourceIndex) }
-      : demo ? { label: "Demo" } : {}),
+    ...(label ? { label } : {}),
     ...(demo ? { demo: true } : {}),
     receivedAt,
-  }));
+  };
 }
 
-export async function materializeFile(file: StoredFile, force = false): Promise<StoredRun[]> {
-  const existing = await db.runs.where("sourceFile").equals(file.name).toArray();
-  const samples = parseDeviceCsv(file.raw);
-  if (!force && existing.length > 0 && existing.every((run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION)) {
-    return existing;
+/**
+ * Materializuje zjazdy z **całego** zbioru surowych plików: scala je w jedną
+ * wspólną oś czasu, grupuje po lokalnym dniu i tnie raz na dzień. Dzięki temu
+ * zjazd rozbity rotacją pliku składa się w jeden. Pliki demo mają osobną oś,
+ * żeby nie mieszały się z realnym śladem.
+ *
+ * Idempotentne: przy niezmienionym zbiorze plików i wersji analizy nic nie robi,
+ * a etykiety i tombstone'y (kluczowane stabilnym id) przeżywają re-analizę.
+ */
+export async function materializeAll(force = false): Promise<void> {
+  await db.open();
+  const files = await db.files.toArray();
+  const signature = filesSignature(files);
+  const marker = await db.meta.get(MATERIALIZED_KEY);
+  if (!force && marker?.value === signature) return;
+
+  const labels = new Map((await db.runLabels.toArray()).map((entry) => [entry.id, entry.label]));
+  const deleted = new Set((await db.deletedRuns.toArray()).map((entry) => entry.id));
+  const receivedAt = files.reduce(
+    (latest, file) => (file.receivedAt > latest ? file.receivedAt : latest),
+    "",
+  );
+
+  const records: StoredRun[] = [];
+  const realFiles = files.filter((file) => file.name !== DEMO_SOURCE_FILE);
+  const realDays = analyzeMergedSamples(
+    realFiles.map((file) => ({ file: file.name, samples: parseFileSamples(file) })),
+  );
+  for (const day of realDays) {
+    for (const run of day.runs) {
+      const id = stableRunId(day.dayKey, run.startT);
+      if (deleted.has(id)) continue;
+      records.push(storedRun(run, day.dayKey, receivedAt, false, labels.get(id)));
+    }
   }
 
-  const analysis = analyzeDay(samples);
-  const records = recordsFromAnalysis(
-    file.name,
-    analysis,
-    file.receivedAt,
-    file.name === DEMO_SOURCE_FILE,
-    existing,
-  );
-  if (existing.length > 0) await db.runs.bulkDelete(existing.map((run) => run.id));
-  if (records.length > 0) await db.runs.bulkPut(records);
-  return records;
+  const demoFile = files.find((file) => file.name === DEMO_SOURCE_FILE);
+  if (demoFile) {
+    for (const run of analyzeDay(parseFileSamples(demoFile)).runs) {
+      const dayKey = localDayKey(run.startT);
+      const id = stableRunId(dayKey, run.startT);
+      if (deleted.has(id)) continue;
+      records.push(storedRun(run, dayKey, demoFile.receivedAt, true, labels.get(id) ?? "Demo"));
+    }
+  }
+
+  await db.transaction("rw", db.runs, db.meta, async () => {
+    await db.runs.clear();
+    if (records.length > 0) await db.runs.bulkPut(records);
+    await db.meta.put({ key: MATERIALIZED_KEY, value: signature });
+  });
 }
 
 async function purgeStaleDemoData(): Promise<void> {
   const stale = (await db.files.toArray()).filter(
     (file) => file.name.startsWith("demo-") && file.name !== DEMO_SOURCE_FILE,
   );
-  for (const file of stale) {
-    await db.runs.where("sourceFile").equals(file.name).delete();
-    await db.files.delete(file.name);
-  }
+  // Zjazdy przeliczy materializeAll (podpis zbioru się zmieni).
+  for (const file of stale) await db.files.delete(file.name);
 }
 
 export async function ensureLocalData(): Promise<void> {
@@ -182,17 +243,7 @@ export async function ensureLocalData(): Promise<void> {
     await db.meta.put({ key: DEMO_SEEDED_KEY, value: receivedAt });
   }
 
-  const files = await db.files.toArray();
-  for (const file of files) {
-    await materializeFile(file, reseededDemo && file.name === DEMO_SOURCE_FILE);
-  }
-}
-
-export async function materializeFiles(names: string[]): Promise<void> {
-  for (const name of names) {
-    const file = await db.files.get(name);
-    if (file) await materializeFile(file);
-  }
+  await materializeAll(reseededDemo);
 }
 
 export async function getAllRuns(): Promise<StoredRun[]> {
@@ -204,7 +255,8 @@ export async function getAllRuns(): Promise<StoredRun[]> {
 
 export async function getAllStoredSamples(): Promise<Sample[]> {
   const files = await db.files.toArray();
-  return files.flatMap((file) => parseDeviceCsv(file.raw));
+  // Ta sama scalona, posortowana i zdeduplikowana oś co przy cięciu zjazdów.
+  return mergeSamples(files.map((file) => ({ file: file.name, samples: parseFileSamples(file) })));
 }
 
 export async function getRunsForDay(dayKey: string): Promise<StoredRun[]> {
@@ -220,10 +272,19 @@ export async function getDayKeys(): Promise<string[]> {
 }
 
 export async function renameRun(id: string, label: string): Promise<void> {
-  const trimmed = label.trim();
-  await db.runs.update(id, trimmed ? { label: trimmed.slice(0, 40) } : { label: undefined });
+  const trimmed = label.trim().slice(0, 40);
+  if (trimmed) {
+    await db.runLabels.put({ id, label: trimmed });
+    await db.runs.update(id, { label: trimmed });
+  } else {
+    await db.runLabels.delete(id);
+    await db.runs.update(id, { label: undefined });
+  }
 }
 
 export async function deleteRun(id: string): Promise<void> {
+  // Trwały tombstone: przy scalonej re-analizie usunięty zjazd nie wróci.
+  // Usunięcie zjazdu NIE usuwa surowego pliku.
+  await db.deletedRuns.put({ id, deletedAt: new Date().toISOString() });
   await db.runs.delete(id);
 }

@@ -6,7 +6,7 @@ import {
   parseDeviceCsv,
   type Sample,
 } from "./csv.ts";
-import { analyzeDay, evaluatePeakQuality } from "./runs.ts";
+import { analyzeDay, analyzeMergedSamples, evaluatePeakQuality, localDayKey, mergeSamples } from "./runs.ts";
 
 const BASE_TIME = Date.parse("2026-09-15T17:23:06.000Z");
 
@@ -136,4 +136,111 @@ test("a non-positive sample interval fails the acceleration check", () => {
 test("a local window without two samples on both sides cannot pass shape", () => {
   const samples = Array.from({ length: 5 }, (_, index) => sample(index, 40 + index));
   assert.equal(evaluatePeakQuality(samples, 1).shapeOk, false);
+});
+
+const MERGE_BASE = Date.parse("2026-01-15T10:00:00.000Z");
+
+function mergeSample(second: number, altitude: number, latitude: number, overrides: Partial<Sample> = {}): Sample {
+  return {
+    t: new Date(MERGE_BASE + second * 1000).toISOString(),
+    lat: latitude,
+    lon: 17.03,
+    speed: 30,
+    altGps: altitude,
+    hdg: 180,
+    altBaro: altitude,
+    gnssFixValid: true,
+    gnssFixAgeMs: 100,
+    gnssSatellites: 8,
+    gnssSatellitesAgeMs: 100,
+    gnssHdop: 0.9,
+    gnssHdopAgeMs: 100,
+    ...overrides,
+  };
+}
+
+test("a ride split by file rotation plus a stop file merges into exactly one run", () => {
+  // Jeden ciągły zjazd: wysokość monotonicznie maleje, więc reguła 5 m nie tnie.
+  const altitudeAt = (index: number) => 1000 - index * 2;
+  const latitudeAt = (index: number) => 51.05 + index * 0.0002;
+
+  const fileA = Array.from({ length: 9 }, (_, index) =>
+    mergeSample(index, altitudeAt(index), latitudeAt(index)),
+  ); // sekundy 0..8
+  // Plik postojowy: stoi w miejscu (ta sama pozycja i wysokość), sekundy 9..11.
+  const stop = Array.from({ length: 3 }, (_, offset) =>
+    mergeSample(9 + offset, altitudeAt(8), latitudeAt(8)),
+  );
+  // Rotacja powtarza skrajną próbkę: pierwsza próbka kolejnego pliku == ostatnia postojowa.
+  const boundary = { ...stop[stop.length - 1] };
+  const fileB = [
+    boundary,
+    ...Array.from({ length: 8 }, (_, offset) =>
+      mergeSample(12 + offset, altitudeAt(8) - (offset + 1) * 2, latitudeAt(8) + (offset + 1) * 0.0002),
+    ),
+  ]; // sekundy 12..19
+
+  const sources = [
+    { file: "20260115_100000.csv", samples: fileA },
+    { file: "20260115_100009.csv", samples: stop },
+    { file: "20260115_100011.csv", samples: fileB },
+  ];
+
+  const merged = mergeSamples(sources);
+  // Powtórzona na styku próbka znika, reszta zostaje.
+  assert.equal(merged.length, fileA.length + stop.length + fileB.length - 1);
+
+  const days = analyzeMergedSamples(sources);
+
+  assert.equal(days.length, 1, "cały ślad jest jednego lokalnego dnia");
+  assert.equal(days[0].runs.length, 1, "rotacja + postój nie tworzą osobnych zjazdów");
+  assert.equal(days[0].runs[0].endT, fileB[fileB.length - 1].t);
+});
+
+test("samples sharing a timestamp but differing in data are all kept", () => {
+  const first = mergeSample(5, 100, 51.0);
+  const second = mergeSample(5, 100, 51.001, { gnssHdop: 0.5 });
+  const merged = mergeSamples([
+    { file: "a.csv", samples: [mergeSample(4, 102, 51.0), first] },
+    { file: "b.csv", samples: [second, mergeSample(6, 98, 51.002)] },
+  ]);
+
+  assert.equal(merged.length, 4);
+});
+
+test("a sustained uphill of at least 5 m still splits the merged trace", () => {
+  const descent = Array.from({ length: 10 }, (_, index) =>
+    mergeSample(index, 1000 - index * 3, 51.05 + index * 0.0002),
+  );
+  const climb = Array.from({ length: 6 }, (_, index) =>
+    mergeSample(10 + index, 1000 - 27 + index * 3, 51.05 + (10 + index) * 0.0002),
+  );
+  const secondDescent = Array.from({ length: 10 }, (_, index) =>
+    mergeSample(16 + index, 1000 - 27 + 15 - index * 3, 51.05 + (16 + index) * 0.0002),
+  );
+
+  const days = analyzeMergedSamples([
+    { file: "20260115_100000.csv", samples: [...descent, ...climb, ...secondDescent] },
+  ]);
+
+  assert.equal(days.length, 1);
+  assert.equal(days[0].runs.length, 2);
+});
+
+test("merged samples are grouped per local day, not into one global run", () => {
+  const firstDay = Array.from({ length: 5 }, (_, index) => mergeSample(index, 1000 - index * 2, 51.05));
+  // +30 h gwarantuje inny dzień kalendarzowy w dowolnej strefie.
+  const secondDay = Array.from({ length: 5 }, (_, index) =>
+    mergeSample(30 * 3600 + index, 1000 - index * 2, 51.05),
+  );
+
+  const days = analyzeMergedSamples([
+    { file: "20260115_100000.csv", samples: firstDay },
+    { file: "20260116_160000.csv", samples: secondDay },
+  ]);
+
+  assert.equal(days.length, 2);
+  assert.equal(new Set(days.map((day) => day.dayKey)).size, 2);
+  assert.ok(days.every((day) => day.runs.length === 1));
+  assert.equal(localDayKey(firstDay[0].t) === localDayKey(secondDay[0].t), false);
 });

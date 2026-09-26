@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { materializeFiles } from "./data.ts";
+import { materializeAll } from "./data.ts";
 import {
   SzusownikBle,
   type DeviceInfo,
@@ -126,8 +126,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setState("downloading");
     setProgress(null);
     try {
-      const { done, failed } = await client.downloadFiles(pendingFiles, setProgress);
-      await materializeFiles(done.map((file) => file.name));
+      const { failed } = await client.downloadFiles(pendingFiles, setProgress);
+      await materializeAll();
       setPendingFiles(failed);
       setProgress(null);
       if (failed.length > 0) {

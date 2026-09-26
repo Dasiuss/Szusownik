@@ -443,6 +443,92 @@ export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_G
   return runs;
 }
 
+/** Lokalny klucz dnia (strefa czasowa telefonu) — grupowanie i cięcie per dzień. */
+export function localDayKey(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(iso));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Źródło próbek do scalenia: plik z urządzenia (lub fixture demo). */
+export interface SampleSource {
+  file: string;
+  samples: Sample[];
+}
+
+function samplesEqual(first: Sample, second: Sample): boolean {
+  return first.t === second.t &&
+    first.lat === second.lat && first.lon === second.lon &&
+    first.speed === second.speed && first.altGps === second.altGps &&
+    first.hdg === second.hdg && first.altBaro === second.altBaro &&
+    first.gnssFixValid === second.gnssFixValid &&
+    first.gnssFixAgeMs === second.gnssFixAgeMs &&
+    first.gnssSatellites === second.gnssSatellites &&
+    first.gnssSatellitesAgeMs === second.gnssSatellitesAgeMs &&
+    first.gnssHdop === second.gnssHdop &&
+    first.gnssHdopAgeMs === second.gnssHdopAgeMs;
+}
+
+/**
+ * Scala próbki z wielu plików w jedną osię czasu. Sortuje po `Date.parse(t)`,
+ * a przy równych timestampach deterministycznie po nazwie pliku i pozycji w pliku.
+ * Deduplikuje wyłącznie realne powtórki na styku plików (rotacja może powtórzyć
+ * skrajną próbkę) — próbki o tym samym `t`, ale innych danych, zostają.
+ */
+export function mergeSamples(sources: SampleSource[]): Sample[] {
+  const entries = sources.flatMap(({ file, samples }) =>
+    samples.map((sample, index) => ({ sample, file, index, timestamp: Date.parse(sample.t) })),
+  );
+  entries.sort((first, second) =>
+    first.timestamp - second.timestamp ||
+    (first.file < second.file ? -1 : first.file > second.file ? 1 : 0) ||
+    first.index - second.index,
+  );
+  const merged: Sample[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const previous = entries[i - 1];
+    const current = entries[i];
+    const boundaryDuplicate = previous !== undefined &&
+      previous.file !== current.file &&
+      previous.timestamp === current.timestamp &&
+      samplesEqual(previous.sample, current.sample);
+    if (!boundaryDuplicate) merged.push(current.sample);
+  }
+  return merged;
+}
+
+/** Wynik scalenia: jeden lokalny dzień i zjazdy wycięte raz, po połączeniu plików. */
+export interface MergedDay {
+  dayKey: string;
+  runs: Run[];
+}
+
+/**
+ * Scalenie i analiza całego zbioru surowych próbek: najpierw wspólna oś czasu,
+ * potem grupowanie po lokalnym dniu i dopiero na końcu `enrich` + `splitRuns`
+ * raz na dzień. Dzięki temu zjazd rozbity rotacją pliku składa się w jeden,
+ * a `cumDistM`/`distM` są liczone po scaleniu (nie sklejane z gotowych plików).
+ */
+export function analyzeMergedSamples(sources: SampleSource[]): MergedDay[] {
+  const merged = mergeSamples(sources);
+  const byDay = new Map<string, Sample[]>();
+  for (const sample of merged) {
+    const dayKey = localDayKey(sample.t);
+    const bucket = byDay.get(dayKey);
+    if (bucket) bucket.push(sample);
+    else byDay.set(dayKey, [sample]);
+  }
+  const days: MergedDay[] = [];
+  for (const [dayKey, daySamples] of byDay) {
+    days.push({ dayKey, runs: analyzeDay(daySamples).runs });
+  }
+  return days;
+}
+
 export function analyzeDay(samples: Sample[]): DayStats {
   const enriched = enrich(samples);
   const runs = splitRuns(enriched);

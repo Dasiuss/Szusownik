@@ -57,10 +57,24 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 ## 6. Przetwarzanie danych (wycinanie zjazdów)
 
+- **Jedna wspólna oś czasu:** cięcie liczy się z **wszystkich** surowych plików w
+  IndexedDB, scalonych i posortowanych po `Date.parse(t)`. Przy równych
+  timestampach porządek jest deterministyczny (nazwa pliku, potem pozycja w pliku).
+  Deduplikowane są wyłącznie realne powtórki na styku plików (rotacja może
+  powtórzyć skrajną próbkę) — próbki o tym samym `t`, ale innych danych, zostają.
+- **Cięcie per lokalny dzień:** próbki są grupowane po lokalnej dacie telefonu
+  (`localDayKey`), a `enrich` + `splitRuns` liczone są raz na dzień. Zjazd nie
+  przechodzi przez północ — dzień jest jednostką UI. Dzięki temu zjazd rozbity
+  rotacją pliku (przerwa rzędu sekund) składa się z powrotem w **jeden** zjazd,
+  a małe pliki „postojowe" nie tworzą osobnych zjazdów. `cumDistM`/`distM` są
+  liczone po scaleniu, nigdy przez sklejanie już wzbogaconych próbek z plików.
 - **Reguła cięcia testowa:** skumulowany wzrost wygładzonej wysokości o **>= 5 m**
   rozdziela dwa zjazdy, ale granica jest ustawiana na początku wykrytego wzrostu;
   poprzedni zjazd kończy się przed odcinkiem wyciągu, a kolejny zaczyna się od niego.
   Drobne zmiany wysokości między próbkami są ignorowane.
+- **Stabilny identyfikator zjazdu:** `${dayKey}::${startT}`. Etykiety użytkownika i
+  usunięcia (tombstone) kluczują się tym id i przeżywają dodanie kolejnego pliku
+  oraz ponowną analizę. Usunięcie zjazdu nie usuwa surowego pliku.
 - Dla każdego zjazdu: dystans (haversine z lat/lon), max prędkość, max nachylenie.
 - **Nachylenie w stopniach**, liczone z **Δwysokości / Δdystansu**.
 - „Dystans w dół" = suma dystansów zjazdów (bez podjazdów/wyciągów).
@@ -90,8 +104,13 @@ na nagraniach z auta defaulty wystarczą.
 - **Żądanie pobrania rotuje plik na urządzeniu** — pobierane pliki są zawsze kompletne.
 - Sync po nazwie pliku (nie po zakresie timestampów): całe pliki, idempotentne, bez problemu
   dryfu zegara.
-- IndexedDB przechowuje surowe CSV jako archiwum oraz osobno zmaterializowane zjazdy do
-  szybkiego wyświetlania i edycji. Usunięcie zjazdu nie usuwa pliku źródłowego.
+- IndexedDB przechowuje **wyłącznie surowe CSV** jako archiwum; zjazdy są **pochodną**
+  materializowaną ze scalonego śladu (patrz §6) — do szybkiego wyświetlania i edycji.
+  Usunięcie zjazdu nie usuwa pliku źródłowego. Etykiety i tombstone'y usunięć są
+  trzymane osobno, po stabilnym id zjazdu, więc ponowna materializacja ich nie gubi.
+- Materializacja jest idempotentna i wykonywana tylko wtedy, gdy zmienił się zbiór
+  plików albo wersja analizy (`QUALITY_ANALYSIS_VERSION`); inaczej jest pomijana.
+  Schemat Dexie v4: `files`, `runs`, `runLabels`, `deletedRuns`, `meta`.
 
 ## 8. Dane testowe (rzeczywisty ślad, metryki GNSS z urządzenia)
 
@@ -106,7 +125,8 @@ na nagraniach z auta defaulty wystarczą.
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
-- **Dexie.js 4** — IndexedDB, schemat v3 (surowe pliki + wersjonowane zjazdy + metadane).
+- **Dexie.js 4** — IndexedDB, schemat v4 (surowe pliki + materializowane zjazdy +
+  etykiety/tombstone'y + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
 - **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa

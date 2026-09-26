@@ -62,6 +62,14 @@ wypracowanych w trzech projektach testowych:
     PWA dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
     pobiera się komendą `FILE:<i>` (STATUS `file <nazwa> <rozmiar>`). Szczegóły w
     `docs/ble-transfer.md` §10.
+13. PWA liczy zjazdy ze **scalonego śladu wszystkich plików** (jedna oś czasu,
+    sortowanie po `Date.parse(t)`, dedup tylko realnych powtórek na styku plików),
+    grupowanego po lokalnym dniu i ciętego raz na dzień. Nie wracaj do analizy
+    per plik: rotacja na postoju rozbijałaby jeden zjazd na kilka. Identyfikator
+    zjazdu jest stabilny (`dayKey::startT`), a etykiety (tabela `runLabels`) i
+    usunięcia (tombstone `deletedRuns`) kluczują się tym id i muszą przeżyć
+    re-analizę. Zmiana reguły cięcia (podjazd ≥ 5 m) wymaga osobnego uzgodnienia.
+    Szczegóły w `docs/wymagania-PWA.md` §6/§7.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
