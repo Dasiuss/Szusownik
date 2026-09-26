@@ -494,8 +494,10 @@ export class SzusownikBle {
     const fresh: FileMeta[] = [];
     for (let index = 0; index < info.fileCount; index++) {
       await this.writeCtrl(`FILE:${index}`);
-      const status = await this.pollStatus(/^file \S+ \d+$/);
-      const match = /^file (\S+) (\d+)$/.exec(status);
+      // Czekamy na status z TYM indeksem — sam wzorzec `file ...` pasowałby też
+      // do odpowiedzi na poprzedni FILE:<i>.
+      const status = await this.pollStatus(new RegExp(`^file ${index} \\S+ \\d+$`));
+      const match = new RegExp(`^file ${index} (\\S+) (\\d+)$`).exec(status);
       if (!match) throw new Error(`Zła odpowiedź listy plików: ${status}`);
       const name = match[1];
       if (!known.has(name.replace(/^\//, ""))) fresh.push({ name, size: Number(match[2]) });

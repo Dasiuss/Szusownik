@@ -242,7 +242,7 @@ Komendy CTRL:
 ```text
 LIST_FILES            — odśwież INFO (bez efektów ubocznych)
 ROTATE                — zamknij bieżący plik na SD + odśwież INFO
-FILE:<i>              — metadane i-tego CSV (kolejność katalogu): STATUS "file <nazwa> <rozmiar>"
+FILE:<i>              — metadane i-tego CSV (kolejność katalogu): STATUS "file <i> <nazwa> <rozmiar>"
 DRYRUN:<nazwa>        — lokalny test SD+miniz+CRC bez radia (wynik w STATUS/logu)
 START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
 STOP                  — przerwij transfer
@@ -291,7 +291,9 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   w NimBLE (`setValue` → `append` odrzuca `len > max`) i PWA dostaje 0 B
   („Unexpected end of JSON input"). Dlatego INFO niesie tylko `fileCount`, a
   metadane plików PWA pobiera pojedynczo przez `FILE:<i>`
-  (STATUS `file <nazwa> <rozmiar>`). Kolejność `i` = kolejność katalogu FAT.
+  (STATUS `file <i> <nazwa> <rozmiar>`). Kolejność `i` = kolejność katalogu FAT.
+  Indeks musi być w odpowiedzi — PWA dopasowuje status do konkretnego żądania;
+  bez indeksu czyta stary status poprzedniego pliku (identyczny wzorzec).
 - Metadane zawierają nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
   Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje
   wyłącznie CSV v2; obecny nagłówek v2 i metryki GNSS opisuje

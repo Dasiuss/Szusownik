@@ -160,8 +160,10 @@ void BleFiles::handleCommand(const String& cmd) {
     String name;
     unsigned long size = 0;
     if (storage_ && storage_->csvAt(index, name, size)) {
+      // Indeks w odpowiedzi: PWA czeka na status pasujący do KONKRETNEGO FILE:<i>,
+      // inaczej czyta stary status poprzedniego pliku (ten sam wzorzec).
       char msg[96];
-      snprintf(msg, sizeof(msg), "file %s %lu", name.c_str(), size);
+      snprintf(msg, sizeof(msg), "file %lu %s %lu", (unsigned long)index, name.c_str(), size);
       setStatus(String(msg));
     } else {
       setStatus("err:file");
