@@ -24,6 +24,7 @@ bool Storage::openLog(const String& stamp) {
   if (!logFile) return false;
   if (logFile.size() == 0) logFile.println(SZ_CSV_HEADER);
   fileOpen_ = true;
+  szLogf("SD: open %s", currentName_.c_str());
   return true;
 }
 
@@ -86,6 +87,7 @@ void Storage::updateFileRotation(float kmh, bool fixValid) {
     movingSince_ = 0;
     if (stoppedSince_ == 0) stoppedSince_ = now;
     if (fileRotationArmed_ && now - stoppedSince_ >= SZ_ROLL_HOLD_MS) {
+      szLogf("SD: rolka (postoj) zamyka %s", currentName_.c_str());
       close();  // main otworzy nowy plik przy kolejnej próbce
       fileRotationArmed_ = false;
     }
