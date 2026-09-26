@@ -76,6 +76,9 @@ void loop() {
   gnss.poll();
   gnss.maintain(now);  // autokonfiguracja UBX (co 5 s aż do skutku) + logi
   float kmh = gnss.hasFix() ? gnss.speedKmh() : 0.0f;
+  // Rolka na postoju: domyka plik, gdy stoimy (chroni dane przed odcięciem
+  // zasilania). Wołane co iterację (na millis), nie tylko na nowej próbce.
+  storage.updateFileRotation(kmh, gnss.hasFix());
 
   // Statystyki: dystans z kolejnych fixów (haversine), max dnia / ostatniego zjazdu.
   if (gnss.hasFix()) {
@@ -107,16 +110,13 @@ void loop() {
     }
     if (storage.isOpen()) {
       // baro.read() aktualizuje cache; przy chwilowym bledzie zostaje ostatni
-      // poprawny odczyt (bez zera w CSV i bez falszywego skoku dla rotacji).
+      // poprawny odczyt (bez zera w CSV).
       if (baro.present()) baro.read();
       bool baroOk = baro.present() && baro.valid();
       float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
       const GnssSampleQuality quality = gnss.sampleQuality();
       storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
                           gnss.headingDeg(), baroAlt, quality);
-      // Rotacja pliku na wykryty podjazd z wysokości barometrycznej (stabilniejsza
-      // niż GPS); GPS tylko gdy baro nigdy nie dał poprawnego odczytu.
-      storage.noteSample(baroOk ? baroAlt : gnss.altM());
       sampleCount++;
       totalSamples++;
 #if SZ_DEBUG_SAMPLES

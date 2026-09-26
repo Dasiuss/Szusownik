@@ -48,12 +48,15 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_VOL_LOW_DEFAULT 20
 #define SZ_VOL_HIGH_DEFAULT 70
 
-// Rotacja: jeden plik na wykryty podjazd (wymagania-ESP.md). Progi kumulacyjne,
-// bez progu prędkości: wzrost >= SZ_UPHILL_CUT_GAIN_M od najniższego punktu
-// zamyka plik; ponowne uzbrojenie dopiero po zjechaniu >= tej samej wartości od
-// szczytu. Odporne na szum baro, wolne tempo i długie wyciągi (1 plik/wyciąg).
-// Wartość testowa do strojenia.
-#define SZ_UPHILL_CUT_GAIN_M 5.0f
+// Rotacja pliku na postoju (wymagania-ESP.md §7). Gdy prędkość spadnie poniżej
+// SZ_ROLL_STOP_BELOW_KMH i utrzyma się przez SZ_ROLL_HOLD_MS, bieżący plik jest
+// domykany — w chwili odcięcia zasilania otwarty jest już tylko plik z próbkami
+// z postoju (bezwartościowy). Ponowne uzbrojenie rolki dopiero po prędkości
+// > SZ_ROLL_REARM_ABOVE_KMH przez SZ_ROLL_HOLD_MS, więc jeden postój = jedna
+// rolka (bez mnożenia plików); ruch < SZ_ROLL_REARM_ABOVE_KMH nie jest chroniony.
+#define SZ_ROLL_STOP_BELOW_KMH 0.3f
+#define SZ_ROLL_REARM_ABOVE_KMH 5.0f
+#define SZ_ROLL_HOLD_MS 3000UL
 
 // Monitoring zdrowia urzadzenia (modul Health). MVP: termika SoC.
 // ESP32-S3 NIE ma sprzetowego zabezpieczenia termicznego, wiec ochrona jest
@@ -99,9 +102,10 @@ static const float SZ_HYST_KMH = 3.0f;
 // FIFO: przy mniej niż tyle wolnego miejsca kasuj najstarsze pliki CSV.
 #define SZ_SD_MIN_FREE_BYTES (4UL * 1024UL * 1024UL)
 
-// Co tyle ms domykamy i otwieramy ponownie bieżący plik (spójny FAT na karcie;
-// utrata przy odcięciu zasilania ograniczona do tego okna).
-#define SZ_SD_COMMIT_MS 2000UL
+// Co tyle ms robimy flush bieżącego pliku (File::flush -> fsync -> FATFS f_sync,
+// czyli domknięcie wpisu katalogowego i FAT na karcie). Ogranicza okno utraty
+// danych przy odcięciu zasilania w trakcie jazdy; koniec jazdy chroni rolka.
+#define SZ_SD_COMMIT_MS 10000UL
 
 // BLE — profil ZAMROŻONY (docs/ble-transfer.md). Zmiana tylko po benchmarku
 // na rzeczywistym ESP32 + Androidzie.

@@ -23,7 +23,7 @@ class Baro {
   float tempC() const { return tempC_; }
 
   // Wysokosc barometryczna ze standardowej atmosfery (ref. 1013,25 hPa).
-  // Do detekcji wyciagu/rotacji (liczy sie zmiana, nie wartosc absolutna).
+  // Trafia do CSV (altitude_baro); rotacja pliku jej nie uzywa (jest na postoju).
   float altitudeM() const;
 
  private:

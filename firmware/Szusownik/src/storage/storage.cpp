@@ -24,10 +24,6 @@ bool Storage::openLog(const String& stamp) {
   if (!logFile) return false;
   if (logFile.size() == 0) logFile.println(SZ_CSV_HEADER);
   fileOpen_ = true;
-  // Stan per plik zerujemy; armed_ celowo przeżywa roll (ciągłość podjazdu).
-  haveLastAlt_ = false;
-  minAlt_ = 0.0f;
-  maxAlt_ = 0.0f;
   return true;
 }
 
@@ -57,15 +53,15 @@ void Storage::writeSample(const String& utc, double lat, double lon, float kmh, 
 }
 
 void Storage::sync() {
-  // File::flush() (fflush+fsync) nie domyka w tej wersji IDF łańcucha FAT.
-  // Pewny zapis stanu daje dopiero close() (FATFS f_close -> f_sync), więc
-  // domykamy i otwieramy ponownie ten sam plik. Przy odcięciu zasilania traci
-  // się co najwyżej dane od ostatniego domknięcia, ale plik jest spójny.
+  // File::flush() = fflush + fsync; fsync na VFS FAT (vfs_fat_fsync) woła
+  // FATFS f_sync, czyli domyka wpis katalogowy i FAT na karcie. Sam flush
+  // wystarcza — okresowe close()+open() nic nie dodaje poza ponownym
+  // przejściem łańcucha FAT przy następnym dopisaniu (koszt rośnie z plikiem).
   if (!fileOpen_) return;
+  uint32_t t0 = millis();
   logFile.flush();
-  logFile.close();
-  logFile = SD.open(currentName_, FILE_APPEND);
-  if (!logFile) fileOpen_ = false;
+  uint32_t dt = millis() - t0;
+  if (dt >= 20) szLogf("SD: sync %lu ms", (unsigned long)dt);
 }
 
 void Storage::close() {
@@ -76,29 +72,34 @@ void Storage::close() {
   }
 }
 
-void Storage::noteSample(float altM) {
-  // Rotacja jednego pliku na podjazd, wyłącznie na progach kumulacyjnych
-  // (bez progu prędkości i bez progu pojedynczej próbki). armed_ = false to
-  // zatrzask po rolce; puszcza dopiero po skumulowanym zjeździe od szczytu.
-  if (!haveLastAlt_) {
-    minAlt_ = altM;
-    maxAlt_ = altM;
-    haveLastAlt_ = true;
+void Storage::updateFileRotation(float kmh, bool fixValid) {
+  // Rolka na postoju: domyka plik, gdy stoimy. Bez poprawnego fixa nie znamy
+  // prędkości (przy braku fixa kmh = 0), więc nie rolujemy — inaczej zanik fixa
+  // w ruchu (tunel, garaż) fałszywie ciąłby przejazd.
+  if (!fixValid) {
+    stoppedSince_ = 0;
+    movingSince_ = 0;
     return;
   }
-  if (armed_) {
-    if (altM < minAlt_) minAlt_ = altM;
-    if (altM - minAlt_ >= SZ_UPHILL_CUT_GAIN_M) {
-      armed_ = false;
-      maxAlt_ = altM;
+  const unsigned long now = millis();
+  if (kmh < SZ_ROLL_STOP_BELOW_KMH) {
+    movingSince_ = 0;
+    if (stoppedSince_ == 0) stoppedSince_ = now;
+    if (fileRotationArmed_ && now - stoppedSince_ >= SZ_ROLL_HOLD_MS) {
       close();  // main otworzy nowy plik przy kolejnej próbce
+      fileRotationArmed_ = false;
+    }
+  } else if (kmh > SZ_ROLL_REARM_ABOVE_KMH) {
+    stoppedSince_ = 0;
+    if (movingSince_ == 0) movingSince_ = now;
+    if (!fileRotationArmed_ && now - movingSince_ >= SZ_ROLL_HOLD_MS) {
+      fileRotationArmed_ = true;
     }
   } else {
-    if (altM > maxAlt_) maxAlt_ = altM;
-    if (maxAlt_ - altM >= SZ_UPHILL_CUT_GAIN_M) {
-      armed_ = true;
-      minAlt_ = altM;
-    }
+    // Strefa histerezy (STOP_BELOW .. REARM_ABOVE): ani bezruch, ani uzbrajający
+    // ruch — zeruj liczniki, ale nie zmieniaj stanu uzbrojenia.
+    stoppedSince_ = 0;
+    movingSince_ = 0;
   }
 }
 

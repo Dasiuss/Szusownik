@@ -2,9 +2,9 @@
 #include <Arduino.h>
 #include "../gnss/gnss.h"
 
-// Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: jeden plik na
-// wykryty podjazd (kumulacyjny wzrost SZ_UPHILL_CUT_GAIN_M) oraz na żądanie
-// sync z PWA. Bez kasowania po wysyłce.
+// Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: domknięcie pliku na
+// postoju (chroni dane przed odcięciem zasilania) oraz na żądanie sync z PWA.
+// Bez kasowania po wysyłce.
 class Storage {
  public:
   bool begin();
@@ -19,7 +19,10 @@ class Storage {
   // i-ty plik CSV w stabilnej kolejności katalogu; false gdy brak.
   bool csvAt(uint32_t index, String& name, unsigned long& size) const;
   void rotateForSync() { close(); }  // nowy otworzy się przy kolejnej próbce
-  void noteSample(float altM);  // rotacja: jeden plik na wykryty podjazd
+  // Rolka na postoju: gdy prędkość < SZ_ROLL_STOP_BELOW_KMH przez SZ_ROLL_HOLD_MS
+  // (tylko przy poprawnym fixie), domyka plik; ponowne uzbrojenie po prędkości
+  // > SZ_ROLL_REARM_ABOVE_KMH przez SZ_ROLL_HOLD_MS. Wołane z pętli co iterację.
+  void updateFileRotation(float kmh, bool fixValid);
   // FIFO: gdy wolne miejsce < SZ_SD_MIN_FREE_BYTES, kasuj najstarsze CSV
   // (nazwy YYYYMMDD_HHMMSS sortują się chronologicznie).
   void ensureFreeSpace();
@@ -38,8 +41,7 @@ class Storage {
   String readName_;
   unsigned long readSize_ = 0;
   bool readOpen_ = false;
-  bool haveLastAlt_ = false;
-  float minAlt_ = 0.0f;   // najniższy punkt od uzbrojenia (stan armed_)
-  float maxAlt_ = 0.0f;   // szczyt od ostatniej rolki (stan zatrzasku)
-  bool armed_ = true;     // true = gotowy wykryć podjazd; false = czekam na zjazd
+  bool fileRotationArmed_ = false;  // false na starcie: pierwsza rolka po realnym ruchu
+  unsigned long stoppedSince_ = 0;  // 0 = brak warunku bezruchu; inaczej millis() startu
+  unsigned long movingSince_ = 0;   // 0 = brak warunku ruchu; inaczej millis() startu
 };

@@ -87,27 +87,41 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   z realnego UTC z GNSS. Plik powstaje dopiero, gdy odbiornik poda poprawną datę
   i godzinę — wcześniej nie zapisujemy na SD (brak fallbacku `LOG_<millis>.csv`).
   Próbki z fixem, ale jeszcze bez poprawnego UTC, są pomijane.
-- **Rotacja: jeden plik na wykryty podjazd** (detekcja niżej), aby pliki nie rosły bez końca.
+- **Rolka na postoju** (mechanizm w §7): po zatrzymaniu bieżący plik jest
+  domykany, a nowy otwiera się przy kolejnej próbce. Dane „w ruchu" lądują w
+  zamkniętym pliku, więc w chwili odcięcia zasilania otwarty jest tylko plik z
+  próbkami z postoju (bezwartościowy). Jeden postój = jedna rolka.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
-- **Okresowe domykanie pliku** co `SZ_SD_COMMIT_MS` (2 s): `close()` + ponowne
-  `open(FILE_APPEND)` tego samego pliku. `File::flush()` (`fflush`+`fsync`) nie
-  domyka w tej wersji IDF łańcucha FAT, więc po odcięciu zasilania plik bywał
-  nieczytelny (rozmiar w katalogu OK, dane nie). Po `close()` stan na karcie jest
-  spójny; przy nagłej utracie zasilania ginie tylko okno ≤ 2 s, a plik pozostaje
-  czytelny. Zero utraty daje `ROTATE` z PWA (domyka plik) przed wyłączeniem.
+- **Okresowy flush pliku** co `SZ_SD_COMMIT_MS` (10 s). `File::flush()` to
+  `fflush` + `fsync`, a `fsync` na VFS FAT (`vfs_fat_fsync`, potwierdzone
+  deasemblacją) woła FATFS `f_sync`, czyli domyka wpis katalogowy i FAT na
+  karcie. Ogranicza **okno utraty danych** przy odcięciu zasilania w trakcie
+  jazdy, ale **nie jest gwarancją braku uszkodzeń**: FAT32 nie ma dziennika, a
+  karta ma wewnętrzny cache i brak niezawodnej bariery zapisu. Jeśli zasilanie
+  zniknie w trakcie zapisu sektora, karta może zapisać go częściowo (rozmiar w
+  katalogu OK, łańcuch FAT/dane nie). Dlatego rolka na postoju (domknięcie przed
+  wyłączeniem) jest ważniejsza niż sam flush.
 
-## 7. Detekcja podjazdu (do rotacji)
+## 7. Rolowanie pliku na postoju (ochrona przed odcięciem zasilania)
 
-- Algorytm w pełni kumulacyjny, bez progu prędkości i bez progu pojedynczej próbki:
-  - Najniższy punkt od uzbrojenia (`minAlt`) śledzi dno; gdy bieżąca wysokość wzrośnie
-    o `SZ_UPHILL_CUT_GAIN_M` (na razie 5 m, testowo) → zamknij plik i uzbrój zatrzask.
-  - Zatrzask trzyma szczyt (`maxAlt`); ponowne uzbrojenie dopiero po zjechaniu
-    `SZ_UPHILL_CUT_GAIN_M` od szczytu. Dzięki temu na monotonnie rosnącym wyciągu
-    powstaje **dokładnie jeden plik**, odpornie na szum barometru i dowolnie wolne tempo.
-- Wysokość do detekcji pochodzi z **barometru** (`altitude_baro`) — stabilniejsza niż
-  GPS; gdy brak baro, fallback na `altitude_gps`.
-- Zapis trwa cały czas; roll to tylko `close()` — żadna próbka nie ginie.
-- Brak wykrytego podjazdu (np. pierwszy/ostatni zjazd dnia) → brak cięcia.
+- Cel: w chwili odcięcia zasilania mieć na karcie **domknięty** plik z danymi
+  „w ruchu"; otwarty ma być tylko plik z próbkami z postoju (bezwartościowy).
+- Maszyna stanu (`Storage::updateFileRotation`, wołana co iterację pętli na
+  `millis()`, nie na próbce):
+  - **Rolka**: `fixValid && prędkość < SZ_ROLL_STOP_BELOW_KMH` (0.3 km/h) przez
+    `SZ_ROLL_HOLD_MS` (3 s) → `close()`, uzbrojenie zdjęte.
+  - **Uzbrojenie**: `fixValid && prędkość > SZ_ROLL_REARM_ABOVE_KMH` (5 km/h)
+    przez `SZ_ROLL_HOLD_MS` (3 s) → uzbrojenie włączone.
+  - Start: uzbrojenie **wyłączone** — pierwsza rolka dopiero po realnym ruchu.
+- Jeden postój = **dokładnie jedna** rolka (zdjęte uzbrojenie blokuje mnożenie
+  plików na jednym postoju). Ruch < 5 km/h (korek, kolejka) nie jest chroniony —
+  świadomie: takie dane nie są istotne, a ochrona mnożyłaby pliki.
+- Wymóg `fixValid`: przy braku fixa prędkość wynosi 0, więc bez tego warunku
+  zanik fixa w ruchu (tunel, garaż) fałszywie rolowałby przejazd.
+- Zapis trwa cały czas; roll to tylko `close()` — próbki z postoju po rolce
+  trafiają do nowego pliku i są świadomie „do stracenia".
+- Rolka na podjazd (wysokościowa) **usunięta** — jeden mechanizm, nie dwa.
+  Cięcie na zjazdy robi PWA (własna metoda, `web/src/lib/runs.ts`).
 - Progi do dostrojenia (patrz „Otwarte punkty").
 
 ## 8. Transfer BLE + sprzątanie
@@ -145,6 +159,6 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 ## 10. Otwarte punkty
 
-1. **Próg detekcji podjazdu** (`SZ_UPHILL_CUT_GAIN_M`, obecnie 5 m w obie strony) — do dostrojenia; bez progu prędkości.
+1. **Progi rolki na postoju** (`SZ_ROLL_STOP_BELOW_KMH` 0.3, `SZ_ROLL_REARM_ABOVE_KMH` 5, `SZ_ROLL_HOLD_MS` 3 s) — potwierdzone na danych testowych (bezruch 0.0–0.1 km/h), do obserwacji w terenie.
 2. **Współbieżność** — jednoczesny zapis na SD + transfer BLE + buzzer na ESP32 (wydajność, bufory) — do weryfikacji.
 3. **Rozmiar pliku na jeden zjazd** — zweryfikować w praktyce (szacunek ~0,06–0,11 MB, tj. ~1/5 z ~0,3–0,55 MB dla 5 zjazdów, patrz koncepcja).
