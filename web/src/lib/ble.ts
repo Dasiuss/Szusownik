@@ -97,6 +97,11 @@ export interface SyncedFile {
   samples: number;
 }
 
+export interface DownloadResult {
+  done: SyncedFile[];
+  failed: FileMeta[];
+}
+
 let crcTable: Uint32Array | null = null;
 function crc32Update(crc: number, data: Uint8Array): number {
   if (!crcTable) {
@@ -501,30 +506,37 @@ export class SzusownikBle {
   async downloadFiles(
     fresh: FileMeta[],
     onProgress: (p: SyncProgress) => void,
-  ): Promise<SyncedFile[]> {
+  ): Promise<DownloadResult> {
     const done: SyncedFile[] = [];
+    const failed: FileMeta[] = [];
     let fileIndex = 0;
     for (const meta of fresh) {
       fileIndex++;
       const name = meta.name.startsWith("/") ? meta.name : `/${meta.name}`;
-      const text = await this.downloadFile(meta, (receivedFrames) =>
-        onProgress({
-          file: name,
-          receivedFrames,
-          fileIndex,
-          fileCount: fresh.length,
-        }),
-      );
-      await db.files.put({
-        name,
-        size: text.length,
-        receivedAt: new Date().toISOString(),
-        userId: "local",
-        raw: text,
-      });
-      done.push({ name, size: text.length, samples: text.split("\n").length - 1 });
+      try {
+        const text = await this.downloadFile(meta, (receivedFrames) =>
+          onProgress({
+            file: name,
+            receivedFrames,
+            fileIndex,
+            fileCount: fresh.length,
+          }),
+        );
+        await db.files.put({
+          name,
+          size: text.length,
+          receivedAt: new Date().toISOString(),
+          userId: "local",
+          raw: text,
+        });
+        done.push({ name, size: text.length, samples: text.split("\n").length - 1 });
+      } catch (caught) {
+        // Jeden uszkodzony plik nie może blokować pozostałych.
+        console.error(`[ble] pobieranie ${name} nieudane`, caught);
+        failed.push(meta);
+      }
     }
-    return done;
+    return { done, failed };
   }
 
   /**

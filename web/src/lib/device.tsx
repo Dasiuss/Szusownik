@@ -126,10 +126,16 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setState("downloading");
     setProgress(null);
     try {
-      const done = await client.downloadFiles(pendingFiles, setProgress);
+      const { done, failed } = await client.downloadFiles(pendingFiles, setProgress);
       await materializeFiles(done.map((file) => file.name));
-      setPendingFiles([]);
+      setPendingFiles(failed);
       setProgress(null);
+      if (failed.length > 0) {
+        setError(
+          `Nie udało się pobrać ${failed.length} z ${pendingFiles.length} plików: ` +
+            failed.map((file) => file.name).join(", "),
+        );
+      }
       setLastSyncAt(new Date().toISOString());
       setDataRevision((revision) => revision + 1);
       setState("connected");
