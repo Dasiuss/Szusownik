@@ -406,6 +406,7 @@ void BleFiles::pumpStream() {
         inPos_ = 0;
         if (inLen_ == 0) {
           inputEof_ = true;
+          szLogf("BLE: input EOF raw=%lu", (unsigned long)rawBytes_);
         } else {
           rawBytes_ += (uint32_t)inLen_;
           fileCrc_ = szCrc32Update(fileCrc_, inBuf_, inLen_);
@@ -420,8 +421,10 @@ void BleFiles::pumpStream() {
       tdefl_status st = compActive_ ? tdefl_compress(comp_, inPtr, &inAvail, out, &outAvail,
                                                     flush)
                                     : TDEFL_STATUS_DONE;
-      inPos_ = inLen_ - inAvail;
-      size_t produced = sizeof(out) - outAvail;
+      // miniz zwraca: inAvail = liczba SKONSUMOWANYCH bajtów wejścia,
+      // outAvail = liczba ZAPISANYCH bajtów wyjścia (a nie „ile zostało").
+      inPos_ += inAvail;
+      size_t produced = outAvail;
       if (produced > 0) {
         memcpy(pend_ + pendLen_, out, produced);
         pendLen_ += produced;
@@ -530,23 +533,26 @@ void BleFiles::dryRun(const String& name) {
   while (!done) {
     size_t n = storage_->readBytes(in, sizeof(in));
     bool eof = (n == 0);
-    size_t inAvail = n;
-    const void* inPtr = eof ? nullptr : in;
     if (n) {
       raw += (uint32_t)n;
       crc = szCrc32Update(crc, in, n);
     }
     tdefl_flush flush = eof ? TDEFL_FINISH : TDEFL_NO_FLUSH;
-    while (true) {
+    const uint8_t* p = in;
+    size_t left = n;
+    for (;;) {
       uint8_t out[512];
       size_t outAvail = sizeof(out);
-      tdefl_status st = tdefl_compress(c, inPtr, &inAvail, out, &outAvail, flush);
-      compBytes += (uint32_t)(sizeof(out) - outAvail);
+      size_t inAvail = left;
+      tdefl_status st = tdefl_compress(c, left ? p : nullptr, &inAvail, out, &outAvail, flush);
+      p += inAvail;      // inAvail = skonsumowane wejście
+      left -= inAvail;
+      compBytes += (uint32_t)outAvail;  // outAvail = zapisane wyjście
       if (st == TDEFL_STATUS_DONE) {
         done = true;
         break;
       }
-      if (!eof && inAvail == 0) break;  // FINISH wołamy aż do DONE
+      if (outAvail == 0 && inAvail == 0) break;  // brak postępu — dociągnij wejście
     }
     if (raw % 65536 < 512) {
       szLogf("BLE: DRYRUN raw=%lu comp=%lu", (unsigned long)raw, (unsigned long)compBytes);

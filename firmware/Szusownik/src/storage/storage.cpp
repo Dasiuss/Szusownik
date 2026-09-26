@@ -150,16 +150,23 @@ bool Storage::openRead(const String& name) {
   }
   readSize_ = readFile.size();
   readOpen_ = true;
+  szLogf("SD: openRead %s size=%lu", p.c_str(), (unsigned long)readSize_);
   return true;
 }
 
 size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
-  if (!readOpen_) return 0;
-  return readFile.read(buf, maxLen);
+  if (!readOpen_) {
+    szLog("SD: readBytes bez otwartego pliku");
+    return 0;
+  }
+  size_t n = readFile.read(buf, maxLen);
+  if (n == 0) szLogf("SD: readBytes=0 size=%lu", (unsigned long)readSize_);
+  return n;
 }
 
 void Storage::closeRead() {
   if (readOpen_) {
+    szLogf("SD: closeRead size=%lu", (unsigned long)readSize_);
     readFile.close();
     readOpen_ = false;
   }

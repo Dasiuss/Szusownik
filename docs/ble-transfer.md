@@ -184,6 +184,11 @@ wynika ze stałego tempa, a utracone ramki odzyskuje ACK/NACK i ring buffer.
 - Przy `START` wyzerować sekwencje, okno, CRC, liczniki i stan pliku.
 - Po `STOP`, rozłączeniu lub błędzie zwolnić uchwyt pliku i zatrzymać pompę.
 - Po timeoutach ACK rozpocząć replay od najstarszej niepotwierdzonej ramki.
+- `tdefl_compress()` zwraca w `*pIn_buf_size` liczbę **skonsumowanych**
+  bajtów wejścia, a w `*pOut_buf_size` liczbę **zapisanych** bajtów wyjścia
+  (a nie „ile zostało"). Traktowanie ich jak „pozostało" powoduje re-kompresję
+  tego samego bufora wejściowego i doklejanie śmieci ze stosu — dokładnie objaw
+  „Junk found after end of compressed data" po stronie PWA.
 - Bufor stagingu ramki (`pend_`) musi pomieścić **cały** output kompresora
   (użyty `out` ma 256 B > payload 240 B). Przy pacingu `emitFrame()` nie kopiuje
   danych i zwraca `false`; `return` w tym miejscu nie może zgubić reszty bufora,

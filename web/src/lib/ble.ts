@@ -392,7 +392,15 @@ export class SzusownikBle {
         await this.writeCtrl(`NACK:${expected}`);
         return;
       }
-      await writer.write(payload);
+      if (expected < 16) {
+        console.log(`[ble] frame seq=${seq} len=${bytes.length} head=${Array.from(payload.slice(0, 4), (b) => b.toString(16).padStart(2, "0")).join(" ")}`);
+      }
+      try {
+        await writer.write(payload);
+      } catch (err) {
+        console.error(`[ble] write fail seq=${seq} len=${payload.length}`, err);
+        throw err;
+      }
       expected++;
       onFrames(expected);
       if (expected % SZ_BLE_ACK_BLOCK === 0) {
