@@ -34,6 +34,7 @@ class BleFiles {
   uint32_t endSeq_ = 0;         // seq end markera
   bool endSent_ = false;
   bool inputEof_ = false;
+  bool compFinished_ = false;
   uint32_t rawBytes_ = 0;
   uint32_t compBytes_ = 0;  // bajty payloadu (bez nagłówków)
   uint32_t frameCount_ = 0;
@@ -46,7 +47,9 @@ class BleFiles {
   uint8_t inBuf_[512];
   size_t inLen_ = 0;
   size_t inPos_ = 0;
-  uint8_t pend_[240];
+  // Staging ramki: mieści częściową ramkę + cały output kompresora (256 B),
+  // bo emitFrame() przy pacingu nie kopiuje danych i nie wolno ich zgubić.
+  uint8_t pend_[512];
   size_t pendLen_ = 0;
   bool allocStreamMem();
   void handleCommand(const String& cmd);

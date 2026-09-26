@@ -112,22 +112,6 @@ function SyncCard() {
   const totalSize = pendingFiles.reduce((sum, file) => sum + file.size, 0);
   const busy = state === "connecting" || state === "checking" || state === "downloading";
 
-  if (pendingFiles.length > 0) {
-    return (
-      <section className="sync-card sync-card-ready">
-        <div className="sync-icon"><Icon name="download" size={22} /></div>
-        <div className="sync-copy">
-          <span className="eyebrow">Nowe na urządzeniu</span>
-          <h2>{pendingFiles.length} {pendingFiles.length === 1 ? "zjazd czeka" : "zjazdy czekają"}</h2>
-          <p>{formatFileSize(totalSize)} do pobrania. Dane pojawią się tutaj po synchronizacji.</p>
-        </div>
-        <button className="button button-primary sync-action" onClick={() => void downloadPending()}>
-          <Icon name="download" size={18} /> Pobierz dane
-        </button>
-      </section>
-    );
-  }
-
   if (state === "downloading") {
     return (
       <section className="sync-card sync-card-progress">
@@ -137,6 +121,22 @@ function SyncCard() {
           <h2>Pobieram Twoje zjazdy</h2>
           <p>{progress ? `${progress.file} · ramka ${progress.receivedFrames} · plik ${progress.fileIndex}/${progress.fileCount}` : "Przygotowuję transfer…"}</p>
         </div>
+      </section>
+    );
+  }
+
+  if (pendingFiles.length > 0) {
+    return (
+      <section className="sync-card sync-card-ready">
+        <div className="sync-icon"><Icon name="download" size={22} /></div>
+        <div className="sync-copy">
+          <span className="eyebrow">Nowe na urządzeniu</span>
+          <h2>{pendingFiles.length} {pendingFiles.length === 1 ? "zjazd czeka" : "zjazdy czekają"}</h2>
+          <p>{formatFileSize(totalSize)} do pobrania. Dane pojawią się tutaj po synchronizacji.</p>
+        </div>
+        <button className="button button-primary sync-action" disabled={busy} onClick={() => void downloadPending()}>
+          <Icon name="download" size={18} /> Pobierz dane
+        </button>
       </section>
     );
   }

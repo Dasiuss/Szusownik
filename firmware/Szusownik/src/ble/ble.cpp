@@ -292,6 +292,7 @@ bool BleFiles::startStream(const String& name) {
   oldestUnacked_ = 0;
   endSent_ = false;
   inputEof_ = false;
+  compFinished_ = false;
   rawBytes_ = 0;
   compBytes_ = 0;
   frameCount_ = 0;
@@ -391,9 +392,14 @@ void BleFiles::pumpStream() {
   }
 
   // 2) produkcja nowych ramek (max 16 na poll, żeby nie blokować pętli).
+  // pend_ jest stagingiem: cały output kompresora trafia do niego, wysyłamy
+  // pełne ramki i przesuwamy resztę. emitFrame() przy pacingu nie kopiuje
+  // danych, więc return nie może ich zgubić.
   uint8_t made = 0;
   while (made < 16 && (nextSeq_ - oldestUnacked_) < SZ_BLE_WINDOW) {
-    if (!endSent_) {
+    if (endSent_) break;
+
+    if (!compFinished_) {
       // Dociągnij dane wejściowe.
       if (!inputEof_ && inPos_ >= inLen_) {
         inLen_ = storage_ ? storage_->readBytes(inBuf_, sizeof(inBuf_)) : 0;
@@ -405,7 +411,7 @@ void BleFiles::pumpStream() {
           fileCrc_ = szCrc32Update(fileCrc_, inBuf_, inLen_);
         }
       }
-      // Kompresuj porcją.
+      // Kompresuj porcją i dopisz CAŁY output do stagingu.
       const void* inPtr = (!inputEof_ && inLen_ > inPos_) ? (inBuf_ + inPos_) : nullptr;
       size_t inAvail = (!inputEof_ && inLen_ > inPos_) ? (inLen_ - inPos_) : 0;
       uint8_t out[256];
@@ -416,33 +422,33 @@ void BleFiles::pumpStream() {
                                     : TDEFL_STATUS_DONE;
       inPos_ = inLen_ - inAvail;
       size_t produced = sizeof(out) - outAvail;
-      // Dopisz do bufora częściowej ramki.
-      size_t op = 0;
-      while (op < produced) {
-        size_t room = SZ_BLE_PAYLOAD_SIZE - pendLen_;
-        size_t cp = produced - op < room ? produced - op : room;
-        memcpy(pend_ + pendLen_, out + op, cp);
-        pendLen_ += cp;
-        op += cp;
-        if (pendLen_ == SZ_BLE_PAYLOAD_SIZE) {
-          if (!emitFrame(pend_, pendLen_)) return;  // pacing — reszta w kolejnym poll
-          pendLen_ = 0;
-          made++;
-        }
+      if (produced > 0) {
+        memcpy(pend_ + pendLen_, out, produced);
+        pendLen_ += produced;
       }
       if (st == TDEFL_STATUS_DONE) {
-        if (pendLen_ > 0) {
-          if (!emitFrame(pend_, pendLen_)) return;
-          pendLen_ = 0;
-          made++;
-        }
-        sendEndMarker();
+        compFinished_ = true;
       } else if (produced == 0 && !inputEof_) {
-        break;  // kompresor czeka na więcej wejścia, a okno pełne — wyjdź
+        break;  // kompresor czeka na więcej wejścia — wróć w kolejnym poll
       }
-      if (endSent_) break;
-    } else {
-      break;  // end marker wysłany — czekamy na finalny ACK
+    }
+
+    // Wyślij wszystkie pełne ramki; częściowa reszta zostaje w pend_.
+    while (pendLen_ >= SZ_BLE_PAYLOAD_SIZE && made < 16) {
+      if (!emitFrame(pend_, SZ_BLE_PAYLOAD_SIZE)) return;  // pacing — dane zostają
+      memmove(pend_, pend_ + SZ_BLE_PAYLOAD_SIZE, pendLen_ - SZ_BLE_PAYLOAD_SIZE);
+      pendLen_ -= SZ_BLE_PAYLOAD_SIZE;
+      made++;
+    }
+
+    if (compFinished_ && pendLen_ < SZ_BLE_PAYLOAD_SIZE) {
+      if (pendLen_ > 0) {
+        if (!emitFrame(pend_, pendLen_)) return;  // pacing — dane zostają
+        pendLen_ = 0;
+        made++;
+      }
+      sendEndMarker();
+      break;
     }
   }
 

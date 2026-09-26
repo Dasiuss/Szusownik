@@ -184,6 +184,12 @@ wynika ze stałego tempa, a utracone ramki odzyskuje ACK/NACK i ring buffer.
 - Przy `START` wyzerować sekwencje, okno, CRC, liczniki i stan pliku.
 - Po `STOP`, rozłączeniu lub błędzie zwolnić uchwyt pliku i zatrzymać pompę.
 - Po timeoutach ACK rozpocząć replay od najstarszej niepotwierdzonej ramki.
+- Bufor stagingu ramki (`pend_`) musi pomieścić **cały** output kompresora
+  (użyty `out` ma 256 B > payload 240 B). Przy pacingu `emitFrame()` nie kopiuje
+  danych i zwraca `false`; `return` w tym miejscu nie może zgubić reszty bufora,
+  bo powstałby dziurawy strumień zlib (PWA: „Junk found after end of compressed
+  data"). Najpierw dokładamy cały output do stagingu, potem wysyłamy pełne ramki
+  i przesuwamy resztę.
 - Zaakceptować ACK tylko w zakresie `oldestUnacked < ack <= nextSequence`.
 - Po trzech nieudanych replay zgłosić jawny błąd do PWA, a nie tylko do Serial.
 - W finalnej wersji dodać status transferu lub characteristic error/status.

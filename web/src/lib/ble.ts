@@ -368,8 +368,7 @@ export class SzusownikBle {
       finished = true;
     };
 
-    const handleFrame = async (view: DataView) => {
-      const bytes = dvBytes(view);
+    const handleFrame = async (bytes: Uint8Array) => {
       if (bytes.length < SZ_BLE_HEADER) return;
       const seq =
         bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] * 0x1000000);
@@ -404,7 +403,10 @@ export class SzusownikBle {
     const onNotify = (e: Event) => {
       const v = (e.target as BluetoothRemoteGATTCharacteristic).value;
       if (!v) return;
-      chain = chain.then(() => handleFrame(v)).catch((err) => {
+      // Kopiujemy synchronicznie: bufor DataView może być współdzielony między
+      // notyfikacjami, a handleFrame wykonuje się asynchronicznie (kolejka chain).
+      const bytes = dvBytes(v);
+      chain = chain.then(() => handleFrame(bytes)).catch((err) => {
         failed = err;
       });
     };
@@ -458,6 +460,14 @@ export class SzusownikBle {
         await reader.cancel();
       } catch {
         /* jw. */
+      }
+      if (!finished) {
+        // Transfer nie doszedł do końca — zatrzymaj firmware, żeby nie replayował.
+        try {
+          await this.writeCtrl("STOP");
+        } catch {
+          /* połączenie mogło już paść */
+        }
       }
     }
   }

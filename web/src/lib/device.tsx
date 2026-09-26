@@ -42,6 +42,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const bleRef = useRef<SzusownikBle | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempted = useRef(false);
+  const downloadingRef = useRef(false);
   const [state, setState] = useState<DeviceState>("disconnected");
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [pendingFiles, setPendingFiles] = useState<FileMeta[]>([]);
@@ -119,7 +120,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   async function downloadPending() {
     const client = bleRef.current;
-    if (!client || pendingFiles.length === 0) return;
+    if (!client || pendingFiles.length === 0 || downloadingRef.current) return;
+    downloadingRef.current = true;
     setError(null);
     setState("downloading");
     setProgress(null);
@@ -136,6 +138,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       setState("connected");
       setError(errorMessage(caught));
       armIdleTimer();
+    } finally {
+      downloadingRef.current = false;
     }
   }
 
