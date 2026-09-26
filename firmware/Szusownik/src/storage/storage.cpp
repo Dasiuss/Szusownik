@@ -28,6 +28,7 @@ bool Storage::openLog(const String& stamp) {
   }
   if (logFile.size() == 0) logFile.println(SZ_CSV_HEADER);
   fileOpen_ = true;
+  metaWritten_ = false;  // nowy plik: .meta dopiero po potwierdzonym ruchu
   SZ_LOGIF("SD open %s", currentName_.c_str());
   return true;
 }
@@ -83,6 +84,7 @@ void Storage::close() {
     logFile.flush();
     logFile.close();
     fileOpen_ = false;
+    metaWritten_ = false;
   }
 }
 
@@ -118,6 +120,33 @@ void Storage::updateFileRotation(float kmh, bool fixValid) {
   }
 }
 
+void Storage::ensureMeta() {
+  // Warunek: otwarty plik + potwierdzony ruch (uzbrojenie rolki) + brak .meta.
+  // Kolejność jest istotna: .meta powstaje i jest domykane (flush) w chwili
+  // potwierdzenia ruchu, więc brak .meta niezawodnie znaczy "brak jazdy".
+  if (!ready_ || !fileOpen_ || !fileRotationArmed_ || metaWritten_) return;
+  String p = currentName_;
+  if (!p.startsWith("/")) p = "/" + p;
+  String metaPath = p + SZ_CSV_META_SUFFIX;
+  File m = SD.open(metaPath, FILE_WRITE);
+  if (!m) {
+    SZ_LOGEF("SD meta open fail %s", metaPath.c_str());
+    return;
+  }
+  m.printf("v=1\ncsv=%s\n", currentName_.c_str());
+  m.flush();
+  m.close();
+  metaWritten_ = true;
+  SZ_LOGIF("SD meta %s", metaPath.c_str());
+}
+
+// Czy istnieje plik towarzyszący .meta (decyduje o widoczności CSV w liście).
+static bool csvHasMeta(const String& csvName) {
+  String p = csvName;
+  if (!p.startsWith("/")) p = "/" + p;
+  return SD.exists(p + SZ_CSV_META_SUFFIX);
+}
+
 uint32_t Storage::countCsv() const {
   if (!ready_) return 0;
   uint32_t count = 0;
@@ -128,7 +157,7 @@ uint32_t Storage::countCsv() const {
     if (!f) break;
     if (!f.isDirectory()) {
       String n = String(f.name());
-      if (n.endsWith(".csv") || n.endsWith(".CSV")) count++;
+      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n)) count++;
     }
     f.close();
   }
@@ -147,7 +176,7 @@ bool Storage::csvAt(uint32_t index, String& name, unsigned long& size) const {
     if (!f) break;
     if (!f.isDirectory()) {
       String n = String(f.name());
-      if (n.endsWith(".csv") || n.endsWith(".CSV")) {
+      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n)) {
         if (seen == index) {
           name = n;
           size = (unsigned long)f.size();
@@ -258,6 +287,9 @@ void Storage::ensureFreeSpace() {
     if (fileOpen_ && currentName_.endsWith(oldest)) return;  // nie rusz bieżącego
     if (SD.remove(oldest)) {
       SZ_LOGWF("SD FIFO kasuje %s", oldest.c_str());
+      String mp = oldest;
+      if (!mp.startsWith("/")) mp = "/" + mp;
+      SD.remove(mp + SZ_CSV_META_SUFFIX);  // plik towarzyszący
     } else {
       return;
     }

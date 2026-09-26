@@ -8,6 +8,20 @@ wypracowanych w trzech projektach testowych:
 - `DisplayTest` - lokalny HUD na OLED SSD1306 oraz bitmapowy protokół ekranu.
 - `MapyTest` - wizualizacja tras narciarskich i lokalny routing.
 
+## Charakter projektu
+
+To projekt **greenfield**. Nie ma jeszcze użytkowników, nie istnieją żadne dane,
+o których utratę się boimy, i nie ma żadnej potrzeby utrzymywania
+kompatybilności wstecznej. Projekt zawsze testuje jedna osoba i zawsze na
+najnowszej wersji firmware i PWA. Dlatego:
+
+- Nie pisz migracji danych, kodu kompatybilności wstecznej, fallbacków starych
+  wersji ani ścieżek deprecjacji.
+- Zmieniaj formaty, protokoły, schematy i interfejsy wprost, bez warstw
+  pośrednich „na wszelki wypadek" i bez oglądania się na starsze wydania.
+- Zamiast migrować lub wspierać starą wersję — po prostu zaktualizuj kod i dane
+  do najnowszej postaci.
+
 ## Dokumentacja referencyjna
 
 - `docs/ustalenia-z-projektow-testowych.md` - architektura docelowa, wspólne decyzje,
@@ -76,6 +90,16 @@ wypracowanych w trzech projektach testowych:
     GNSS i diagnostyka UBX/BLE są tylko w DEBUG i wycinane kompilacyjnie.
     Nie przywracaj osobnych `SZ_DEBUG_*`/`SZ_STOK_MODE` ani per-próbkowego
     `FIX`/`SAMPLE` — dane per próbka są trwale w CSV.
+15. Plik CSV bez pliku towarzyszącego `<nazwa>.csv.meta` jest „postojowy":
+    firmware go **nie listuje** (`countCsv`/`csvAt` tylko z `.meta`), więc PWA go
+    nie widzi i nie pobiera. `.meta` powstaje po potwierdzonym ruchu (>5 km/h
+    przez 3 s, `Storage::ensureMeta`), a jego brak ma niezawodnie znaczyć „brak
+    jazdy". Nie wracaj do progu rozmiaru ani migracji starych plików (greenfield).
+    Trwale uszkodzone pliki z `.meta` (rozmiar/CRC/nagłówek/brak próbek) PWA
+    zapisuje w tabeli `ignoredFiles` i nie ponawia; ostrzega raz, z podpowiedzią
+    odzyskania z karty na komputerze. Błędy przejściowe (timeout, rozłączenie,
+    kody `err:`) zostają w kolejce do ponowienia. Szczegóły w
+    `docs/wymagania-ESP.md` §6/§7 i `docs/wymagania-PWA.md` §7.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

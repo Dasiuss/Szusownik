@@ -225,6 +225,7 @@ otrzymanych danych.
 
 > Stan: zaimplementowane w `firmware/Szusownik/src/ble/` i `web/src/lib/ble.ts`.
 > Test e2e z telefonem — przed nami.
+> 2026-09-26: widoczność plików przez `.meta` + klasyfikacja błędów po stronie PWA.
 
 GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
 
@@ -304,6 +305,15 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.
 - Błędy mają jawne kody (`err:open`, `err:deflate`, `err:ack-timeout`,
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
+- **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`csvAt` listują
+  wyłącznie CSV z plikiem towarzyszącym `<nazwa>.csv.meta`, który powstaje po
+  potwierdzonym ruchu (`docs/wymagania-ESP.md` §7). Pliki postojowe są ukryte, więc
+  PWA ich nie pobiera; `INFO.fileCount` również liczy tylko widoczne pliki.
+- **PWA rozdziela błędy trwałe od przejściowych** (2026-09-26): niezgodny
+  rozmiar/CRC, zły nagłówek i brak próbek rzucają `PermanentDownloadError`, plik
+  trafia do `ignoredFiles` (zero ponowień) i dostaje jednorazowe ostrzeżenie.
+  Timeout, rozłączenie oraz kody `err:` z STATUS są przejściowe i zostają w
+  kolejce do ponowienia. PWA nie bramkuje tego po wersji firmware.
 
 PWA porównuje nazwy plików z IndexedDB i pobiera tylko nowe. Dane pozostają na
 karcie jako backup. Żądanie synchronizacji zamyka najpierw aktualny plik

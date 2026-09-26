@@ -97,9 +97,30 @@ export interface SyncedFile {
   samples: number;
 }
 
+/** Uszkodzony na karcie plik z danymi zjazdu — nie da się go już odzyskać przez BLE. */
+export interface CorruptFile {
+  meta: FileMeta;
+  reason: string;
+}
+
 export interface DownloadResult {
   done: SyncedFile[];
-  failed: FileMeta[];
+  /** Błędy przejściowe (timeout, rozłączenie) — warte ponowienia. */
+  transient: FileMeta[];
+  /** Trwałe uszkodzenie danych — zapis do ignoredFiles, zero ponowień. */
+  corrupt: CorruptFile[];
+}
+
+/**
+ * Trwałe, nieodwracalne uszkodzenie pliku na karcie (rozmiar/CRC/nagłówek/brak
+ * próbek). Powtórki z definicji nic nie dadzą — taki plik jest pomijany.
+ * Błędy przejściowe rzucamy zwykłym Error.
+ */
+export class PermanentDownloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentDownloadError";
+  }
 }
 
 let crcTable: Uint32Array | null = null;
@@ -440,13 +461,21 @@ export class SzusownikBle {
       }
       // Walidacja end-to-end: rozmiar (INFO), CRC (STATUS done), schemat CSV.
       const status = await this.pollStatus(/crc=[0-9A-Fa-f]{8}/);
+      if (status.startsWith("err:")) {
+        // Błąd urządzenia (np. err:ack-timeout/err:nomem/err:busy) — przejściowy.
+        throw new Error(`Urządzenie przerwało transfer (${status})`);
+      }
       const mCrc = /crc=([0-9A-Fa-f]{8})/.exec(status);
+      if (!mCrc) {
+        // Brak potwierdzenia CRC — traktujemy jako przejściowe, nie jako śmieć.
+        throw new Error(`Brak statusu CRC z urządzenia (STATUS: ${status})`);
+      }
       const gotCrc = (crc ^ 0xffffffff) >>> 0;
-      if (!mCrc || parseInt(mCrc[1], 16) >>> 0 !== gotCrc) {
-        throw new Error(`Niezgodne CRC (STATUS: ${status})`);
+      if (parseInt(mCrc[1], 16) >>> 0 !== gotCrc) {
+        throw new PermanentDownloadError(`Niezgodne CRC (STATUS: ${status})`);
       }
       if (outLen !== meta.size) {
-        throw new Error(`Niezgodny rozmiar: ${outLen} vs ${meta.size} (INFO)`);
+        throw new PermanentDownloadError(`Niezgodny rozmiar: ${outLen} vs ${meta.size} (INFO)`);
       }
       const flat = new Uint8Array(outLen);
       let off = 0;
@@ -457,9 +486,9 @@ export class SzusownikBle {
       const text = new TextDecoder().decode(flat);
       const header = text.slice(0, text.indexOf("\n")).trim();
       if (header !== DEVICE_CSV_V2_HEADER) {
-        throw new Error(`Zły nagłówek CSV: ${header}`);
+        throw new PermanentDownloadError(`Zły nagłówek CSV: ${header}`);
       }
-      if (lines < 2) throw new Error("Plik bez próbek");
+      if (lines < 2) throw new PermanentDownloadError("Plik bez próbek");
       return text;
     } finally {
       clearTimeout(timeout);
@@ -491,6 +520,9 @@ export class SzusownikBle {
     const known = new Set(
       ((await db.files.toCollection().primaryKeys()) as string[]).map((name) => name.replace(/^\//, "")),
     );
+    const ignored = new Set(
+      ((await db.ignoredFiles.toCollection().primaryKeys()) as string[]).map((name) => name.replace(/^\//, "")),
+    );
     const fresh: FileMeta[] = [];
     for (let index = 0; index < info.fileCount; index++) {
       await this.writeCtrl(`FILE:${index}`);
@@ -500,7 +532,8 @@ export class SzusownikBle {
       const match = new RegExp(`^file ${index} (\\S+) (\\d+)$`).exec(status);
       if (!match) throw new Error(`Zła odpowiedź listy plików: ${status}`);
       const name = match[1];
-      if (!known.has(name.replace(/^\//, ""))) fresh.push({ name, size: Number(match[2]) });
+      const bare = name.replace(/^\//, "");
+      if (!known.has(bare) && !ignored.has(bare)) fresh.push({ name, size: Number(match[2]) });
     }
     return fresh;
   }
@@ -510,7 +543,8 @@ export class SzusownikBle {
     onProgress: (p: SyncProgress) => void,
   ): Promise<DownloadResult> {
     const done: SyncedFile[] = [];
-    const failed: FileMeta[] = [];
+    const transient: FileMeta[] = [];
+    const corrupt: CorruptFile[] = [];
     let fileIndex = 0;
     for (const meta of fresh) {
       fileIndex++;
@@ -535,17 +569,19 @@ export class SzusownikBle {
       } catch (caught) {
         // Jeden uszkodzony plik nie może blokować pozostałych.
         console.error(`[ble] pobieranie ${name} nieudane`, caught);
-        failed.push(meta);
+        const reason = caught instanceof Error ? caught.message : String(caught);
+        if (caught instanceof PermanentDownloadError) corrupt.push({ meta, reason });
+        else transient.push(meta);
       }
     }
-    return { done, failed };
+    return { done, transient, corrupt };
   }
 
   /**
    * Sync: ROTATE (domknięcie bieżącego pliku) → lista → pobierz tylko nowe
    * (porównanie po nazwie z IndexedDB) → zapis surowego CSV → IndexedDB.
    */
-  async syncNewFiles(onProgress: (p: SyncProgress) => void): Promise<SyncedFile[]> {
+  async syncNewFiles(onProgress: (p: SyncProgress) => void): Promise<DownloadResult> {
     try {
       await this.connect();
       const fresh = await this.checkNewFiles();

@@ -91,6 +91,10 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   domykany, a nowy otwiera się przy kolejnej próbce. Dane „w ruchu" lądują w
   zamkniętym pliku, więc w chwili odcięcia zasilania otwarty jest tylko plik z
   próbkami z postoju (bezwartościowy). Jeden postój = jedna rolka.
+- **Plik towarzyszący `.meta`**: `<nazwa>.csv.meta` powstaje po potwierdzonym
+  ruchu (§7). Jego brak oznacza plik postojowy — takiego CSV firmware **nie
+  listuje** (`countCsv`/`csvAt`), więc PWA go nie widzi i nie pobiera. Format
+  prosty `klucz=wartość` (`v=1`, `csv=<nazwa>`), rozszerzalny bez serializera JSON.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
 - **Okresowy flush pliku** co `SZ_SD_COMMIT_MS` (10 s). `File::flush()` to
   `fflush` + `fsync`, a `fsync` na VFS FAT (`vfs_fat_fsync`, potwierdzone
@@ -123,6 +127,15 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   zanik fixa w ruchu (tunel, garaż) fałszywie rolowałby przejazd.
 - Zapis trwa cały czas; roll to tylko `close()` — próbki z postoju po rolce
   trafiają do nowego pliku i są świadomie „do stracenia".
+- **Zapis `.meta`** (`Storage::ensureMeta()`, wołane co iterację pętli): tworzy
+  `<bieżący>.csv.meta` i domyka go (`flush`) w chwili uzbrojenia rolki, czyli po
+  potwierdzonym ruchu (> 5 km/h przez 3 s). Kolejność jest istotna — brak `.meta`
+  ma niezawodnie znaczyć „ten plik nigdy nie miał jazdy". Jeśli prąd padnie przed
+  zapisem `.meta`, w CSV nie ma jeszcze żadnej próbki z jazdy, więc nic cennego
+  nie ginie. `.meta` powstaje też dla pliku otwartego, gdy uzbrojenie już trwa
+  (np. ruch tuż po starcie urządzenia).
+- Pliki bez `.meta` **nie są kasowane** — zostają na karcie. FIFO
+  (`ensureFreeSpace`) kasuje CSV razem z jego `.meta`.
 - Rolka na podjazd (wysokościowa) **usunięta** — jeden mechanizm, nie dwa.
   Cięcie na zjazdy robi PWA (własna metoda, `web/src/lib/runs.ts`).
 - Progi do dostrojenia (patrz „Otwarte punkty").
@@ -130,7 +143,8 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 ## 8. Transfer BLE + sprzątanie
 
 - PWA prosi o **listę plików** (nazwa + rozmiar + czas startu) i pobiera **tylko nowe**
-  (porównanie po nazwie — patrz `docs/wymagania-PWA.md`).
+  (porównanie po nazwie — patrz `docs/wymagania-PWA.md`). Na liście są wyłącznie
+  CSV z plikiem `.meta` (czyli takie, które miały ruch) — pliki postojowe są ukryte.
 - **Nie kasujemy danych z SD** — zostają jako backup. Oznaczanie „wysłane" na urządzeniu
   nie jest potrzebne (PWA śledzi co ma w IndexedDB).
 - Sprzątanie: gdy karta jest pełna — kasuj **najstarsze pliki** (FIFO) lub ręcznie.

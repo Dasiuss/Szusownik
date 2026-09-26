@@ -8,6 +8,12 @@
 #define SZ_WIRE_PROTO "szusownik/ble-file-v1"
 #define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro,gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms"
 
+// Plik towarzyszący "<nazwa>.csv.meta" powstaje dopiero po potwierdzonym ruchu
+// (> SZ_ROLL_REARM_ABOVE_KMH przez SZ_ROLL_HOLD_MS). Jego brak oznacza plik
+// "postojowy": firmware go nie listuje, więc PWA go nie pobiera. Format prosty
+// klucz=wartość (ini-podobny), rozszerzalny bez serializera JSON.
+#define SZ_CSV_META_SUFFIX ".meta"
+
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
 // 50-70:3Hz, 70-80:6Hz, >=80:10Hz. Histereza +/-3 km/h.
 static const float SZ_HYST_KMH = 3.0f;

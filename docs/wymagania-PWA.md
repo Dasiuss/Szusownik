@@ -101,6 +101,15 @@ na nagraniach z auta defaulty wystarczą.
 
 - PWA prosi urządzenie o **listę plików** (nazwa + rozmiar + czas startu).
 - Porównuje z plikami już posiadanymi w IndexedDB (**po nazwie**) i pobiera **tylko nowe**.
+- **Pliki postojowe są niewidoczne**: firmware listuje wyłącznie CSV z plikiem
+  towarzyszącym `.meta` (patrz `docs/wymagania-ESP.md` §7), więc PWA nigdy nie widzi
+  ani nie próbuje pobierać plików bez jazdy. Zero błędów i ponowień dla śmieci.
+- **Klasyfikacja błędów pobierania.** Trwałe uszkodzenie danych (niezgodny
+  rozmiar/CRC, zły nagłówek, brak próbek) zapisujemy w `ignoredFiles` i **nie
+  ponawiamy**; użytkownik dostaje jednorazowe ostrzeżenie z podpowiedzią, że plik
+  zostaje na karcie i można spróbować odzyskać go na komputerze. Błędy przejściowe
+  (timeout, rozłączenie, `err:ack-timeout`/`err:nomem`/`err:busy`) zostają w
+  kolejce do ponowienia.
 - **Żądanie pobrania rotuje plik na urządzeniu** — pobierane pliki są zawsze kompletne.
 - Sync po nazwie pliku (nie po zakresie timestampów): całe pliki, idempotentne, bez problemu
   dryfu zegara.
@@ -110,7 +119,7 @@ na nagraniach z auta defaulty wystarczą.
   trzymane osobno, po stabilnym id zjazdu, więc ponowna materializacja ich nie gubi.
 - Materializacja jest idempotentna i wykonywana tylko wtedy, gdy zmienił się zbiór
   plików albo wersja analizy (`QUALITY_ANALYSIS_VERSION`); inaczej jest pomijana.
-  Schemat Dexie v4: `files`, `runs`, `runLabels`, `deletedRuns`, `meta`.
+  Schemat Dexie v5: `files`, `runs`, `runLabels`, `deletedRuns`, `ignoredFiles`, `meta`.
 
 ## 8. Dane testowe (rzeczywisty ślad, metryki GNSS z urządzenia)
 
@@ -125,8 +134,8 @@ na nagraniach z auta defaulty wystarczą.
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
-- **Dexie.js 4** — IndexedDB, schemat v4 (surowe pliki + materializowane zjazdy +
-  etykiety/tombstone'y + metadane).
+- **Dexie.js 4** — IndexedDB, schemat v5 (surowe pliki + materializowane zjazdy +
+  etykiety/tombstone'y + trwale pominięte pliki + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
 - **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa

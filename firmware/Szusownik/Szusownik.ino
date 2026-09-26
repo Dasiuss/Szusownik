@@ -146,6 +146,9 @@ void loop() {
   // Rolka na postoju: domyka plik, gdy stoimy (chroni dane przed odcięciem
   // zasilania). Wołane co iterację (na millis), nie tylko na nowej próbce.
   storage.updateFileRotation(kmh, fix);
+  // .meta po potwierdzonym ruchu: bez niego plik jest uznawany za postojowy
+  // i nie trafia do listy pobierania (PWA go nie widzi).
+  storage.ensureMeta();
 
   // Statystyki: dystans z kolejnych fixów (haversine), max dnia / ostatniego zjazdu.
   if (fix) {

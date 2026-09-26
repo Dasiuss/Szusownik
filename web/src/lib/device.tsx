@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { materializeAll } from "./data.ts";
+import { db } from "./db.ts";
 import {
   SzusownikBle,
   type DeviceInfo,
@@ -126,16 +127,30 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setState("downloading");
     setProgress(null);
     try {
-      const { failed } = await client.downloadFiles(pendingFiles, setProgress);
+      const { transient, corrupt } = await client.downloadFiles(pendingFiles, setProgress);
       await materializeAll();
-      setPendingFiles(failed);
+      // Trwale uszkodzone pliki zapamiętujemy, żeby nie wracały w każdej synchronizacji.
+      for (const { meta, reason } of corrupt) {
+        await db.ignoredFiles.put({
+          name: meta.name.replace(/^\//, ""),
+          reason,
+          ignoredAt: new Date().toISOString(),
+        });
+      }
+      setPendingFiles(transient);
       setProgress(null);
-      if (failed.length > 0) {
-        setError(
-          `Nie udało się pobrać ${failed.length} z ${pendingFiles.length} plików: ` +
-            failed.map((file) => file.name).join(", "),
+      const notices: string[] = [];
+      if (corrupt.length > 0) {
+        const names = corrupt.map((entry) => entry.meta.name).join(", ");
+        notices.push(
+          `Pominięto uszkodzony plik z danymi zjazdu: ${names}. ` +
+            "Plik zostaje na karcie — możesz spróbować odzyskać go na komputerze.",
         );
       }
+      if (transient.length > 0) {
+        notices.push(`Nie udało się pobrać ${transient.length} plików — spróbuj ponownie.`);
+      }
+      if (notices.length > 0) setError(notices.join(" "));
       setLastSyncAt(new Date().toISOString());
       setDataRevision((revision) => revision + 1);
       setState("connected");

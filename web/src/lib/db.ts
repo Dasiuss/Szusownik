@@ -46,11 +46,20 @@ export interface StoredDeletedRun {
   deletedAt: string;
 }
 
+/** Trwale pominięty plik (uszkodzony na karcie) — nigdy nie ponawiamy pobierania.
+ *  Zostaje na SD jako backup; wpis znika dopiero z resetem danych PWA. */
+export interface StoredIgnoredFile {
+  name: string;
+  reason: string;
+  ignoredAt: string;
+}
+
 class SzusownikDb extends Dexie {
   files!: Table<StoredFile, string>;
   runs!: Table<StoredRun, string>;
   runLabels!: Table<StoredRunLabel, string>;
   deletedRuns!: Table<StoredDeletedRun, string>;
+  ignoredFiles!: Table<StoredIgnoredFile, string>;
   meta!: Table<StoredMeta, string>;
 
   constructor() {
@@ -96,6 +105,15 @@ class SzusownikDb extends Dexie {
         // Wymuś jednorazowe przeliczenie na nowym, scalonym pipeline.
         await tx.table("runs").clear();
       });
+    // v5: trwale pominięte pliki (uszkodzone na karcie) — zero ponowień.
+    this.version(5).stores({
+      files: "name, receivedAt, userId",
+      runs: "id, dayKey, startT, label, demo",
+      runLabels: "id",
+      deletedRuns: "id",
+      ignoredFiles: "name",
+      meta: "key",
+    });
   }
 }
 

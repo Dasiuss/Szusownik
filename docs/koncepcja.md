@@ -98,6 +98,9 @@ Dwa główne elementy:
   wysokość barometryczna (BME280).
 - **Rotacja plików** na urządzeniu: domknięcie pliku na postoju (ochrona przed odcięciem zasilania) oraz przy żądaniu pobrania; PWA pobiera
   pliki po nazwie (lista + porównanie), bez kasowania danych z karty.
+- **Pliki z jazdą znaczone `.meta`**: plik `<nazwa>.csv.meta` powstaje po
+  potwierdzonym ruchu; bez niego CSV jest „postojowy" i nie trafia na listę
+  pobierania, więc PWA nie widzi śmieci z postoju.
 - **Cięcie trasy przy kliknięciu w PWA**: aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia. Ograniczenie: maksymalnie **bieżący dzień** — jeśli poprzednie cięcie było
   wcześniejszego dnia, uwzględniane są tylko dane z dzisiaj (starsze zostają niewrzucone).
