@@ -56,9 +56,11 @@ bool BleFiles::allocStreamMem() {
 
 void BleFiles::refreshInfo() {
   if (!chrInfo) return;
-  String arr = storage_ ? storage_->listJsonArray() : String("[]");
-  String j = "{\"proto\":\"" SZ_WIRE_PROTO "\",\"fw\":\"" SZ_FW_VERSION "\",\"files\":";
-  j += arr;
+  // INFO celowo małe: pełna lista plików nie mieści się w limicie 512 B atrybutu
+  // ATT (Web Bluetooth i tak nie odczyta >512 B), a przekroczenie zeruje wartość
+  // w NimBLE. Metadane plików PWA pobiera pojedynczo przez FILE:<i>.
+  String j = "{\"proto\":\"" SZ_WIRE_PROTO "\",\"fw\":\"" SZ_FW_VERSION "\",\"fileCount\":";
+  j += String(storage_ ? (unsigned long)storage_->countCsv() : 0UL);
   if (beeper_) {
     j += ",\"volLow\":";
     j += String(beeper_->volLow());
@@ -153,6 +155,17 @@ void BleFiles::handleCommand(const String& cmd) {
     if (storage_) storage_->rotateForSync();
     refreshInfo();
     setStatus("ok");
+  } else if (cmd.startsWith("FILE:")) {
+    uint32_t index = (uint32_t)cmd.substring(5).toInt();
+    String name;
+    unsigned long size = 0;
+    if (storage_ && storage_->csvAt(index, name, size)) {
+      char msg[96];
+      snprintf(msg, sizeof(msg), "file %s %lu", name.c_str(), size);
+      setStatus(String(msg));
+    } else {
+      setStatus("err:file");
+    }
   } else if (cmd.startsWith("DRYRUN:")) {
     String name = cmd.substring(7);
     name.trim();

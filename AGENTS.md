@@ -57,6 +57,11 @@ wypracowanych w trzech projektach testowych:
     przywracaj fallbacków wersji ani komend `GET*`.
 11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo. Build weryfikuje
     sam użytkownik i zgłasza, jeśli coś się nie powiodło.
+12. Nie wkładaj pełnej listy plików do INFO. Wartość atrybutu ATT ma limit 512 B
+    (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE —
+    PWA dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
+    pobiera się komendą `FILE:<i>` (STATUS `file <nazwa> <rozmiar>`). Szczegóły w
+    `docs/ble-transfer.md` §10.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

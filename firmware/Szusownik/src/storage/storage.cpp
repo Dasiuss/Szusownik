@@ -94,27 +94,48 @@ void Storage::noteSample(float altM) {
   }
 }
 
-String Storage::listJsonArray() const {
-  String out = "[";
+uint32_t Storage::countCsv() const {
+  uint32_t count = 0;
   File root = SD.open("/");
-  if (!root) return "[]";
-  bool first = true;
+  if (!root) return 0;
+  while (true) {
+    File f = root.openNextFile();
+    if (!f) break;
+    if (!f.isDirectory()) {
+      String n = String(f.name());
+      if (n.endsWith(".csv") || n.endsWith(".CSV")) count++;
+    }
+    f.close();
+  }
+  root.close();
+  return count;
+}
+
+bool Storage::csvAt(uint32_t index, String& name, unsigned long& size) const {
+  uint32_t seen = 0;
+  File root = SD.open("/");
+  if (!root) return false;
+  bool found = false;
   while (true) {
     File f = root.openNextFile();
     if (!f) break;
     if (!f.isDirectory()) {
       String n = String(f.name());
       if (n.endsWith(".csv") || n.endsWith(".CSV")) {
-        if (!first) out += ",";
-        first = false;
-        out += "{\"name\":\"" + n + "\",\"size\":" + String((unsigned long)f.size()) + "}";
+        if (seen == index) {
+          name = n;
+          size = (unsigned long)f.size();
+          found = true;
+          f.close();
+          break;
+        }
+        seen++;
       }
     }
     f.close();
   }
   root.close();
-  out += "]";
-  return out;
+  return found;
 }
 
 bool Storage::openRead(const String& name) {

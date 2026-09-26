@@ -250,7 +250,7 @@ export default function SettingsView() {
       ) : (
         <section className="device-info-card">
           <div className="device-info-main"><div className="connected-mark"><Icon name="check" size={18} /></div><div><strong>Szusownik</strong><span>Połączenie aktywne</span></div></div>
-          <div className="device-info-values"><span>FW <b>{device.info?.fw ?? "—"}</b></span><span>Plików <b>{device.info?.files.length ?? 0}</b></span></div>
+          <div className="device-info-values"><span>FW <b>{device.info?.fw ?? "—"}</b></span><span>Plików <b>{device.info?.fileCount ?? 0}</b></span></div>
           <button className="button button-ghost" onClick={device.disconnect}>Rozłącz</button>
         </section>
       )}
@@ -261,7 +261,6 @@ export default function SettingsView() {
 
       {(settingsError || device.error) && (
         <div className="alert-card alert-card-error">
-          <Icon name="x" size={18} />
           <span>{settingsError ?? device.error}</span>
           <button className="alert-card-close" type="button" aria-label="Zamknij" onClick={dismissError}>
             <Icon name="x" size={14} />

@@ -27,7 +27,7 @@ export interface FileMeta {
 
 export interface DeviceInfo {
   fw: string;
-  files: FileMeta[];
+  fileCount: number;
   volLow: number;
   volHigh: number;
   freqShort: number;
@@ -201,7 +201,7 @@ export class SzusownikBle {
         `Zły JSON INFO z urządzenia (${bytes.length} B): ${text.slice(0, 160)}${text.length > 160 ? "…" : ""}`,
       );
     }
-    if (!Array.isArray(info.files)) throw new Error("Zły format INFO z urządzenia");
+    if (typeof info.fileCount !== "number") throw new Error("Zły format INFO z urządzenia");
     for (const field of SzusownikBle.INFO_NUMBER_FIELDS) {
       if (typeof info[field] !== "number") {
         throw new Error(`Brak pola ${field} w INFO urządzenia`);
@@ -465,8 +465,19 @@ export class SzusownikBle {
   async checkNewFiles(): Promise<FileMeta[]> {
     await this.writeCtrl("ROTATE");
     const info = await this.readInfo();
-    const known = new Set((await db.files.toCollection().primaryKeys()) as string[]);
-    return info.files.filter((file) => !known.has(file.name) && !known.has(`/${file.name}`));
+    const known = new Set(
+      ((await db.files.toCollection().primaryKeys()) as string[]).map((name) => name.replace(/^\//, "")),
+    );
+    const fresh: FileMeta[] = [];
+    for (let index = 0; index < info.fileCount; index++) {
+      await this.writeCtrl(`FILE:${index}`);
+      const status = await this.pollStatus(/^file \S+ \d+$/);
+      const match = /^file (\S+) (\d+)$/.exec(status);
+      if (!match) throw new Error(`Zła odpowiedź listy plików: ${status}`);
+      const name = match[1];
+      if (!known.has(name.replace(/^\//, ""))) fresh.push({ name, size: Number(match[2]) });
+    }
+    return fresh;
   }
 
   async downloadFiles(

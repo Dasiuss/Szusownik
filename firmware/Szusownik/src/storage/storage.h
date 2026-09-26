@@ -15,7 +15,9 @@ class Storage {
   void close();
   bool isOpen() const { return fileOpen_; }
   String currentName() const { return currentName_; }
-  String listJsonArray() const;  // [{"name":..,"size":..},..]
+  uint32_t countCsv() const;  // liczba plików CSV na karcie (bez katalogów)
+  // i-ty plik CSV w stabilnej kolejności katalogu; false gdy brak.
+  bool csvAt(uint32_t index, String& name, unsigned long& size) const;
   void rotateForSync() { close(); }  // nowy otworzy się przy kolejnej próbce
   void noteSample(float altM);  // rotacja: jeden plik na wykryty podjazd
   // FIFO: gdy wolne miejsce < SZ_SD_MIN_FREE_BYTES, kasuj najstarsze CSV

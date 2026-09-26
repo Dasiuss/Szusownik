@@ -219,7 +219,7 @@ GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
 
 ```text
 Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: "Szusownik")
-INFO:    3f9a0002-...  READ    — JSON {proto, fw, files:[{name, size}]}
+INFO:    3f9a0002-...  READ    — JSON {proto, fw, fileCount, ...ustawienia}
 CTRL:    3f9a0003-...  WRITE   — komendy tekstowe (patrz niżej)
 DATA:    3f9a0004-...  NOTIFY  — ramki 244 B (seq LE32 + do 240 B payload)
 STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów ("ok", "streaming",
@@ -231,6 +231,7 @@ Komendy CTRL:
 ```text
 LIST_FILES            — odśwież INFO (bez efektów ubocznych)
 ROTATE                — zamknij bieżący plik na SD + odśwież INFO
+FILE:<i>              — metadane i-tego CSV (kolejność katalogu): STATUS "file <nazwa> <rozmiar>"
 DRYRUN:<nazwa>        — lokalny test SD+miniz+CRC bez radia (wynik w STATUS/logu)
 START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
 STOP                  — przerwij transfer
@@ -274,8 +275,13 @@ Reklamowanie (advertising) — doprecyzowane 2026-09-25 (NimBLE-Arduino 2.5.1):
 
 Decyzje względem pierwotnej granicy funkcjonalnej:
 
-- `FILE_INFO:<nazwa>` niepotrzebne — INFO zwraca od razu pełną listę z rozmiarami.
-- Lista zawiera nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
+- Pełna lista plików **nie** jest w INFO. Wartość atrybutu ATT ma twardy limit
+  512 B, a Web Bluetooth nie odczyta więcej; przekroczenie limitu zeruje wartość
+  w NimBLE (`setValue` → `append` odrzuca `len > max`) i PWA dostaje 0 B
+  („Unexpected end of JSON input"). Dlatego INFO niesie tylko `fileCount`, a
+  metadane plików PWA pobiera pojedynczo przez `FILE:<i>`
+  (STATUS `file <nazwa> <rozmiar>`). Kolejność `i` = kolejność katalogu FAT.
+- Metadane zawierają nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
   Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje
   wyłącznie CSV v2; obecny nagłówek v2 i metryki GNSS opisuje
   `docs/jakosc-danych.md`. Zmiana schematu wymaga jednoczesnej aktualizacji
