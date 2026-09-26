@@ -89,6 +89,12 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   Próbki z fixem, ale jeszcze bez poprawnego UTC, są pomijane.
 - **Rotacja: jeden plik na wykryty podjazd** (detekcja niżej), aby pliki nie rosły bez końca.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
+- **Okresowe domykanie pliku** co `SZ_SD_COMMIT_MS` (2 s): `close()` + ponowne
+  `open(FILE_APPEND)` tego samego pliku. `File::flush()` (`fflush`+`fsync`) nie
+  domyka w tej wersji IDF łańcucha FAT, więc po odcięciu zasilania plik bywał
+  nieczytelny (rozmiar w katalogu OK, dane nie). Po `close()` stan na karcie jest
+  spójny; przy nagłej utracie zasilania ginie tylko okno ≤ 2 s, a plik pozostaje
+  czytelny. Zero utraty daje `ROTATE` z PWA (domyka plik) przed wyłączeniem.
 
 ## 7. Detekcja podjazdu (do rotacji)
 

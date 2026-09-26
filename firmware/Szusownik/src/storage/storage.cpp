@@ -57,7 +57,15 @@ void Storage::writeSample(const String& utc, double lat, double lon, float kmh, 
 }
 
 void Storage::sync() {
-  if (fileOpen_) logFile.flush();
+  // File::flush() (fflush+fsync) nie domyka w tej wersji IDF łańcucha FAT.
+  // Pewny zapis stanu daje dopiero close() (FATFS f_close -> f_sync), więc
+  // domykamy i otwieramy ponownie ten sam plik. Przy odcięciu zasilania traci
+  // się co najwyżej dane od ostatniego domknięcia, ale plik jest spójny.
+  if (!fileOpen_) return;
+  logFile.flush();
+  logFile.close();
+  logFile = SD.open(currentName_, FILE_APPEND);
+  if (!logFile) fileOpen_ = false;
 }
 
 void Storage::close() {

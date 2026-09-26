@@ -125,7 +125,7 @@ void loop() {
     }
   }
   if (now >= nextSync) {
-    nextSync = now + 5000;
+    nextSync = now + SZ_SD_COMMIT_MS;
     storage.sync();
   }
   if (now >= nextHud) {

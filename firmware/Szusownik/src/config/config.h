@@ -99,6 +99,10 @@ static const float SZ_HYST_KMH = 3.0f;
 // FIFO: przy mniej niż tyle wolnego miejsca kasuj najstarsze pliki CSV.
 #define SZ_SD_MIN_FREE_BYTES (4UL * 1024UL * 1024UL)
 
+// Co tyle ms domykamy i otwieramy ponownie bieżący plik (spójny FAT na karcie;
+// utrata przy odcięciu zasilania ograniczona do tego okna).
+#define SZ_SD_COMMIT_MS 2000UL
+
 // BLE — profil ZAMROŻONY (docs/ble-transfer.md). Zmiana tylko po benchmarku
 // na rzeczywistym ESP32 + Androidzie.
 #define SZ_BLE_FRAME_SIZE 244
