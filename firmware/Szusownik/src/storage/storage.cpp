@@ -150,6 +150,7 @@ bool Storage::openRead(const String& name) {
   }
   readSize_ = readFile.size();
   readOpen_ = true;
+  readName_ = p;
   szLogf("SD: openRead %s size=%lu pos=%lu", p.c_str(), (unsigned long)readSize_,
          (unsigned long)readFile.position());
   readFile.seek(0);  // size() może przestawić pozycję VFS na koniec
@@ -164,10 +165,33 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
   size_t pos = readFile.position();
   size_t n = readFile.read(buf, maxLen);
   if (n == 0) {
+    File probe = SD.open(readName_, FILE_READ);
     uint8_t one = 0;
-    size_t n1 = readFile.read(&one, 1);
-    szLogf("SD: readBytes=0 pos=%lu size=%lu retry1=%lu byte=%02X", (unsigned long)pos,
-           (unsigned long)readSize_, (unsigned long)n1, one);
+    size_t pn = probe ? probe.read(&one, 1) : 0;
+    szLogf("SD: read=0 pos=%lu size=%lu fileOpen=%d log=%s probe=%d pn=%lu",
+           (unsigned long)pos, (unsigned long)readSize_, fileOpen_ ? 1 : 0,
+           currentName_.c_str(), probe ? 1 : 0, (unsigned long)pn);
+    if (probe) probe.close();
+    File root = SD.open("/");
+    if (root) {
+      int tested = 0;
+      while (tested < 3) {
+        File f = root.openNextFile();
+        if (!f) break;
+        if (!f.isDirectory()) {
+          String n2 = String(f.name());
+          if (n2.endsWith(".csv") || n2.endsWith(".CSV")) {
+            uint8_t b2 = 0;
+            size_t r2 = f.read(&b2, 1);
+            szLogf("SD: probe2 %s size=%lu read1=%lu", n2.c_str(),
+                   (unsigned long)f.size(), (unsigned long)r2);
+            tested++;
+          }
+        }
+        f.close();
+      }
+      root.close();
+    }
   }
   return n;
 }

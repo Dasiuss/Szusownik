@@ -35,6 +35,7 @@ class Storage {
  private:
   bool fileOpen_ = false;
   String currentName_;
+  String readName_;
   unsigned long readSize_ = 0;
   bool readOpen_ = false;
   bool haveLastAlt_ = false;
