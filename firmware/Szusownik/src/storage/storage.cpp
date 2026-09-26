@@ -150,7 +150,9 @@ bool Storage::openRead(const String& name) {
   }
   readSize_ = readFile.size();
   readOpen_ = true;
-  szLogf("SD: openRead %s size=%lu", p.c_str(), (unsigned long)readSize_);
+  szLogf("SD: openRead %s size=%lu pos=%lu", p.c_str(), (unsigned long)readSize_,
+         (unsigned long)readFile.position());
+  readFile.seek(0);  // size() może przestawić pozycję VFS na koniec
   return true;
 }
 
@@ -159,8 +161,14 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
     szLog("SD: readBytes bez otwartego pliku");
     return 0;
   }
+  size_t pos = readFile.position();
   size_t n = readFile.read(buf, maxLen);
-  if (n == 0) szLogf("SD: readBytes=0 size=%lu", (unsigned long)readSize_);
+  if (n == 0) {
+    uint8_t one = 0;
+    size_t n1 = readFile.read(&one, 1);
+    szLogf("SD: readBytes=0 pos=%lu size=%lu retry1=%lu byte=%02X", (unsigned long)pos,
+           (unsigned long)readSize_, (unsigned long)n1, one);
+  }
   return n;
 }
 
