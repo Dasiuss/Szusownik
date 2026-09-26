@@ -33,9 +33,14 @@ class Gnss {
   bool isConfigured() const { return configured_; }
   long baud() const { return baud_; }
   bool setRateMs(uint16_t ms);  // ręczna zmiana meas rate (też do testów)
-  void dumpStatus();            // jedna linia statusu na Serial
   bool hasFix();
   GnssSampleQuality sampleQuality();
+  // Pola do linii statusu (DBG) i zdarzen.
+  float hdop();  // nie-const: TinyGPSHDOP::hdop() nie jest const
+  unsigned long locationAgeMs() const;
+  uint32_t charsProcessed() const { return gps_.charsProcessed(); }
+  uint32_t ubxFails() const { return ubxFails_; }
+  int band() const { return band_; }
   float speedKmh();
   double lat();
   double lon();

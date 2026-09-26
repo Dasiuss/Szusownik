@@ -79,7 +79,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   `altitude_baro` liczone na urządzeniu z ciśnienia BME280 (I2C, wspólna magistrala
   z OLED) ze standardowej atmosfery (ref. 1013,25 hPa). Temperatura czujnika jest
   wewnętrzna i służy do kompensacji ciśnienia; nie trafia do CSV, ale jest
-  logowana diagnostycznie na Serial jako `air` w linii STATUS (patrz §9).
+  pokazywana jako `air` w linii statusu SYS (DEBUG, patrz §9 i §11).
 - Nagłówek CSV v2 dodaje metryki fixa, liczby satelitów, HDOP oraz wiek tych pól;
   bieżące źródło prędkości pozostaje RMC/NMEA. Szczegółowy schemat i świeżość
   opisano w `docs/jakosc-danych.md`.
@@ -101,6 +101,9 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   zniknie w trakcie zapisu sektora, karta może zapisać go częściowo (rozmiar w
   katalogu OK, łańcuch FAT/dane nie). Dlatego rolka na postoju (domknięcie przed
   wyłączeniem) jest ważniejsza niż sam flush.
+- Jeśli inicjalizacja SD (`Storage::begin()`) nie powiedzie się przy starcie,
+  firmware nie próbuje później otwierać ani zapisywać plików na karcie w tym
+  uruchomieniu. Ponowne wykrycie karty wymaga restartu urządzenia.
 
 ## 7. Rolowanie pliku na postoju (ochrona przed odcięciem zasilania)
 
@@ -154,11 +157,34 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   ~30 mA i dogrzewa obudowę (na stoku nieistotne; na biurku odnotować). W pełni
   chłodzące odcięcie GNSS wymagałoby `UBX-RXM-PMREQ` albo load switcha na VCC
   (roadmapa).
-- Diagnostyka: linia STATUS co 2 s niesie `die=..C air=..C` (die z SoC, air z
-  BME280) — do oceny termiki wnętrza obudowy.
+- Diagnostyka: linia statusu SYS co 5 s (poziom DEBUG) niesie `die=..C air=..C`
+  (die z SoC, air z BME280) — do oceny termiki wnętrza obudowy.
 
 ## 10. Otwarte punkty
 
 1. **Progi rolki na postoju** (`SZ_ROLL_STOP_BELOW_KMH` 0.3, `SZ_ROLL_REARM_ABOVE_KMH` 5, `SZ_ROLL_HOLD_MS` 3 s) — potwierdzone na danych testowych (bezruch 0.0–0.1 km/h), do obserwacji w terenie.
 2. **Współbieżność** — jednoczesny zapis na SD + transfer BLE + buzzer na ESP32 (wydajność, bufory) — do weryfikacji.
 3. **Rozmiar pliku na jeden zjazd** — zweryfikować w praktyce (szacunek ~0,06–0,11 MB, tj. ~1/5 z ~0,3–0,55 MB dla 5 zjazdów, patrz koncepcja).
+
+## 11. Logowanie i diagnostyka
+
+- Logi mają poziomy `E` (błąd), `W` (ostrzeżenie), `I` (zdarzenie, **domyślny**)
+  i `D` (debug), oraz tag modułu (`BOOT`, `GNSS`, `SD`, `BLE`, `BARO`, `HEALTH`,
+  `SYS`). Format: `[ms] L TAG: tresc`. Realizacja: `src/config/log.h`, próg
+  `SZ_LOG_LEVEL` w `config.h`. Wywołania poniżej progu są **wycinane
+  kompilacyjnie** (zero kosztu flash/CPU).
+- **INFO = zdarzenia**: cykl życia (`boot ok`, reset reason, fix acquired/lost,
+  UTC valid), SD (open/rolka/FIFO/sync), BLE (conn/disconn/MTU, przebieg
+  transferu co 32 ramki, retry/replay, done/abort), BARO (fail/recover),
+  HEALTH (ostrzeżenie/krytyczne/ostygło). Transfer BLE jest rzadki, więc
+  celowo logowany szczegółowo.
+- **DEBUG = wszystko cykliczne/strumieniowe**: jedna linia statusu `SYS` co 5 s
+  (`SZ_STATUS_MS`) z GNSS/SD/loop/heap/PSRAM/termika/BLE oraz jedna linia
+  per-próbka `GNSS smpl` (dane per próbka są trwale w CSV, więc nie dublujemy
+  ich w INFO). Diagnostyka UBX (`UBX tx`), `CFG-*`, `BLE INFO` też są w DEBUG.
+- Błędy logujemy zawsze (najniższy próg), bez względu na `SZ_LOG_LEVEL`.
+- Instrumentacja wspierająca monitoring: licznik błędów zapisu i maks. czas
+  `flush` SD, pomiar czasu i maks. przerwy pętli (loop stall), `FreeHeap`/
+  `MinFreeHeap`/`FreePSram`, reset reason (`esp_reset_reason()`), statystyki
+  retransmisji BLE, licznik nieudanych odczytów barometru.
+- Reguły dla kolejnych sesji: `AGENTS.md` pkt 14.

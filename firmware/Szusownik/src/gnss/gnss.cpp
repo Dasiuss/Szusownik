@@ -6,8 +6,8 @@
 bool Gnss::begin(long baud) {
   baud_ = baud;
   Serial0.begin(baud_, SERIAL_8N1, PIN_GNSS_RX, PIN_GNSS_TX);
-  szLogf("GPS: UART0 %ld 8N1 (RX=GPIO%d TX=GPIO%d), czekam na dane...", baud_,
-         PIN_GNSS_RX, PIN_GNSS_TX);
+  SZ_LOGIF("GNSS UART0 %ld 8N1 (RX=GPIO%d TX=GPIO%d), czekam na dane...", baud_,
+           PIN_GNSS_RX, PIN_GNSS_TX);
   return true;
 }
 
@@ -21,10 +21,6 @@ void Gnss::poll() {
   if (gps_.speed.isUpdated()) {
     float kmh = speedKmh();
     newSample_ = true;
-#if SZ_DEBUG_FIX
-    szLogf("FIX ok=%d spd=%.1f sats=%lu lat=%.6f lon=%.6f alt=%.1f hdg=%.0f", hasFix() ? 1 : 0,
-           kmh, (unsigned long)sats(), lat(), lon(), altM(), headingDeg());
-#endif
     updateAdaptiveRate(kmh);
   }
 }
@@ -39,7 +35,7 @@ void Gnss::maintain(unsigned long nowMs) {
   if (configured_) return;
   if (nowMs - lastAttempt_ < 5000) return;
   lastAttempt_ = nowMs;
-  szLog(F("GPS: proba konfiguracji..."));
+  SZ_LOGI("GNSS proba konfiguracji...");
   attemptConfigure();
 }
 
@@ -114,11 +110,12 @@ String Gnss::csvStamp() {
   return String(b);
 }
 
-void Gnss::dumpStatus() {
-  szLogf("GPS: fix=%d sats=%lu spd=%.1f band=%d rate=%lums baud=%ld cfg=%d chars=%lu fails=%lu",
-         hasFix() ? 1 : 0, (unsigned long)sats(), speedKmh(), band_, logIntervalMs_,
-         baud_, configured_ ? 1 : 0, (unsigned long)gps_.charsProcessed(),
-         (unsigned long)ubxFails_);
+float Gnss::hdop() {
+  return gps_.hdop.isValid() ? (float)gps_.hdop.hdop() : 0.0f;
+}
+
+unsigned long Gnss::locationAgeMs() const {
+  return gps_.location.isValid() ? gps_.location.age() : 0UL;
 }
 
 int Gnss::bandOf(float kmh) {
@@ -147,10 +144,10 @@ void Gnss::updateAdaptiveRate(float kmh) {
   band_ = want;
   rateHz_ = hz[band_];
   logIntervalMs_ = bandIntervalMs(band_);
-  szLogf("GPS: pasmo -> b%d, interwal %lums", band_, logIntervalMs_);
+  SZ_LOGIF("GNSS pasmo -> b%d, interwal %lums", band_, logIntervalMs_);
   if (configured_) {
     if (!ubxSetRate((uint16_t)logIntervalMs_)) {
-      szLog(F("GPS: zmiana meas rate NIEUDANA (logowanie dalej po staremu)"));
+      SZ_LOGW("GNSS zmiana meas rate NIEUDANA (logowanie dalej po staremu)");
     }
   }
 }
@@ -158,52 +155,52 @@ void Gnss::updateAdaptiveRate(float kmh) {
 // ---------- autokonfiguracja ----------
 
 bool Gnss::attemptConfigure() {
-  szLog(F("GPS: krok 1/5 - czekam na NMEA @9600..."));
+  SZ_LOGI("GNSS krok 1/5 - czekam na NMEA @9600...");
   if (!waitForData(8000, "9600")) {
     // Moduł mógł wstać z ZAPISANĄ konfiguracją (115200) po poprzednim restarcie.
-    szLog(F("GPS: brak danych @9600 - probuje @115200 (zapisana konfiguracja?)..."));
+    SZ_LOGI("GNSS brak danych @9600 - probuje @115200 (zapisana konfiguracja?)...");
     Serial0.updateBaudRate(115200);
     baud_ = 115200;
     if (waitForData(8000, "115200")) {
-      szLog(F("GPS: modul ma zapisana konfiguracje, przejmuje @115200"));
+      SZ_LOGI("GNSS modul ma zapisana konfiguracje, przejmuje @115200");
       ubxSetRate(2000);  // upewnij sie, ze spoczynek = 0.5 Hz
       configured_ = true;
-      szLog(F("GPS: KONFIGURACJA OK (przejeta @115200, rate=2000ms)"));
+      SZ_LOGI("GNSS KONFIGURACJA OK (przejeta @115200, rate=2000ms)");
       return true;
     }
     Serial0.updateBaudRate(9600);
     baud_ = 9600;
-    szLog(F("GPS: BRAK DANYCH @9600 i @115200. Sprawdz: TX modulu->GPIO44, "
-            "RX modulu->GPIO43, VCC 3V3, GND."));
+    SZ_LOGE("GNSS BRAK DANYCH @9600 i @115200. Sprawdz: TX modulu->GPIO44, "
+            "RX modulu->GPIO43, VCC 3V3, GND.");
     return false;
   }
-  szLogf("GPS: dane @9600 OK (chars=%lu)", (unsigned long)gps_.charsProcessed());
+  SZ_LOGIF("GNSS dane @9600 OK (chars=%lu)", (unsigned long)gps_.charsProcessed());
 
-  szLog(F("GPS: krok 2/5 - CFG-RATE 2000ms (spoczynek 0.5Hz)..."));
+  SZ_LOGI("GNSS krok 2/5 - CFG-RATE 2000ms (spoczynek 0.5Hz)...");
   if (!ubxSetRate(2000)) return false;
 
-  szLog(F("GPS: krok 3/5 - CFG-PRT 115200..."));
+  SZ_LOGI("GNSS krok 3/5 - CFG-PRT 115200...");
   if (!ubxSetUart(115200)) return false;
   Serial0.flush();
   delay(120);  // daj odbiornikowi czas na przelaczenie UART
   Serial0.updateBaudRate(115200);
   baud_ = 115200;
-  szLog(F("GPS: host UART -> 115200"));
+  SZ_LOGI("GNSS host UART -> 115200");
 
-  szLog(F("GPS: krok 4/5 - weryfikacja danych @115200..."));
+  SZ_LOGI("GNSS krok 4/5 - weryfikacja danych @115200...");
   if (!waitForData(8000, "115200")) {
-    szLog(F("GPS: BRAK DANYCH @115200 - wracam na 9600"));
+    SZ_LOGW("GNSS BRAK DANYCH @115200 - wracam na 9600");
     Serial0.updateBaudRate(9600);
     baud_ = 9600;
     return false;
   }
 
-  szLog(F("GPS: krok 5/5 - CFG-CFG zapis do flash..."));
+  SZ_LOGI("GNSS krok 5/5 - CFG-CFG zapis do flash...");
   if (!ubxSave()) {
-    szLog(F("GPS: zapis WARN - jade dalej, konfiguracja w RAM"));
+    SZ_LOGW("GNSS zapis WARN - jade dalej, konfiguracja w RAM");
   }
   configured_ = true;
-  szLog(F("GPS: KONFIGURACJA OK (baud=115200, rate=2000ms)"));
+  SZ_LOGI("GNSS KONFIGURACJA OK (baud=115200, rate=2000ms)");
   return true;
 }
 
@@ -215,15 +212,15 @@ bool Gnss::waitForData(unsigned long timeoutMs, const char* tag) {
       gps_.encode((char)Serial0.read());
     }
     if (gps_.charsProcessed() - startChars > 100) {
-      szLogf("GPS: NMEA plynie @%s (+%lu chars)", tag,
-             (unsigned long)(gps_.charsProcessed() - startChars));
+      SZ_LOGIF("GNSS NMEA plynie @%s (+%lu chars)", tag,
+               (unsigned long)(gps_.charsProcessed() - startChars));
       return true;
     }
     yield();
   }
-  szLogf("GPS: timeout @%s (chars=%lu, przybylo %lu)", tag,
-         (unsigned long)gps_.charsProcessed(),
-         (unsigned long)(gps_.charsProcessed() - startChars));
+  SZ_LOGWF("GNSS timeout @%s (chars=%lu, przybylo %lu)", tag,
+           (unsigned long)gps_.charsProcessed(),
+           (unsigned long)(gps_.charsProcessed() - startChars));
   return false;
 }
 
@@ -244,7 +241,7 @@ void Gnss::ubxWrite(uint8_t cls, uint8_t id, const uint8_t* pl, uint16_t len) {
   Serial0.write(ckA);
   Serial0.write(ckB);
   Serial0.flush();
-  szLogf("GPS: UBX tx cls=0x%02X id=0x%02X len=%u ck=%02X%02X", cls, id, len, ckA, ckB);
+  SZ_LOGDF("GNSS UBX tx cls=0x%02X id=0x%02X len=%u ck=%02X%02X", cls, id, len, ckA, ckB);
 }
 
 bool Gnss::ubxWaitAck(uint8_t cls, uint8_t id, unsigned long timeoutMs) {
@@ -304,11 +301,11 @@ bool Gnss::ubxWaitAck(uint8_t cls, uint8_t id, unsigned long timeoutMs) {
           rckB = b;
           if (ckA == rckA && ckB == rckB && ln >= 2 && pl[0] == cls && pl[1] == id) {
             if (c2 == 0x05 && i2 == 0x01) {
-              szLogf("GPS: UBX ACK (0x%02X/0x%02X)", cls, id);
+              SZ_LOGIF("GNSS UBX ACK (0x%02X/0x%02X)", cls, id);
               return true;
             }
             if (c2 == 0x05 && i2 == 0x00) {
-              szLogf("GPS: UBX NAK (0x%02X/0x%02X)", cls, id);
+              SZ_LOGWF("GNSS UBX NAK (0x%02X/0x%02X)", cls, id);
               ubxFails_++;
               return false;
             }
@@ -319,7 +316,7 @@ bool Gnss::ubxWaitAck(uint8_t cls, uint8_t id, unsigned long timeoutMs) {
     }
     yield();
   }
-  szLogf("GPS: UBX ACK-TIMEOUT (0x%02X/0x%02X)", cls, id);
+  SZ_LOGWF("GNSS UBX ACK-TIMEOUT (0x%02X/0x%02X)", cls, id);
   ubxFails_++;
   return false;
 }
@@ -328,7 +325,7 @@ bool Gnss::ubxSetRate(uint16_t measMs) {
   uint8_t pl[6] = {(uint8_t)(measMs & 0xFF), (uint8_t)(measMs >> 8),
                    0x01, 0x00,  // navRate = 1
                    0x01, 0x00};  // timeRef = GPS
-  szLogf("GPS: CFG-RATE meas=%ums...", measMs);
+  SZ_LOGDF("GNSS CFG-RATE meas=%ums...", measMs);
   ubxWrite(0x06, 0x08, pl, sizeof(pl));
   return ubxWaitAck(0x06, 0x08, 1000);
 }
@@ -345,7 +342,7 @@ bool Gnss::ubxSetUart(uint32_t baud) {
       0x00, 0x00,  // flags
       0x00, 0x00   // reserved
   };
-  szLogf("GPS: CFG-PRT baud=%lu...", (unsigned long)baud);
+  SZ_LOGDF("GNSS CFG-PRT baud=%lu...", (unsigned long)baud);
   ubxWrite(0x06, 0x00, pl, sizeof(pl));
   return ubxWaitAck(0x06, 0x00, 1000);
 }
@@ -361,7 +358,7 @@ bool Gnss::ubxSave() {
 bool Gnss::setRateMs(uint16_t ms) {
   logIntervalMs_ = ms;
   if (!configured_) {
-    szLog(F("GPS: setRateMs - brak konfiguracji, tylko interwal logowania"));
+    SZ_LOGW("GNSS setRateMs - brak konfiguracji, tylko interwal logowania");
     return false;
   }
   return ubxSetRate(ms);

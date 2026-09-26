@@ -11,12 +11,39 @@ static NimBLECharacteristic* chrCtrl = nullptr;
 static NimBLECharacteristic* chrData = nullptr;
 static NimBLECharacteristic* chrStat = nullptr;
 
+// Callbacki serwera tylko ustawiaja flagi (kontekst taska NimBLE). Logi
+// wystawiamy w poll() z glownej petli, zeby nie mieszac strumieni Serial.
+static volatile bool g_connChanged = false;
+static volatile bool g_connected = false;
+static volatile bool g_mtuChanged = false;
+static volatile uint16_t g_mtu = 0;
+static volatile int g_discReason = 0;
+
+class SzBleServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer*, NimBLEConnInfo& info) override {
+    g_mtu = info.getMTU();
+    g_connected = true;
+    g_connChanged = true;
+  }
+  void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int reason) override {
+    g_connected = false;
+    g_discReason = reason;
+    g_connChanged = true;
+  }
+  void onMTUChange(uint16_t mtu, NimBLEConnInfo&) override {
+    g_mtu = mtu;
+    g_mtuChanged = true;
+  }
+};
+static SzBleServerCallbacks szBleCallbacks;
+
 void BleFiles::begin(Storage* storage) {
   storage_ = storage;
   allocStreamMem();
   NimBLEDevice::init(SZ_BLE_NAME);
   NimBLEDevice::setMTU(517);
   NimBLEServer* srv = NimBLEDevice::createServer();
+  srv->setCallbacks(&szBleCallbacks, false);  // obiekt statyczny - nie kasuj
   NimBLEService* svc = srv->createService(SZ_UUID_SVC);
   chrInfo = svc->createCharacteristic(SZ_UUID_INFO, NIMBLE_PROPERTY::READ);
   chrCtrl = svc->createCharacteristic(SZ_UUID_CTRL,
@@ -36,7 +63,7 @@ void BleFiles::begin(Storage* storage) {
   adv->addServiceUUID(SZ_UUID_SVC);
   adv->setName(SZ_BLE_NAME);
   adv->start();
-  szLogf("BLE: start name=%s mtu=517", SZ_BLE_NAME);
+  SZ_LOGIF("BLE start name=%s mtu_req=517", SZ_BLE_NAME);
 }
 
 bool BleFiles::allocStreamMem() {
@@ -45,12 +72,12 @@ bool BleFiles::allocStreamMem() {
   window_ = (uint8_t(*)[SZ_BLE_FRAME_SIZE])ps_malloc(SZ_BLE_WINDOW * SZ_BLE_FRAME_SIZE);
   windowLen_ = (uint16_t*)ps_malloc(SZ_BLE_WINDOW * sizeof(uint16_t));
   if (!comp_ || !window_ || !windowLen_) {
-    szLog("BLE: PSRAM alloc FAIL (streaming niedostepny)");
+    SZ_LOGE("BLE PSRAM alloc FAIL (streaming niedostepny)");
     return false;
   }
   memset(windowLen_, 0, SZ_BLE_WINDOW * sizeof(uint16_t));
-  szLogf("BLE: stream mem OK (comp=%u ring=%u w PSRAM)", (unsigned)sizeof(tdefl_compressor),
-         (unsigned)(SZ_BLE_WINDOW * SZ_BLE_FRAME_SIZE));
+  SZ_LOGIF("BLE stream mem OK (comp=%u ring=%u w PSRAM)", (unsigned)sizeof(tdefl_compressor),
+           (unsigned)(SZ_BLE_WINDOW * SZ_BLE_FRAME_SIZE));
   return true;
 }
 
@@ -83,8 +110,8 @@ void BleFiles::refreshInfo() {
   }
   j += "}";
   chrInfo->setValue(j.c_str());
-  szLogf("BLE: INFO len=%u stored=%u", (unsigned)j.length(),
-         (unsigned)chrInfo->getValue().length());
+  SZ_LOGDF("BLE INFO len=%u stored=%u", (unsigned)j.length(),
+           (unsigned)chrInfo->getValue().length());
 }
 
 void BleFiles::reportVolume() {
@@ -96,7 +123,7 @@ void BleFiles::reportVolume() {
   snprintf(msg, sizeof(msg), "vol low=%u high=%u", beeper_->volLow(), beeper_->volHigh());
   refreshInfo();  // INFO niesie volLow/volHigh dla PWA
   setStatus(String(msg));
-  szLogf("BLE: %s", msg);
+  SZ_LOGI(msg);
 }
 
 void BleFiles::reportFreq() {
@@ -109,7 +136,7 @@ void BleFiles::reportFreq() {
            beeper_->freqLong());
   refreshInfo();  // INFO niesie freqShort/freqLong dla PWA
   setStatus(String(msg));
-  szLogf("BLE: %s", msg);
+  SZ_LOGI(msg);
 }
 
 void BleFiles::reportTiming() {
@@ -123,7 +150,7 @@ void BleFiles::reportTiming() {
            beeper_->signalGapMs());
   refreshInfo();  // INFO niesie czasy dla PWA
   setStatus(String(msg));
-  szLogf("BLE: %s", msg);
+  SZ_LOGI(msg);
 }
 
 void BleFiles::reportMinBeep() {
@@ -135,7 +162,7 @@ void BleFiles::reportMinBeep() {
   snprintf(msg, sizeof(msg), "beep min=%u", beeper_->minBeepKmh());
   refreshInfo();
   setStatus(String(msg));
-  szLogf("BLE: %s", msg);
+  SZ_LOGI(msg);
 }
 
 void BleFiles::setStatus(const String& s) {
@@ -252,6 +279,21 @@ void BleFiles::handleCommand(const String& cmd) {
 
 void BleFiles::poll() {
   if (!chrCtrl) return;
+  // Zdarzenia z callbackow (kontekst NimBLE) logujemy tu, w petli glownej.
+  if (g_mtuChanged) {
+    g_mtuChanged = false;
+    mtu_ = g_mtu;
+    if (g_connected) SZ_LOGIF("BLE mtu -> %u", (unsigned)g_mtu);
+  }
+  if (g_connChanged) {
+    g_connChanged = false;
+    mtu_ = g_mtu;
+    if (g_connected) {
+      SZ_LOGIF("BLE conn mtu=%u", (unsigned)g_mtu);
+    } else {
+      SZ_LOGIF("BLE disconn reason=%d", g_discReason);
+    }
+  }
   // Odczyt i skonsumowanie komendy zamiast callbacku — bez ryzyka API callbacks.
   std::string v = chrCtrl->getValue();
   String cmd(v.c_str());
@@ -271,7 +313,7 @@ bool BleFiles::startStream(const String& name) {
   storage_->rotateForSync();  // plik do pobrania zawsze kompletny/zamknięty
   activeFile_ = name;
   if (!storage_->openRead(name)) {
-    szLogf("BLE: START open fail name=%s", name.c_str());
+    SZ_LOGEF("BLE START open fail name=%s", name.c_str());
     setStatus("err:open");
     return false;
   }
@@ -284,7 +326,7 @@ bool BleFiles::startStream(const String& name) {
                                TDEFL_DEFAULT_MAX_PROBES | TDEFL_WRITE_ZLIB_HEADER |
                                    TDEFL_COMPUTE_ADLER32);
   if (st != TDEFL_STATUS_OKAY) {
-    szLog("BLE: START tdefl_init fail");
+    SZ_LOGE("BLE START tdefl_init fail");
     storage_->closeRead();
     setStatus("err:deflate");
     return false;
@@ -304,12 +346,14 @@ bool BleFiles::startStream(const String& name) {
   pendLen_ = 0;
   ackRetries_ = 0;
   replaying_ = false;
+  replays_ = 0;
+  ackTimeouts_ = 0;
   lastProgressMs_ = millis();
   lastNotifyMs_ = 0;
   transferring_ = true;
   refreshInfo();
   setStatus("streaming");
-  szLogf("BLE: START name=%s raw=%lu", name.c_str(), (unsigned long)storage_->readSize());
+  SZ_LOGIF("BLE START name=%s raw=%lu", name.c_str(), (unsigned long)storage_->readSize());
   return true;
 }
 
@@ -319,7 +363,7 @@ void BleFiles::abortStream(const String& reason) {
   compActive_ = false;
   replaying_ = false;
   setStatus(reason);
-  szLogf("BLE: abort (%s)", reason.c_str());
+  SZ_LOGWF("BLE abort (%s)", reason.c_str());
 }
 
 void BleFiles::finishStream() {
@@ -332,7 +376,8 @@ void BleFiles::finishStream() {
   transferring_ = false;
   compActive_ = false;
   setStatus(String(msg));
-  szLogf("BLE: %s name=%s", msg, activeFile_.c_str());
+  SZ_LOGIF("BLE %s name=%s replay=%lu ackTimeout=%lu", msg, activeFile_.c_str(),
+           (unsigned long)replays_, (unsigned long)ackTimeouts_);
 }
 
 bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
@@ -352,8 +397,8 @@ bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
   lastNotifyMs_ = now;
   lastProgressMs_ = now;
   if ((frameCount_ & 31) == 0) {
-    szLogf("BLE: tx frames=%lu next=%lu unacked=%lu", (unsigned long)frameCount_,
-           (unsigned long)nextSeq_, (unsigned long)(nextSeq_ - oldestUnacked_));
+    SZ_LOGIF("BLE tx frames=%lu next=%lu unacked=%lu", (unsigned long)frameCount_,
+             (unsigned long)nextSeq_, (unsigned long)(nextSeq_ - oldestUnacked_));
   }
   return true;
 }
@@ -372,7 +417,7 @@ void BleFiles::sendEndMarker() {
   nextSeq_++;
   lastNotifyMs_ = millis();
   lastProgressMs_ = lastNotifyMs_;
-  szLogf("BLE: end marker seq=%lu", (unsigned long)endSeq_);
+  SZ_LOGIF("BLE end marker seq=%lu", (unsigned long)endSeq_);
 }
 
 void BleFiles::pumpStream() {
@@ -408,7 +453,7 @@ void BleFiles::pumpStream() {
         inPos_ = 0;
         if (inLen_ == 0) {
           inputEof_ = true;
-          szLogf("BLE: input EOF raw=%lu", (unsigned long)rawBytes_);
+          SZ_LOGIF("BLE input EOF raw=%lu", (unsigned long)rawBytes_);
         } else {
           rawBytes_ += (uint32_t)inLen_;
           fileCrc_ = szCrc32Update(fileCrc_, inBuf_, inLen_);
@@ -464,8 +509,9 @@ void BleFiles::pumpStream() {
       return;
     }
     ackRetries_++;
-    szLogf("BLE: ack timeout, replay od %lu (retry %u)", (unsigned long)oldestUnacked_,
-           ackRetries_);
+    ackTimeouts_++;
+    SZ_LOGWF("BLE ack timeout, replay od %lu (retry %u)", (unsigned long)oldestUnacked_,
+             ackRetries_);
     replayFrom(oldestUnacked_);
   }
 }
@@ -473,8 +519,8 @@ void BleFiles::pumpStream() {
 void BleFiles::onAck(uint32_t n) {
   if (!transferring_) return;
   if (n <= oldestUnacked_ || n > nextSeq_) {
-    szLogf("BLE: ACK:%lu poza zakresem (oldest=%lu next=%lu) - ignoruje", (unsigned long)n,
-           (unsigned long)oldestUnacked_, (unsigned long)nextSeq_);
+    SZ_LOGWF("BLE ACK:%lu poza zakresem (oldest=%lu next=%lu) - ignoruje", (unsigned long)n,
+             (unsigned long)oldestUnacked_, (unsigned long)nextSeq_);
     return;
   }
   oldestUnacked_ = n;
@@ -488,16 +534,17 @@ void BleFiles::onAck(uint32_t n) {
 void BleFiles::onNack(uint32_t e) {
   if (!transferring_) return;
   if (e < oldestUnacked_ || e >= nextSeq_) {
-    szLogf("BLE: NACK:%lu poza zakresem - ignoruje", (unsigned long)e);
+    SZ_LOGWF("BLE NACK:%lu poza zakresem - ignoruje", (unsigned long)e);
     return;
   }
-  szLogf("BLE: NACK:%lu - replay", (unsigned long)e);
+  SZ_LOGIF("BLE NACK:%lu - replay", (unsigned long)e);
   replayFrom(e);
 }
 
 void BleFiles::replayFrom(uint32_t seq) {
   replayPos_ = seq;
   replaying_ = true;
+  replays_++;
   lastProgressMs_ = millis();
 }
 
@@ -517,7 +564,7 @@ void BleFiles::dryRun(const String& name) {
     return;
   }
   if (!storage_->openRead(name)) {
-    szLogf("BLE: DRYRUN open fail name=%s", name.c_str());
+    SZ_LOGEF("BLE DRYRUN open fail name=%s", name.c_str());
     setStatus("err:open");
     return;
   }
@@ -557,7 +604,7 @@ void BleFiles::dryRun(const String& name) {
       if (outAvail == 0 && inAvail == 0) break;  // brak postępu — dociągnij wejście
     }
     if (raw % 65536 < 512) {
-      szLogf("BLE: DRYRUN raw=%lu comp=%lu", (unsigned long)raw, (unsigned long)compBytes);
+      SZ_LOGDF("BLE DRYRUN raw=%lu comp=%lu", (unsigned long)raw, (unsigned long)compBytes);
     }
   }
   storage_->closeRead();
@@ -565,6 +612,6 @@ void BleFiles::dryRun(const String& name) {
   snprintf(msg, sizeof(msg), "dryrun raw=%lu comp=%lu crc=%08lX", (unsigned long)raw,
            (unsigned long)compBytes, (unsigned long)szCrc32Final(crc));
   setStatus(String(msg));
-  szLogf("BLE: %s name=%s", msg, name.c_str());
+  SZ_LOGIF("BLE %s name=%s", msg, name.c_str());
   refreshInfo();
 }

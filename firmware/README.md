@@ -4,7 +4,7 @@ Firmware dla ESP32-S3 (arduino-cli / Arduino, C++).
 
 Moduły (`firmware/Szusownik/src/`):
 
-- `config/` — piny, stałe, UUID BLE v1, logowanie z timestampem.
+- `config/` — piny, stałe, UUID BLE v1, logowanie z timestampem i poziomami (E/W/I/D).
 - `gnss/` — pomiar (NEO-M8N, NMEA, autokonfiguracja UBX, adaptacyjne próbkowanie).
 - `storage/` — zapis surowego CSV na microSD, rotacja, FIFO, odczyt do BLE.
 - `audio/` — buzzer piezo (LEDC, próg pikania 60..120 km/h, głośność adaptacyjna 60→120 km/h, NVS, SETVOL/SETFREQ/SETTIMING/SETMINBEEP z PWA).
@@ -76,7 +76,8 @@ ESP32-S3-Zero (Waveshare). Uwagi do pinów: **GPIO21** = dioda RGB (nie używać
 - Buzzer na GPIO10 sterowany LEDC (sygnał startowy = wzór 120 przy głośności 60).
 - Termika: ESP32-S3 nie ma sprzętowego shutdownu. Moduł `health/` co 30 s czyta
   `temperatureRead()` (die, nie ambient); alarm buzzerem >95 °C, a >100 °C zamyka
-  SD, rysuje ekran i wchodzi w deep sleep. Diagnostyka: `die=..C air=..C` w STATUS.
+  SD, rysuje ekran i wchodzi w deep sleep. Diagnostyka: linia statusu SYS co 5 s
+  (DEBUG) z `die=..C air=..C`. Domyślnie INFO pokazuje tylko zdarzenia.
   Deep sleep nie odcina 3V3 (GNSS dalej pobiera) — OLED trzyma obraz po uśpieniu.
 
 Kod w `Szusownik/` (MVP1: GPS+UBX, CSV, buzzer, OLED, BLE streaming — patrz moduły).

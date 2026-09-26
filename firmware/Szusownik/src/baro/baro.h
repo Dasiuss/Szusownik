@@ -4,8 +4,7 @@
 // Barometr BME280 / BMP280 (I2C, wspolna magistrala z OLED GPIO8/9).
 // Wlasny minimalny driver: detekcja po chip-ID (0xD0), tylko cisnienie +
 // temperatura. Temperatura jest wewnetrzna (struktury czujnika) i sluzy
-// do kompensacji cisnienia; dodatkowo logowana diagnostycznie w STATUS
-// (SZ_DEBUG_STATUS) jako "air" — do kontroli termiki obudowy.
+// do kompensacji cisnienia; dodatkowo trafia jako "air" do linii statusu SYS.
 // Referencje: Bosch BME280/BMP280 datasheet (kompensacja T/P identyczna).
 class Baro {
  public:
@@ -17,10 +16,13 @@ class Baro {
 
   // Wymuszony pomiar (forced mode). Przy bledzie zwraca false, ale zostawia
   // ostatnie poprawne wartosci (pressurePa_/tempC_), wiec altitudeM() nie
-  // skacze do zera przy chwilowym bledzie I2C.
+  // skacze do zera przy chwilowym bledzie I2C. Przejscia ok/blad sa logowane
+  // raz (WARN przy pierwszym bledzie, INFO przy powrocie).
   bool read();
   float pressurePa() const { return pressurePa_; }
   float tempC() const { return tempC_; }
+  uint32_t fails() const { return fails_; }        // laczna liczba nieudanych odczytow
+  bool errorActive() const { return errorActive_; }  // czy trwa seria bledow
 
   // Wysokosc barometryczna ze standardowej atmosfery (ref. 1013,25 hPa).
   // Trafia do CSV (altitude_baro); rotacja pliku jej nie uzywa (jest na postoju).
@@ -30,9 +32,12 @@ class Baro {
   bool writeReg(uint8_t reg, uint8_t val);
   bool readRegs(uint8_t reg, uint8_t* buf, uint8_t len);
   bool readCalibration();
+  bool readRaw();  // pojedynczy pomiar bez obslugi logu przejsc
 
   bool present_ = false;
   bool valid_ = false;
+  bool errorActive_ = false;
+  uint32_t fails_ = 0;
   uint8_t addr_ = 0;
   const char* typeName_ = "brak";
   bool isBme_ = false;

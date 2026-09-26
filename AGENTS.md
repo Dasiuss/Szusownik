@@ -70,6 +70,12 @@ wypracowanych w trzech projektach testowych:
     usunięcia (tombstone `deletedRuns`) kluczują się tym id i muszą przeżyć
     re-analizę. Zmiana reguły cięcia (podjazd ≥ 5 m) wymaga osobnego uzgodnienia.
     Szczegóły w `docs/wymagania-PWA.md` §6/§7.
+14. Logi mają poziomy `E/W/I/D` (`src/config/log.h`, próg `SZ_LOG_LEVEL`).
+    Domyślny INFO = zdarzenia (fix acquired/lost, SD, cykl życia BLE, health,
+    boot) oraz szczegółowy przebieg transferu BLE. Status okresowy, per-próbka
+    GNSS i diagnostyka UBX/BLE są tylko w DEBUG i wycinane kompilacyjnie.
+    Nie przywracaj osobnych `SZ_DEBUG_*`/`SZ_STOK_MODE` ani per-próbkowego
+    `FIX`/`SAMPLE` — dane per próbka są trwale w CSV.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
@@ -103,7 +109,8 @@ Nie odwracać kolejności (monitor → upload kończy się błędem zajętego po
   potwierdzeniach → alarm buzzerem 3 s przy każdym kolejnym odczycie ≥95 °C;
   ≥100 °C → zamknięcie SD, ekran „PRZEGRZANIE" (die/air), alarm i deep sleep.
   Progi/histereza w `config.h` (`SZ_HEALTH_*`).
-- Diagnostyka na Serial: linia STATUS co 2 s z `die=..C air=..C`.
+- Diagnostyka na Serial: linia statusu SYS co 5 s (poziom DEBUG) z
+  `die=..C air=..C`; domyślny poziom INFO pokazuje tylko zdarzenia.
 - Deep sleep **nie odcina 3V3** — GNSS dalej pobiera ~30 mA i dogrzewa. Na
   stoku nieistotne; przy testach w domu nie trzymać szczelnej obudowy.
 

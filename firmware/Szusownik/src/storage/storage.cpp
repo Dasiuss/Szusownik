@@ -10,27 +10,31 @@ static File readFile;
 
 bool Storage::begin() {
   SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
-  return SD.begin(PIN_SD_CS, SPI, 20000000);
+  ready_ = SD.begin(PIN_SD_CS, SPI, 20000000);
+  return ready_;
 }
 
 bool Storage::openLog(const String& stamp) {
   // Bez poprawnego czasu GNSS nie ma jak nazwać pliku — nie logujemy.
-  if (!stamp.length()) return false;
+  if (!ready_ || !stamp.length()) return false;
   ensureFreeSpace();
   char name[32];
   snprintf(name, sizeof(name), "/%s.csv", stamp.c_str());
   currentName_ = String(name);
   logFile = SD.open(currentName_, FILE_APPEND);
-  if (!logFile) return false;
+  if (!logFile) {
+    SZ_LOGEF("SD open fail %s", currentName_.c_str());
+    return false;
+  }
   if (logFile.size() == 0) logFile.println(SZ_CSV_HEADER);
   fileOpen_ = true;
-  szLogf("SD: open %s", currentName_.c_str());
+  SZ_LOGIF("SD open %s", currentName_.c_str());
   return true;
 }
 
 void Storage::writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                           float hdg, float altBaro, const GnssSampleQuality& quality) {
-  if (!fileOpen_) return;
+  if (!ready_ || !fileOpen_) return;
   char fixAge[16] = "";
   char satellites[16] = "";
   char satellitesAge[16] = "";
@@ -50,7 +54,15 @@ void Storage::writeSample(const String& utc, double lat, double lon, float kmh, 
   snprintf(line, sizeof(line), "%s,%.6f,%.6f,%.1f,%.1f,%.0f,%.1f,%d,%s,%s,%s,%s,%s",
            utc.c_str(), lat, lon, kmh, altGps, hdg, altBaro, quality.fixValid ? 1 : 0, fixAge,
            satellites, satellitesAge, hdop, hdopAge);
-  logFile.println(line);
+  size_t want = strlen(line) + 2;  // println dopisuje CRLF
+  size_t got = logFile.println(line);
+  if (got != want) {
+    writeErrors_++;
+    if (writeErrors_ == 1 || (writeErrors_ % 50) == 0) {
+      SZ_LOGEF("SD write error #%lu (got=%u want=%u)", (unsigned long)writeErrors_,
+               (unsigned)got, (unsigned)want);
+    }
+  }
 }
 
 void Storage::sync() {
@@ -58,11 +70,12 @@ void Storage::sync() {
   // FATFS f_sync, czyli domyka wpis katalogowy i FAT na karcie. Sam flush
   // wystarcza — okresowe close()+open() nic nie dodaje poza ponownym
   // przejściem łańcucha FAT przy następnym dopisaniu (koszt rośnie z plikiem).
-  if (!fileOpen_) return;
+  if (!ready_ || !fileOpen_) return;
   uint32_t t0 = millis();
   logFile.flush();
   uint32_t dt = millis() - t0;
-  if (dt >= 20) szLogf("SD: sync %lu ms", (unsigned long)dt);
+  if (dt > syncMaxMs_) syncMaxMs_ = dt;
+  if (dt >= SZ_SD_SYNC_WARN_MS) SZ_LOGWF("SD sync wolny %lums", (unsigned long)dt);
 }
 
 void Storage::close() {
@@ -87,7 +100,7 @@ void Storage::updateFileRotation(float kmh, bool fixValid) {
     movingSince_ = 0;
     if (stoppedSince_ == 0) stoppedSince_ = now;
     if (fileRotationArmed_ && now - stoppedSince_ >= SZ_ROLL_HOLD_MS) {
-      szLogf("SD: rolka (postoj) zamyka %s", currentName_.c_str());
+      SZ_LOGIF("SD rolka (postoj) zamyka %s", currentName_.c_str());
       close();  // main otworzy nowy plik przy kolejnej próbce
       fileRotationArmed_ = false;
     }
@@ -106,6 +119,7 @@ void Storage::updateFileRotation(float kmh, bool fixValid) {
 }
 
 uint32_t Storage::countCsv() const {
+  if (!ready_) return 0;
   uint32_t count = 0;
   File root = SD.open("/");
   if (!root) return 0;
@@ -123,6 +137,7 @@ uint32_t Storage::countCsv() const {
 }
 
 bool Storage::csvAt(uint32_t index, String& name, unsigned long& size) const {
+  if (!ready_) return false;
   uint32_t seen = 0;
   File root = SD.open("/");
   if (!root) return false;
@@ -151,6 +166,7 @@ bool Storage::csvAt(uint32_t index, String& name, unsigned long& size) const {
 
 bool Storage::openRead(const String& name) {
   closeRead();
+  if (!ready_) return false;
   String p = name;
   p.trim();
   if (!p.startsWith("/")) p = "/" + p;
@@ -162,15 +178,15 @@ bool Storage::openRead(const String& name) {
   readSize_ = readFile.size();
   readOpen_ = true;
   readName_ = p;
-  szLogf("SD: openRead %s size=%lu pos=%lu", p.c_str(), (unsigned long)readSize_,
-         (unsigned long)readFile.position());
+  SZ_LOGIF("SD openRead %s size=%lu pos=%lu", p.c_str(), (unsigned long)readSize_,
+           (unsigned long)readFile.position());
   readFile.seek(0);  // size() może przestawić pozycję VFS na koniec
   return true;
 }
 
 size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
-  if (!readOpen_) {
-    szLog("SD: readBytes bez otwartego pliku");
+  if (!ready_ || !readOpen_) {
+    SZ_LOGW("SD readBytes bez otwartego pliku");
     return 0;
   }
   size_t pos = readFile.position();
@@ -180,9 +196,9 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
     File probe = SD.open(readName_, FILE_READ);
     uint8_t one = 0;
     size_t pn = probe ? probe.read(&one, 1) : 0;
-    szLogf("SD: read=0 pos=%lu size=%lu fileOpen=%d log=%s probe=%d pn=%lu",
-           (unsigned long)pos, (unsigned long)readSize_, fileOpen_ ? 1 : 0,
-           currentName_.c_str(), probe ? 1 : 0, (unsigned long)pn);
+    SZ_LOGEF("SD read=0 pos=%lu size=%lu fileOpen=%d log=%s probe=%d pn=%lu",
+             (unsigned long)pos, (unsigned long)readSize_, fileOpen_ ? 1 : 0,
+             currentName_.c_str(), probe ? 1 : 0, (unsigned long)pn);
     if (probe) probe.close();
     File root = SD.open("/");
     if (root) {
@@ -195,8 +211,8 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
           if (n2.endsWith(".csv") || n2.endsWith(".CSV")) {
             uint8_t b2 = 0;
             size_t r2 = f.read(&b2, 1);
-            szLogf("SD: probe2 %s size=%lu read1=%lu", n2.c_str(),
-                   (unsigned long)f.size(), (unsigned long)r2);
+            SZ_LOGWF("SD probe2 %s size=%lu read1=%lu", n2.c_str(),
+                     (unsigned long)f.size(), (unsigned long)r2);
             tested++;
           }
         }
@@ -210,7 +226,7 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
 
 void Storage::closeRead() {
   if (readOpen_) {
-    szLogf("SD: closeRead size=%lu", (unsigned long)readSize_);
+    SZ_LOGIF("SD closeRead size=%lu", (unsigned long)readSize_);
     readFile.close();
     readOpen_ = false;
   }
@@ -218,6 +234,7 @@ void Storage::closeRead() {
 }
 
 void Storage::ensureFreeSpace() {
+  if (!ready_) return;
   unsigned long total = SD.totalBytes();
   if (total == 0) return;  // brak karty — nie ma czego sprzątać
   while (SD.totalBytes() - SD.usedBytes() < SZ_SD_MIN_FREE_BYTES) {
@@ -240,7 +257,7 @@ void Storage::ensureFreeSpace() {
     if (oldest.length() == 0) return;  // nic do skasowania
     if (fileOpen_ && currentName_.endsWith(oldest)) return;  // nie rusz bieżącego
     if (SD.remove(oldest)) {
-      szLogf("SD: FIFO kasuje %s", oldest.c_str());
+      SZ_LOGWF("SD FIFO kasuje %s", oldest.c_str());
     } else {
       return;
     }

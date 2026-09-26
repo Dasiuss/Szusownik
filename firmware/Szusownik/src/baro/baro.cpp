@@ -1,5 +1,6 @@
 #include "baro.h"
 #include "../config/pins.h"
+#include "../config/config.h"
 #include "../config/log.h"
 #include <Wire.h>
 #include <math.h>
@@ -84,6 +85,23 @@ bool Baro::readCalibration() {
 
 bool Baro::read() {
   if (!present_) return false;
+  bool ok = readRaw();
+  if (!ok) {
+    fails_++;
+    if (!errorActive_) {
+      errorActive_ = true;
+      SZ_LOGWF("BARO read fail #%lu", (unsigned long)fails_);
+    }
+    return false;
+  }
+  if (errorActive_) {
+    errorActive_ = false;
+    SZ_LOGI("BARO recovered");
+  }
+  return true;
+}
+
+bool Baro::readRaw() {
   if (isBme_) writeReg(REG_CTRL_HUM, 0x01);  // BME280: ctrl_hum resetuje sie w forced
   // forced mode, osrs_t x1, osrs_p x1
   if (!writeReg(REG_CTRL_MEAS, (1 << 5) | (1 << 2) | 0x01)) return false;

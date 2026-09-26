@@ -17,6 +17,7 @@ class BleFiles {
   void poll();
   bool busy() const { return transferring_; }
   String lastError() const { return lastError_; }
+  uint16_t mtu() const { return mtu_; }  // ostatnio wynegocjowane MTU (0 = brak)
 
  private:
   Storage* storage_ = nullptr;
@@ -44,6 +45,11 @@ class BleFiles {
   uint8_t ackRetries_ = 0;
   uint32_t replayPos_ = 0;
   bool replaying_ = false;
+  // Statystyki transferu (do logu done/abort): ile razy wznawiano i ile razy
+  // zadzialal timeout ACK. Pomagaja ocenic jakosc lacza bez sledzenia konsoli.
+  uint32_t replays_ = 0;
+  uint32_t ackTimeouts_ = 0;
+  uint16_t mtu_ = 0;
   uint8_t inBuf_[512];
   size_t inLen_ = 0;
   size_t inPos_ = 0;

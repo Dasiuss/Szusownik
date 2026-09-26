@@ -76,28 +76,16 @@ static const float SZ_HYST_KMH = 3.0f;
 // HUD: SPD pokazuje max ostatniego zjazdu gdy prędkość <5 km/h.
 #define SZ_SPD_STATIC_BELOW_KMH 5.0f
 
-// Debug: loguj każdy zapis próbki (SAMPLE) na Serial. Do testów na stole;
-// docelowo wyłączyć (przy 10 Hz to 10 linii/s).
-#define SZ_DEBUG_SAMPLES 1
+// Poziom logowania na Serial: 0=ERR 1=WARN 2=INFO (domyslny) 3=DEBUG.
+// INFO = zdarzenia (fix, SD, BLE, health, boot) + cykl transferu BLE;
+// DEBUG = status okresowy, per-probka GNSS, diagnostyka UBX/INFO/BLE.
+// Wszystko ponizej progu jest wycinane kompilacyjnie (src/config/log.h).
+#define SZ_LOG_LEVEL 2
 
-// Debug: loguj każdy nowy odczyt z odbiornika (FIX) na Serial, niezależnie
-// od zapisu do CSV. Do weryfikacji rzeczywistego tempa pomiarów.
-#define SZ_DEBUG_FIX 1
-
-// Debug: status GPS + tempo zapisu co 2 s.
-#define SZ_DEBUG_STATUS 1
-
-// Tryb stokowy: 1 = cisza na Serial (oszczędność CDC/baterii, mniej zakłóceń).
-// Wymusza wygaszenie wszystkich debugów powyżej.
-#define SZ_STOK_MODE 0
-#if SZ_STOK_MODE
-#undef SZ_DEBUG_SAMPLES
-#define SZ_DEBUG_SAMPLES 0
-#undef SZ_DEBUG_FIX
-#define SZ_DEBUG_FIX 0
-#undef SZ_DEBUG_STATUS
-#define SZ_DEBUG_STATUS 0
-#endif
+// Linia statusu SYS (DEBUG) i progi ostrzezen.
+#define SZ_STATUS_MS 5000UL          // okres linii SYS: GNSS/SD/loop/heap/termika/BLE
+#define SZ_SD_SYNC_WARN_MS 100UL     // wolny flush (fsync) -> WARN
+#define SZ_LOOP_STALL_WARN_MS 200UL  // dluzsza iteracja petli -> WARN (pierwsza w oknie)
 
 // FIFO: przy mniej niż tyle wolnego miejsca kasuj najstarsze pliki CSV.
 #define SZ_SD_MIN_FREE_BYTES (4UL * 1024UL * 1024UL)

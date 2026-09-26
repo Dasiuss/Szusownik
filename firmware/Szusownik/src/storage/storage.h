@@ -8,6 +8,7 @@
 class Storage {
  public:
   bool begin();
+  bool isReady() const { return ready_; }  // inicjalizacja SD powiodla sie przy starcie
   bool openLog(const String& stamp);  // stamp = YYYYMMDD_HHMMSS; pusty => nie tworzy pliku
   void writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                    float hdg, float altBaro, const GnssSampleQuality& quality);
@@ -34,13 +35,19 @@ class Storage {
   unsigned long readSize() const { return readSize_; }
   void closeRead();
   bool readOpen() const { return readOpen_; }
+  uint32_t writeErrors() const { return writeErrors_; }  // nieudane println (np. karta out)
+  unsigned long syncMaxMs() const { return syncMaxMs_; }  // najgorszy flush w oknie
+  void resetSyncStats() { syncMaxMs_ = 0; }
 
  private:
+  bool ready_ = false;
   bool fileOpen_ = false;
   String currentName_;
   String readName_;
   unsigned long readSize_ = 0;
   bool readOpen_ = false;
+  uint32_t writeErrors_ = 0;
+  unsigned long syncMaxMs_ = 0;
   bool fileRotationArmed_ = false;  // false na starcie: pierwsza rolka po realnym ruchu
   unsigned long stoppedSince_ = 0;  // 0 = brak warunku bezruchu; inaczej millis() startu
   unsigned long movingSince_ = 0;   // 0 = brak warunku ruchu; inaczej millis() startu
