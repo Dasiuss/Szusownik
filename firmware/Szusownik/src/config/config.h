@@ -112,6 +112,10 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_BLE_ACK_TIMEOUT_MS 500
 #define SZ_BLE_ACK_RETRY 3
 #define SZ_BLE_INPUT_CHUNK 512
+// LIST:<since>: ile plików mieści się w jednej odpowiedzi STATUS. Nazwa (<=20 B)
+// + rozmiar (<=8 cyfr) to ~30 B/wpis, a odczyt atrybutu ATT ma limit 512 B;
+// 12 wpisów (~360 B) zostawia margines. PWA dopyta o kolejny fragment.
+#define SZ_BLE_LIST_MAX 12
 
 // BLE UUID v1 Szusownika — NOWE, nie mieszać z testowymi 7e6d… / 5f8a….
 #define SZ_UUID_SVC "3f9a0001-7c4e-4b2a-9e11-000000000001"

@@ -72,10 +72,12 @@ najnowszej wersji firmware i PWA. Dlatego:
 11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo. Build weryfikuje
     sam użytkownik i zgłasza, jeśli coś się nie powiodło.
 12. Nie wkładaj pełnej listy plików do INFO. Wartość atrybutu ATT ma limit 512 B
-    (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE —
-    PWA dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
-    pobiera się komendą `FILE:<i>` (STATUS `file <nazwa> <rozmiar>`). Szczegóły w
-    `docs/ble-transfer.md` §10.
+    (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE — PWA
+    dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
+    pobiera się stronicowanym `LIST:<since>` (STATUS `list <nazwa> <rozmiar> ...`,
+    do 12 wpisów). Kursor = największa rozwiązana nazwa; pusta lista = brak
+    nowych. Nieudane pobrania wracają po nazwie z `pendingFiles` bez listowania.
+    Szczegóły w `docs/ble-transfer.md` §10.
 13. PWA liczy zjazdy ze **scalonego śladu wszystkich plików** (jedna oś czasu,
     sortowanie po `Date.parse(t)`, dedup tylko realnych powtórek na styku plików),
     grupowanego po lokalnym dniu i ciętego raz na dzień. Nie wracaj do analizy

@@ -224,7 +224,9 @@ otrzymanych danych.
 ## 10. Protokół plików Szusownika v1 (zaprojektowany i zaimplementowany 2026-09-11)
 
 > Stan: zaimplementowane w `firmware/Szusownik/src/ble/` i `web/src/lib/ble.ts`.
-> Test e2e z telefonem — przed nami.
+> Listowanie przeprojektowane 2026-09-26 na przyrostowe `LIST:<since>` + trwałą
+> kolejkę ponowień po nazwie (szczegóły w „Decyzje" niżej). Test e2e z telefonem
+> — przed nami.
 > 2026-09-26: widoczność plików przez `.meta` + klasyfikacja błędów po stronie PWA.
 
 GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
@@ -241,9 +243,11 @@ STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów ("ok", "streaming",
 Komendy CTRL:
 
 ```text
-LIST_FILES            — odśwież INFO (bez efektów ubocznych)
+LIST:<since>          — pliki o nazwie > since, rosnąco, do SZ_BLE_LIST_MAX (12)
+                        na odpowiedź: STATUS "list <nazwa> <rozmiar> ...".
+                        Puste since = od najstarszego; pusta lista = brak nowych.
+                        PWA pyta dalej z since = ostatnia nazwa, aż dostanie pustą.
 ROTATE                — zamknij bieżący plik na SD + odśwież INFO
-FILE:<i>              — metadane i-tego CSV (kolejność katalogu): STATUS "file <i> <nazwa> <rozmiar>"
 DRYRUN:<nazwa>        — lokalny test SD+miniz+CRC bez radia (wynik w STATUS/logu)
 START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
 STOP                  — przerwij transfer
@@ -287,14 +291,17 @@ Reklamowanie (advertising) — doprecyzowane 2026-09-25 (NimBLE-Arduino 2.5.1):
 
 Decyzje względem pierwotnej granicy funkcjonalnej:
 
-- Pełna lista plików **nie** jest w INFO. Wartość atrybutu ATT ma twardy limit
-  512 B, a Web Bluetooth nie odczyta więcej; przekroczenie limitu zeruje wartość
-  w NimBLE (`setValue` → `append` odrzuca `len > max`) i PWA dostaje 0 B
-  („Unexpected end of JSON input"). Dlatego INFO niesie tylko `fileCount`, a
-  metadane plików PWA pobiera pojedynczo przez `FILE:<i>`
-  (STATUS `file <i> <nazwa> <rozmiar>`). Kolejność `i` = kolejność katalogu FAT.
-  Indeks musi być w odpowiedzi — PWA dopasowuje status do konkretnego żądania;
-  bez indeksu czyta stary status poprzedniego pliku (identyczny wzorzec).
+- Pełna lista plików **nie** jest w INFO ani w jednej odpowiedzi. Wartość
+  atrybutu ATT ma twardy limit 512 B, a Web Bluetooth nie odczyta więcej;
+  przekroczenie limitu zeruje wartość w NimBLE (`setValue` → `append` odrzuca
+  `len > max`) i PWA dostaje 0 B („Unexpected end of JSON input"). Dlatego INFO
+  niesie tylko `fileCount`, a metadane plików zwraca stronicowane
+  `LIST:<since>` (STATUS `list <nazwa> <rozmiar> ...`, do `SZ_BLE_LIST_MAX=12`
+  wpisów ~30 B każdy). Filtr po nazwie `YYYYMMDD_HHMMSS` (UTC z GNSS) jest
+  naturalnym kursorem: PWA pyta o nazwy > ostatnio rozwiązana i dostaje pustą
+  listę, gdy nie ma nic nowego — O(nowe), a nie O(ile jest). Odporne na
+  niestabilną kolejność katalogu FAT i na kasowanie FIFO (to drugie psuje
+  indeksy `FILE:<i>`, dlatego zrezygnowano z indeksowego listowania).
 - Metadane zawierają nazwę FAT32 i rozmiar surowy; **bez wersji formatu** w INFO.
   Schemat CSV jest **ewolucyjny** i walidowany po nagłówku. PWA akceptuje
   wyłącznie CSV v2; obecny nagłówek v2 i metryki GNSS opisuje
@@ -305,19 +312,27 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.
 - Błędy mają jawne kody (`err:open`, `err:deflate`, `err:ack-timeout`,
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
-- **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`csvAt` listują
+- **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`listCsv` listują
   wyłącznie CSV z plikiem towarzyszącym `<nazwa>.csv.meta`, który powstaje po
   potwierdzonym ruchu (`docs/wymagania-ESP.md` §7). Pliki postojowe są ukryte, więc
   PWA ich nie pobiera; `INFO.fileCount` również liczy tylko widoczne pliki.
+- **Kolejka ponowień po nazwie + trwały kursor** (2026-09-26): PWA trzyma
+  `pendingFiles` (błędy przejściowe) i `meta.syncCursor` = największa rozwiązana
+  nazwa. Sync = `ROTATE` → kolejka (`pendingFiles` ∪ nowe z `LIST:<kursor>`) →
+  `START_FILE:<nazwa>` po nazwie. Błąd przejściowy wraca po nazwie **bez
+  listowania**, więc kursor może przeskoczyć plik, który wypadł, a plik i tak
+  zostanie pobrany. Walidacja rozmiaru idzie po `STATUS done raw=..`, nie po
+  rozmiarze z listy — ponowienie po nazwie nie potrzebuje metadanych.
 - **PWA rozdziela błędy trwałe od przejściowych** (2026-09-26): niezgodny
-  rozmiar/CRC, zły nagłówek i brak próbek rzucają `PermanentDownloadError`, plik
-  trafia do `ignoredFiles` (zero ponowień) i dostaje jednorazowe ostrzeżenie.
-  Timeout, rozłączenie oraz kody `err:` z STATUS są przejściowe i zostają w
-  kolejce do ponowienia. PWA nie bramkuje tego po wersji firmware.
+  rozmiar/CRC, zły nagłówek i brak próbek rzucają `PermanentDownloadError`, a
+  `STATUS err:open` (plik zniknął z karty) rzuca `FileGoneError`; oba trafiają do
+  `ignoredFiles` (zero ponowień) z jednorazowym ostrzeżeniem. Timeout, rozłączenie
+  oraz pozostałe kody `err:` są przejściowe i lądują w `pendingFiles`. PWA nie
+  bramkuje tego po wersji firmware.
 
-PWA porównuje nazwy plików z IndexedDB i pobiera tylko nowe. Dane pozostają na
-karcie jako backup. Żądanie synchronizacji zamyka najpierw aktualny plik
-(`ROTATE`), aby transfer nie czytał pliku, który nadal jest zapisywany.
+PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
+Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw
+aktualny plik (`ROTATE`), aby transfer nie czytał pliku, który nadal jest zapisywany.
 
 ## 11. Znane problemy z testu — status po implementacji v1 (2026-09-11)
 

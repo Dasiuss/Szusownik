@@ -54,12 +54,23 @@ export interface StoredIgnoredFile {
   ignoredAt: string;
 }
 
+/** Nieudane pobranie przejściowe (timeout, rozłączenie, err:) — ponawiamy po nazwie,
+ *  bez ponownego listowania. Wpis znika po sukcesie lub po err:open (do ignoredFiles). */
+export interface StoredPendingFile {
+  name: string; // nazwa bez wiodącego ukośnika (jak w LIST)
+  size: number; // ostatnio znany rozmiar (do postępu; walidacja i tak idzie po done raw=)
+  attempts: number;
+  lastError: string;
+  updatedAt: string;
+}
+
 class SzusownikDb extends Dexie {
   files!: Table<StoredFile, string>;
   runs!: Table<StoredRun, string>;
   runLabels!: Table<StoredRunLabel, string>;
   deletedRuns!: Table<StoredDeletedRun, string>;
   ignoredFiles!: Table<StoredIgnoredFile, string>;
+  pendingFiles!: Table<StoredPendingFile, string>;
   meta!: Table<StoredMeta, string>;
 
   constructor() {
@@ -112,6 +123,17 @@ class SzusownikDb extends Dexie {
       runLabels: "id",
       deletedRuns: "id",
       ignoredFiles: "name",
+      meta: "key",
+    });
+    // v6: trwała kolejka ponowień po nazwie (błędy przejściowe). Kursor sync
+    // (największa rozwiązana nazwa) trzymamy w `meta` pod kluczem "syncCursor".
+    this.version(6).stores({
+      files: "name, receivedAt, userId",
+      runs: "id, dayKey, startT, label, demo",
+      runLabels: "id",
+      deletedRuns: "id",
+      ignoredFiles: "name",
+      pendingFiles: "name",
       meta: "key",
     });
   }

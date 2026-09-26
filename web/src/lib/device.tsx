@@ -84,7 +84,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     bleRef.current = client;
     setInfo(connectedInfo);
     setState("checking");
-    const fresh = await client.checkNewFiles();
+    const fresh = await client.collectNewFiles();
     setPendingFiles(fresh);
     setState("connected");
     armIdleTimer();
@@ -143,8 +143,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       if (corrupt.length > 0) {
         const names = corrupt.map((entry) => entry.meta.name).join(", ");
         notices.push(
-          `Pominięto uszkodzony plik z danymi zjazdu: ${names}. ` +
-            "Plik zostaje na karcie — możesz spróbować odzyskać go na komputerze.",
+          `Pominięto plik z urządzenia: ${names}. ` +
+            "Nie da się go pobrać — zostaje na karcie jako backup (możesz spróbować odzyskać na komputerze).",
         );
       }
       if (transient.length > 0) {

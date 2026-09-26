@@ -85,7 +85,7 @@ void BleFiles::refreshInfo() {
   if (!chrInfo) return;
   // INFO celowo małe: pełna lista plików nie mieści się w limicie 512 B atrybutu
   // ATT (Web Bluetooth i tak nie odczyta >512 B), a przekroczenie zeruje wartość
-  // w NimBLE. Metadane plików PWA pobiera pojedynczo przez FILE:<i>.
+  // w NimBLE. Metadane plików PWA pobiera stronicowanym LIST:<since>.
   String j = "{\"proto\":\"" SZ_WIRE_PROTO "\",\"fw\":\"" SZ_FW_VERSION "\",\"fileCount\":";
   j += String(storage_ ? (unsigned long)storage_->countCsv() : 0UL);
   if (beeper_) {
@@ -174,27 +174,26 @@ void BleFiles::setStatus(const String& s) {
 }
 
 void BleFiles::handleCommand(const String& cmd) {
-  if (cmd.startsWith("LIST_FILES")) {
-    refreshInfo();
-    setStatus("ok");
+  if (cmd.startsWith("LIST:")) {
+    // Filtr po nazwie (YYYYMMDD_HHMMSS): zwracamy do SZ_BLE_LIST_MAX najstarszych
+    // plików > since. Puste since = od najstarszego. Pusta lista = brak nowych.
+    String since = cmd.substring(5);
+    since.trim();
+    StorageEntry entries[SZ_BLE_LIST_MAX];
+    uint32_t n = storage_ ? storage_->listCsv(since, SZ_BLE_LIST_MAX, entries) : 0;
+    String msg = "list";
+    for (uint32_t i = 0; i < n; i++) {
+      msg += ' ';
+      msg += entries[i].name;
+      msg += ' ';
+      msg += String(entries[i].size);
+    }
+    setStatus(msg);
   } else if (cmd.startsWith("ROTATE")) {
     // Żądanie sync: zamknij bieżący plik, żeby transfer czytał kompletny plik.
     if (storage_) storage_->rotateForSync();
     refreshInfo();
     setStatus("ok");
-  } else if (cmd.startsWith("FILE:")) {
-    uint32_t index = (uint32_t)cmd.substring(5).toInt();
-    String name;
-    unsigned long size = 0;
-    if (storage_ && storage_->csvAt(index, name, size)) {
-      // Indeks w odpowiedzi: PWA czeka na status pasujący do KONKRETNEGO FILE:<i>,
-      // inaczej czyta stary status poprzedniego pliku (ten sam wzorzec).
-      char msg[96];
-      snprintf(msg, sizeof(msg), "file %lu %s %lu", (unsigned long)index, name.c_str(), size);
-      setStatus(String(msg));
-    } else {
-      setStatus("err:file");
-    }
   } else if (cmd.startsWith("DRYRUN:")) {
     String name = cmd.substring(7);
     name.trim();

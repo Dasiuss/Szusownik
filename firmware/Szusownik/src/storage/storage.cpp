@@ -165,32 +165,34 @@ uint32_t Storage::countCsv() const {
   return count;
 }
 
-bool Storage::csvAt(uint32_t index, String& name, unsigned long& size) const {
-  if (!ready_) return false;
-  uint32_t seen = 0;
+uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const {
+  if (!ready_ || maxCount == 0) return 0;
+  uint32_t count = 0;
   File root = SD.open("/");
-  if (!root) return false;
-  bool found = false;
+  if (!root) return 0;
   while (true) {
     File f = root.openNextFile();
     if (!f) break;
     if (!f.isDirectory()) {
       String n = String(f.name());
-      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n)) {
-        if (seen == index) {
-          name = n;
-          size = (unsigned long)f.size();
-          found = true;
-          f.close();
-          break;
+      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n) && n > since) {
+        // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
+        uint32_t pos = 0;
+        while (pos < count && String(out[pos].name) < n) pos++;
+        if (pos < maxCount) {
+          uint32_t newCount = count < maxCount ? count + 1 : count;
+          for (uint32_t j = newCount - 1; j > pos; --j) out[j] = out[j - 1];
+          strncpy(out[pos].name, n.c_str(), sizeof(out[pos].name) - 1);
+          out[pos].name[sizeof(out[pos].name) - 1] = '\0';
+          out[pos].size = (unsigned long)f.size();
+          count = newCount;
         }
-        seen++;
       }
     }
     f.close();
   }
   root.close();
-  return found;
+  return count;
 }
 
 bool Storage::openRead(const String& name) {

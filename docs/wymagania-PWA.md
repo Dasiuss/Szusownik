@@ -99,17 +99,28 @@ na nagraniach z auta defaulty wystarczą.
 
 ## 7. Transfer z urządzenia (BLE)
 
-- PWA prosi urządzenie o **listę plików** (nazwa + rozmiar + czas startu).
-- Porównuje z plikami już posiadanymi w IndexedDB (**po nazwie**) i pobiera **tylko nowe**.
+- PWA odkrywa nowe pliki **przyrostowo**: pyta firmware o pliki o nazwie
+  większej niż kursor (`LIST:<since>`, stronicowane), a nie o pełną listę.
+  Nazwa pliku to `YYYYMMDD_HHMMSS` (UTC z GNSS), więc sortuje się chronologicznie.
+  Pusta odpowiedź = brak nowych plików.
+- Kursor = największa **rozwiązana** nazwa (pobrana albo trwale pominięta),
+  trzymany w `meta` (`syncCursor`). Porównanie z IndexedDB **po nazwie**.
+- **Kolejka ponowień po nazwie.** Błąd przejściowy trafia do tabeli
+  `pendingFiles` (nazwa + rozmiar + liczba prób). Przy następnym sync PWA
+  pobiera taki plik **wprost po nazwie** (`START_FILE:<nazwa>`), bez listowania,
+  i scala go z nowo wylistowanymi w jedną kolejkę (dedup, sort rosnąco).
+  Dzięki temu kursor może przeskoczyć plik, który wypadł — nie przepada.
+- Rozmiar do walidacji bierze się z urządzenia (`STATUS done raw=..`), nie z
+  listy — ponowienie po nazwie nie potrzebuje metadanych.
 - **Pliki postojowe są niewidoczne**: firmware listuje wyłącznie CSV z plikiem
   towarzyszącym `.meta` (patrz `docs/wymagania-ESP.md` §7), więc PWA nigdy nie widzi
   ani nie próbuje pobierać plików bez jazdy. Zero błędów i ponowień dla śmieci.
 - **Klasyfikacja błędów pobierania.** Trwałe uszkodzenie danych (niezgodny
-  rozmiar/CRC, zły nagłówek, brak próbek) zapisujemy w `ignoredFiles` i **nie
-  ponawiamy**; użytkownik dostaje jednorazowe ostrzeżenie z podpowiedzią, że plik
-  zostaje na karcie i można spróbować odzyskać go na komputerze. Błędy przejściowe
-  (timeout, rozłączenie, `err:ack-timeout`/`err:nomem`/`err:busy`) zostają w
-  kolejce do ponowienia.
+  rozmiar/CRC, zły nagłówek, brak próbek) oraz zniknięcie pliku z karty
+  (`STATUS err:open`) zapisujemy w `ignoredFiles` i **nie ponawiamy**; użytkownik
+  dostaje jednorazowe ostrzeżenie, że plik zostaje na karcie jako backup i można
+  spróbować odzyskać go na komputerze. Błędy przejściowe (timeout, rozłączenie,
+  `err:ack-timeout`/`err:nomem`/`err:busy`) trafiają do `pendingFiles`.
 - **Żądanie pobrania rotuje plik na urządzeniu** — pobierane pliki są zawsze kompletne.
 - Sync po nazwie pliku (nie po zakresie timestampów): całe pliki, idempotentne, bez problemu
   dryfu zegara.
@@ -119,7 +130,8 @@ na nagraniach z auta defaulty wystarczą.
   trzymane osobno, po stabilnym id zjazdu, więc ponowna materializacja ich nie gubi.
 - Materializacja jest idempotentna i wykonywana tylko wtedy, gdy zmienił się zbiór
   plików albo wersja analizy (`QUALITY_ANALYSIS_VERSION`); inaczej jest pomijana.
-  Schemat Dexie v5: `files`, `runs`, `runLabels`, `deletedRuns`, `ignoredFiles`, `meta`.
+  Schemat Dexie v6: `files`, `runs`, `runLabels`, `deletedRuns`, `ignoredFiles`,
+  `pendingFiles`, `meta`.
 
 ## 8. Dane testowe (rzeczywisty ślad, metryki GNSS z urządzenia)
 

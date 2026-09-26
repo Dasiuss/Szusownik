@@ -93,7 +93,7 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   próbkami z postoju (bezwartościowy). Jeden postój = jedna rolka.
 - **Plik towarzyszący `.meta`**: `<nazwa>.csv.meta` powstaje po potwierdzonym
   ruchu (§7). Jego brak oznacza plik postojowy — takiego CSV firmware **nie
-  listuje** (`countCsv`/`csvAt`), więc PWA go nie widzi i nie pobiera. Format
+  listuje** (`countCsv`/`listCsv`), więc PWA go nie widzi i nie pobiera. Format
   prosty `klucz=wartość` (`v=1`, `csv=<nazwa>`), rozszerzalny bez serializera JSON.
 - **Rotacja też przy żądaniu pobrania** — pobierane pliki zawsze kompletne/zamknięte.
 - **Okresowy flush pliku** co `SZ_SD_COMMIT_MS` (10 s). `File::flush()` to
@@ -142,9 +142,10 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
 
 ## 8. Transfer BLE + sprzątanie
 
-- PWA prosi o **listę plików** (nazwa + rozmiar + czas startu) i pobiera **tylko nowe**
-  (porównanie po nazwie — patrz `docs/wymagania-PWA.md`). Na liście są wyłącznie
-  CSV z plikiem `.meta` (czyli takie, które miały ruch) — pliki postojowe są ukryte.
+- PWA pobiera **tylko nowe** pliki, przyrostowo: pyta o nazwy większe od kursora
+  (`LIST:<since>`, stronicowane, po nazwie — patrz `docs/wymagania-PWA.md` §7).
+  Na liście są wyłącznie CSV z plikiem `.meta` (czyli takie, które miały ruch) —
+  pliki postojowe są ukryte. Błędy przejściowe wracają po nazwie, bez listowania.
 - **Nie kasujemy danych z SD** — zostają jako backup. Oznaczanie „wysłane" na urządzeniu
   nie jest potrzebne (PWA śledzi co ma w IndexedDB).
 - Sprzątanie: gdy karta jest pełna — kasuj **najstarsze pliki** (FIFO) lub ręcznie.

@@ -5,6 +5,13 @@
 // Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: domknięcie pliku na
 // postoju (chroni dane przed odcięciem zasilania) oraz na żądanie sync z PWA.
 // Bez kasowania po wysyłce. Pliki postojowe (bez .meta) nie są listowane.
+
+// Wpis listy plików dla BLE (LIST:<since>). Nazwa FAT bez wiodącego ukośnika.
+struct StorageEntry {
+  char name[24];
+  unsigned long size;
+};
+
 class Storage {
  public:
   bool begin();
@@ -17,8 +24,10 @@ class Storage {
   bool isOpen() const { return fileOpen_; }
   String currentName() const { return currentName_; }
   uint32_t countCsv() const;  // liczba CSV z .meta (widocznych dla PWA)
-  // i-ty CSV z .meta w stabilnej kolejności katalogu; false gdy brak.
-  bool csvAt(uint32_t index, String& name, unsigned long& size) const;
+  // Do maxCount najstarszych nazw > since (rosnąco, filtr .meta). Nazwy
+  // YYYYMMDD_HHMMSS sortują się chronologicznie, więc zwracany jest kolejny
+  // fragment listy: PWA pyta dalej z since = ostatnia nazwa, aż dostanie pustą.
+  uint32_t listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const;
   void rotateForSync() { close(); }  // nowy otworzy się przy kolejnej próbce
   // Rolka na postoju: gdy prędkość < SZ_ROLL_STOP_BELOW_KMH przez SZ_ROLL_HOLD_MS
   // (tylko przy poprawnym fixie), domyka plik; ponowne uzbrojenie po prędkości

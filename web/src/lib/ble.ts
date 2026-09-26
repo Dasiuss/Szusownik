@@ -123,6 +123,62 @@ export class PermanentDownloadError extends Error {
   }
 }
 
+/**
+ * Plik zniknął z karty (STATUS `err:open`) — np. skasowany przez FIFO, gdy
+ * leżał w kolejce ponowień. Trwale nierozwiązywalny: ląduje w ignoredFiles.
+ */
+export class FileGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileGoneError";
+  }
+}
+
+/** Musi zgadzać się z SZ_BLE_LIST_MAX w firmware (config.h). */
+const LIST_PAGE_MAX = 12;
+/** Zabezpieczenie przed zapętleniem listowania przy błędnym firmware. */
+const LIST_PAGE_LIMIT = 10000;
+const CURSOR_KEY = "syncCursor";
+
+function bareName(name: string): string {
+  return name.replace(/^\//, "");
+}
+
+/**
+ * Parsuje STATUS odpowiedzi na LIST:<since>. "list" = pusta lista. Rzuca przy
+ * odpowiedzi niezgodnej z formatem (zabezpieczenie przed cichym pominięciem).
+ */
+export function parseListStatus(status: string): FileMeta[] {
+  if (!status.startsWith("list")) throw new Error(`Zła odpowiedź listy plików: ${status}`);
+  const tokens = status.slice(4).trim();
+  if (!tokens) return [];
+  const parts = tokens.split(/\s+/);
+  if (parts.length % 2 !== 0 || parts.length / 2 > LIST_PAGE_MAX) {
+    throw new Error(`Zła odpowiedź listy plików: ${status}`);
+  }
+  const out: FileMeta[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const size = Number(parts[i + 1]);
+    if (!Number.isFinite(size)) throw new Error(`Zły rozmiar w liście: ${status}`);
+    out.push({ name: parts[i], size });
+  }
+  return out;
+}
+
+/**
+ * Scala trwałą kolejkę ponowień z nowo wylistowanymi plikami: dedup po nazwie
+ * (bez wiodącego ukośnika), odrzucenie już znanych, sort rosnąco (chronologicznie).
+ */
+export function buildQueue(pending: FileMeta[], listed: FileMeta[], known: Set<string>): FileMeta[] {
+  const merged = new Map<string, FileMeta>();
+  for (const meta of [...pending, ...listed]) {
+    const bare = bareName(meta.name);
+    if (known.has(bare) || merged.has(bare)) continue;
+    merged.set(bare, { name: bare, size: meta.size });
+  }
+  return [...merged.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
+}
+
 let crcTable: Uint32Array | null = null;
 function crc32Update(crc: number, data: Uint8Array): number {
   if (!crcTable) {
@@ -459,8 +515,12 @@ export class SzusownikBle {
         await new Promise((r) => setTimeout(r, 20));
         if (failed) throw failed;
       }
-      // Walidacja end-to-end: rozmiar (INFO), CRC (STATUS done), schemat CSV.
+      // Walidacja end-to-end: rozmiar (STATUS done raw=), CRC, schemat CSV.
       const status = await this.pollStatus(/crc=[0-9A-Fa-f]{8}/);
+      if (status.startsWith("err:open")) {
+        // Plik zniknął z karty (np. FIFO skasowało go, gdy czekał w kolejce).
+        throw new FileGoneError(`Plik zniknął z karty (${status})`);
+      }
       if (status.startsWith("err:")) {
         // Błąd urządzenia (np. err:ack-timeout/err:nomem/err:busy) — przejściowy.
         throw new Error(`Urządzenie przerwało transfer (${status})`);
@@ -470,12 +530,16 @@ export class SzusownikBle {
         // Brak potwierdzenia CRC — traktujemy jako przejściowe, nie jako śmieć.
         throw new Error(`Brak statusu CRC z urządzenia (STATUS: ${status})`);
       }
+      const mRaw = /raw=(\d+)/.exec(status);
+      if (!mRaw) throw new Error(`Brak rozmiaru raw w STATUS urządzenia (STATUS: ${status})`);
       const gotCrc = (crc ^ 0xffffffff) >>> 0;
       if (parseInt(mCrc[1], 16) >>> 0 !== gotCrc) {
         throw new PermanentDownloadError(`Niezgodne CRC (STATUS: ${status})`);
       }
-      if (outLen !== meta.size) {
-        throw new PermanentDownloadError(`Niezgodny rozmiar: ${outLen} vs ${meta.size} (INFO)`);
+      // Rozmiar autorytatywny bierze się z urządzenia (raw=), nie z listy —
+      // dzięki temu ponowienie po nazwie nie potrzebuje metadanych.
+      if (outLen !== Number(mRaw[1])) {
+        throw new PermanentDownloadError(`Niezgodny rozmiar: ${outLen} vs raw=${mRaw[1]}`);
       }
       const flat = new Uint8Array(outLen);
       let off = 0;
@@ -514,48 +578,82 @@ export class SzusownikBle {
     }
   }
 
-  async checkNewFiles(): Promise<FileMeta[]> {
-    await this.writeCtrl("ROTATE");
-    const info = await this.readInfo();
-    const known = new Set(
-      ((await db.files.toCollection().primaryKeys()) as string[]).map((name) => name.replace(/^\//, "")),
-    );
-    const ignored = new Set(
-      ((await db.ignoredFiles.toCollection().primaryKeys()) as string[]).map((name) => name.replace(/^\//, "")),
-    );
-    const fresh: FileMeta[] = [];
-    for (let index = 0; index < info.fileCount; index++) {
-      await this.writeCtrl(`FILE:${index}`);
-      // Czekamy na status z TYM indeksem — sam wzorzec `file ...` pasowałby też
-      // do odpowiedzi na poprzedni FILE:<i>.
-      const status = await this.pollStatus(new RegExp(`^file ${index} \\S+ \\d+$`));
-      const match = new RegExp(`^file ${index} (\\S+) (\\d+)$`).exec(status);
-      if (!match) throw new Error(`Zła odpowiedź listy plików: ${status}`);
-      const name = match[1];
-      const bare = name.replace(/^\//, "");
-      if (!known.has(bare) && !ignored.has(bare)) fresh.push({ name, size: Number(match[2]) });
+  private async readCursor(): Promise<string> {
+    const row = await db.meta.get(CURSOR_KEY);
+    return row?.value ?? "";
+  }
+
+  /** Kursor = największa ROZWIĄZANA nazwa; nigdy nie cofa się. */
+  private async advanceCursor(name: string): Promise<void> {
+    const current = await this.readCursor();
+    if (name > current) await db.meta.put({ key: CURSOR_KEY, value: name });
+  }
+
+  /**
+   * Stronicowane LIST:<since>. Firmware zwraca do LIST_PAGE_MAX najstarszych
+   * nazw > since; pusta lista = koniec. Pytamy dalej z since = ostatnia nazwa.
+   */
+  private async listSince(since: string): Promise<FileMeta[]> {
+    const out: FileMeta[] = [];
+    let cursor = since;
+    for (let page = 0; page < LIST_PAGE_LIMIT; page++) {
+      await this.writeCtrl(`LIST:${cursor}`);
+      const status = await this.pollStatus(/^list( |$)/);
+      if (status.startsWith("err:")) throw new Error(`Błąd listowania plików: ${status}`);
+      const entries = parseListStatus(status);
+      if (entries.length === 0) return out; // pusta lista = nic nowego
+      for (const entry of entries) out.push(entry);
+      // Nazwy są rosnące i muszą posuwać kursor, inaczej pętla nieskończona.
+      const last = entries[entries.length - 1].name;
+      if (last <= cursor) throw new Error(`Lista plików nie posuwa kursora: ${status}`);
+      cursor = last;
     }
-    return fresh;
+    throw new Error("Lista plików przekroczyła limit stron");
+  }
+
+  /**
+   * Odkrywa pliki do pobrania: ROTATE (domknięcie bieżącego pliku) → kolejka
+   * ponowień po nazwie (bez listowania) ∪ nowe nazwy > kursor. Dedup i sort
+   * rosnąco. Kursor = największa rozwiązana nazwa (files ∪ ignoredFiles).
+   */
+  async collectNewFiles(): Promise<FileMeta[]> {
+    await this.writeCtrl("ROTATE");
+    await this.pollStatus(/^ok$/);
+    const known = new Set<string>(
+      [
+        ...((await db.files.toCollection().primaryKeys()) as string[]),
+        ...((await db.ignoredFiles.toCollection().primaryKeys()) as string[]),
+      ].map(bareName),
+    );
+    const pending = await db.pendingFiles.toArray();
+    const stale = pending.filter((entry) => known.has(entry.name));
+    for (const entry of stale) await db.pendingFiles.delete(entry.name); // już rozwiązany — sprzątnij
+    const alive = pending
+      .filter((entry) => !known.has(entry.name))
+      .map((entry) => ({ name: entry.name, size: entry.size }));
+    const listed = await this.listSince(await this.readCursor());
+    return buildQueue(alive, listed, known);
   }
 
   async downloadFiles(
-    fresh: FileMeta[],
+    queue: FileMeta[],
     onProgress: (p: SyncProgress) => void,
   ): Promise<DownloadResult> {
     const done: SyncedFile[] = [];
     const transient: FileMeta[] = [];
     const corrupt: CorruptFile[] = [];
     let fileIndex = 0;
-    for (const meta of fresh) {
+    for (const meta of queue) {
       fileIndex++;
-      const name = meta.name.startsWith("/") ? meta.name : `/${meta.name}`;
+      const bare = bareName(meta.name);
+      const name = `/${bare}`;
       try {
         const text = await this.downloadFile(meta, (receivedFrames) =>
           onProgress({
             file: name,
             receivedFrames,
             fileIndex,
-            fileCount: fresh.length,
+            fileCount: queue.length,
           }),
         );
         await db.files.put({
@@ -565,27 +663,45 @@ export class SzusownikBle {
           userId: "local",
           raw: text,
         });
+        await db.pendingFiles.delete(bare);
+        await this.advanceCursor(bare);
         done.push({ name, size: text.length, samples: text.split("\n").length - 1 });
       } catch (caught) {
         // Jeden uszkodzony plik nie może blokować pozostałych.
         console.error(`[ble] pobieranie ${name} nieudane`, caught);
         const reason = caught instanceof Error ? caught.message : String(caught);
-        if (caught instanceof PermanentDownloadError) corrupt.push({ meta, reason });
-        else transient.push(meta);
+        if (caught instanceof PermanentDownloadError || caught instanceof FileGoneError) {
+          // Uszkodzony lub zniknięty z karty — nigdy nie ponawiamy.
+          await db.ignoredFiles.put({ name: bare, reason, ignoredAt: new Date().toISOString() });
+          await db.pendingFiles.delete(bare);
+          await this.advanceCursor(bare);
+          corrupt.push({ meta, reason });
+        } else {
+          // Błąd przejściowy — zostaje w kolejce ponowień (po nazwie).
+          const previous = await db.pendingFiles.get(bare);
+          await db.pendingFiles.put({
+            name: bare,
+            size: meta.size,
+            attempts: (previous?.attempts ?? 0) + 1,
+            lastError: reason,
+            updatedAt: new Date().toISOString(),
+          });
+          transient.push(meta);
+        }
       }
     }
     return { done, transient, corrupt };
   }
 
   /**
-   * Sync: ROTATE (domknięcie bieżącego pliku) → lista → pobierz tylko nowe
-   * (porównanie po nazwie z IndexedDB) → zapis surowego CSV → IndexedDB.
+   * Sync: ROTATE → kolejka (ponowienia po nazwie ∪ nowe > kursor) → pobranie
+   * po nazwie → zapis surowego CSV → IndexedDB. Kursor i pending są trwałe.
    */
   async syncNewFiles(onProgress: (p: SyncProgress) => void): Promise<DownloadResult> {
     try {
       await this.connect();
-      const fresh = await this.checkNewFiles();
-      return this.downloadFiles(fresh, onProgress);
+      const queue = await this.collectNewFiles();
+      return this.downloadFiles(queue, onProgress);
     } finally {
       this.disconnect();
     }
