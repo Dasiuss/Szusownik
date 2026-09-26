@@ -18,6 +18,7 @@ interface DeviceContextValue {
   pendingFiles: FileMeta[];
   progress: SyncProgress | null;
   error: string | null;
+  clearError: () => void;
   lastSyncAt: string | null;
   dataRevision: number;
   connectAndCheck: () => Promise<void>;
@@ -48,6 +49,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
+
+  function clearError() {
+    setError(null);
+  }
 
   function clearIdleTimer() {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -170,6 +175,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         pendingFiles,
         progress,
         error,
+        clearError,
         lastSyncAt,
         dataRevision,
         connectAndCheck,

@@ -47,7 +47,15 @@ export default function DayView() {
       </header>
 
       {isToday && <SyncCard />}
-      {device.error && <div className="alert-card alert-card-error"><Icon name="x" size={18} /><span>{device.error}</span></div>}
+      {device.error && (
+        <div className="alert-card alert-card-error">
+          <Icon name="x" size={18} />
+          <span>{device.error}</span>
+          <button className="alert-card-close" type="button" aria-label="Zamknij" onClick={device.clearError}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="loading-card"><span className="spinner" /> Wczytuję aktywność…</div>

@@ -78,6 +78,9 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .button:disabled { opacity: .55; }
 .text-link { display: inline-flex; align-items: center; gap: 2px; color: #4b8a74; font-size: 12px; font-weight: 800; }
 .alert-card { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; color: #9b4838; background: #fff4f0; font-size: 12px; line-height: 1.45; }
+.alert-card > span { flex: 1; }
+.alert-card-close { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; padding: 0; color: inherit; background: transparent; border: 0; border-radius: 50%; cursor: pointer; }
+.alert-card-close:hover { background: #f6dcd2; }
 .loading-card { display: flex; align-items: center; gap: 10px; padding: 20px; color: #71858a; background: #fff; font-size: 13px; font-weight: 700; }
 .spinner { display: inline-block; width: 17px; height: 17px; border: 2px solid #d5e5e1; border-top-color: #ed7657; border-radius: 50%; animation: spin .75s linear infinite; }
 .spinner-light { border-color: #ffffff42; border-top-color: #fff; }

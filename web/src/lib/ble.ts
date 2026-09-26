@@ -190,7 +190,17 @@ export class SzusownikBle {
 
   async readInfo(): Promise<DeviceInfo> {
     const v = await this.info!.readValue();
-    const info = JSON.parse(new TextDecoder().decode(dvBytes(v))) as DeviceInfo;
+    const bytes = dvBytes(v);
+    const text = new TextDecoder().decode(bytes);
+    let info: DeviceInfo;
+    try {
+      info = JSON.parse(text) as DeviceInfo;
+    } catch {
+      console.error(`INFO z urządzenia nieparsowalne (${bytes.length} B):`, text);
+      throw new Error(
+        `Zły JSON INFO z urządzenia (${bytes.length} B): ${text.slice(0, 160)}${text.length > 160 ? "…" : ""}`,
+      );
+    }
     if (!Array.isArray(info.files)) throw new Error("Zły format INFO z urządzenia");
     for (const field of SzusownikBle.INFO_NUMBER_FIELDS) {
       if (typeof info[field] !== "number") {

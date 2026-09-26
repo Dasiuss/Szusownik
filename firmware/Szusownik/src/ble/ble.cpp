@@ -81,6 +81,8 @@ void BleFiles::refreshInfo() {
   }
   j += "}";
   chrInfo->setValue(j.c_str());
+  szLogf("BLE: INFO len=%u stored=%u", (unsigned)j.length(),
+         (unsigned)chrInfo->getValue().length());
 }
 
 void BleFiles::reportVolume() {

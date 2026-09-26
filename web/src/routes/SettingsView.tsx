@@ -218,6 +218,11 @@ export default function SettingsView() {
     }
   }
 
+  function dismissError() {
+    setSettingsError(null);
+    device.clearError();
+  }
+
   const connected = device.state === "connected" || device.state === "checking" || device.state === "downloading";
 
   return (
@@ -254,7 +259,15 @@ export default function SettingsView() {
         <Link className="mini-sync-link" to="/"><Icon name="download" size={18} /><span><strong>{device.pendingFiles.length} nowych plików</strong><small>Przejdź do Dzisiaj, żeby je pobrać</small></span><Icon name="chevron" size={18} /></Link>
       )}
 
-      {(settingsError || device.error) && <div className="alert-card alert-card-error"><Icon name="x" size={18} /><span>{settingsError ?? device.error}</span></div>}
+      {(settingsError || device.error) && (
+        <div className="alert-card alert-card-error">
+          <Icon name="x" size={18} />
+          <span>{settingsError ?? device.error}</span>
+          <button className="alert-card-close" type="button" aria-label="Zamknij" onClick={dismissError}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
 
       <section className="settings-section">
         <div className="section-heading"><div><span className="eyebrow">Feedback na stoku</span><h2>Dźwięk</h2></div><span className="section-status">{settingsBusy ? "Zapisuję…" : connected ? "Zapisuje się automatycznie" : "Połącz urządzenie"}</span></div>
