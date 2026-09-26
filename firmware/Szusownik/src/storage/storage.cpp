@@ -164,7 +164,8 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
   }
   size_t pos = readFile.position();
   size_t n = readFile.read(buf, maxLen);
-  if (n == 0) {
+  if (n == 0 && pos < readSize_) {
+    // Realny błąd odczytu (nie normalny EOF na końcu pliku).
     File probe = SD.open(readName_, FILE_READ);
     uint8_t one = 0;
     size_t pn = probe ? probe.read(&one, 1) : 0;
