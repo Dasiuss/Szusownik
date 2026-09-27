@@ -552,10 +552,27 @@ export class SzusownikBle {
       if (!started.startsWith("streaming") && !started.startsWith("done")) {
         throw new Error(`Brak startu transferu (${started || "brak statusu"})`);
       }
+      let lastStatusCheck = 0;
       for (;;) {
         await chain;
         if (failed) throw failed;
         if (finished && readerDone) break;
+        // Firmware może przerwać transfer (np. err:read) BEZ end markera. Wtedy
+        // sama pętla czekałaby do timeoutu transferu, więc co ~250 ms sprawdzamy
+        // STATUS na błąd dotyczący tego pliku.
+        const now = Date.now();
+        if (now - lastStatusCheck >= 250) {
+          lastStatusCheck = now;
+          let current = "";
+          try {
+            current = await this.readStatus();
+          } catch {
+            current = ""; // chwilowy błąd odczytu STATUS nie może psuć transferu
+          }
+          if (current.includes(meta.name) && current.startsWith("err:")) {
+            throw this.classifyTransferError(current);
+          }
+        }
         await new Promise((r) => setTimeout(r, 20));
         if (failed) throw failed;
       }

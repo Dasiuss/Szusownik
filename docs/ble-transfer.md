@@ -352,7 +352,9 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `ignoredFiles` (zero ponowień) z jednorazowym ostrzeżeniem. Timeout, rozłączenie
   oraz pozostałe kody `err:` (w tym `err:read`) są przejściowe i lądują w
   `pendingFiles`. Statusy transferu niosą nazwę pliku, więc PWA wykrywa błąd
-  startu (otwarcie/odczyt SD) w kilka sekund, zamiast czekać na timeout transferu.
+  (otwarcie/odczyt SD) w kilka sekund, zamiast czekać na timeout transferu: raz w
+  oknie startu, a potem sprawdzając STATUS co ~250 ms w trakcie odbioru ramek
+  (firmware przerywa bez end markera).
   PWA nie bramkuje tego po wersji firmware.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
