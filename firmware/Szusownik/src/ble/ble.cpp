@@ -495,13 +495,25 @@ void BleFiles::pumpStream() {
   }
 
   // 2) produkcja nowych ramek (max 16 na poll, żeby nie blokować pętli).
-  // pend_ jest stagingiem: cały output kompresora trafia do niego, wysyłamy
-  // pełne ramki i przesuwamy resztę. emitFrame() przy pacingu nie kopiuje
-  // danych, więc return nie może ich zgubić.
+  // pend_ jest stagingiem. KOLEJNOŚĆ JEST ISTOTNA: najpierw wysyłamy pełne
+  // ramki, a dopisujemy output kompresora tylko gdy w stagingu zostało < 240 B.
+  // Dzięki temu przy zablokowanym pacingu (emitFrame zwraca false i robimy
+  // return) staging nie rośnie między poll() i nie przepełnia pend_[512].
   uint8_t made = 0;
   while (made < 16 && (nextSeq_ - oldestUnacked_) < SZ_BLE_WINDOW) {
     if (endSent_) break;
 
+    // (a) Wyślij jedną pełną ramkę ze stagingu (pacing może wstrzymać).
+    if (pendLen_ >= SZ_BLE_PAYLOAD_SIZE) {
+      if (!emitFrame(pend_, SZ_BLE_PAYLOAD_SIZE)) return;  // pacing — dane zostają
+      memmove(pend_, pend_ + SZ_BLE_PAYLOAD_SIZE, pendLen_ - SZ_BLE_PAYLOAD_SIZE);
+      pendLen_ -= SZ_BLE_PAYLOAD_SIZE;
+      made++;
+      continue;
+    }
+
+    // (b) Kompresja — dopisujemy tylko mając miejsce: pend_ < 240, a output
+    //     kompresora to <= 256 B, więc razem <= 496 < 512.
     if (!compFinished_) {
       // Dociągnij dane wejściowe.
       if (!inputEof_ && inPos_ >= inLen_) {
@@ -539,28 +551,20 @@ void BleFiles::pumpStream() {
       }
       if (st == TDEFL_STATUS_DONE) {
         compFinished_ = true;
-      } else if (produced == 0 && !inputEof_) {
-        break;  // kompresor czeka na więcej wejścia — wróć w kolejnym poll
+      } else if (produced == 0) {
+        break;  // brak postępu — wróć w kolejnym poll()
       }
+      continue;  // wróć na górę: wyślij pełne ramki, ew. dokończ kompresję
     }
 
-    // Wyślij wszystkie pełne ramki; częściowa reszta zostaje w pend_.
-    while (pendLen_ >= SZ_BLE_PAYLOAD_SIZE && made < 16) {
-      if (!emitFrame(pend_, SZ_BLE_PAYLOAD_SIZE)) return;  // pacing — dane zostają
-      memmove(pend_, pend_ + SZ_BLE_PAYLOAD_SIZE, pendLen_ - SZ_BLE_PAYLOAD_SIZE);
-      pendLen_ -= SZ_BLE_PAYLOAD_SIZE;
+    // (c) Kompresja zakończona, w stagingu < pełnej ramki: wyślij resztę i end.
+    if (pendLen_ > 0) {
+      if (!emitFrame(pend_, pendLen_)) return;  // pacing — dane zostają
+      pendLen_ = 0;
       made++;
     }
-
-    if (compFinished_ && pendLen_ < SZ_BLE_PAYLOAD_SIZE) {
-      if (pendLen_ > 0) {
-        if (!emitFrame(pend_, pendLen_)) return;  // pacing — dane zostają
-        pendLen_ = 0;
-        made++;
-      }
-      sendEndMarker();
-      break;
-    }
+    sendEndMarker();
+    break;
   }
 
   // 3) timeout ACK -> replay od najstarszej niepotwierdzonej.
