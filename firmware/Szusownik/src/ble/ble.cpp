@@ -37,6 +37,37 @@ class SzBleServerCallbacks : public NimBLEServerCallbacks {
 };
 static SzBleServerCallbacks szBleCallbacks;
 
+// Komendy CTRL przechodzą przez callback onWrite (kontekst taska hosta NimBLE)
+// do kolejki czytanej w pętli głównej. NIE czytamy chrCtrl->getValue() z pętli:
+// writeEvent() woła w tasku hosta setValue() (realloc m_value), a getValue() robi
+// deepCopy() z rozmiarem czytanym poza sekcją krytyczną, więc równoległy odczyt
+// i zapis przepełnia bufor/niszczy stertę ("CORRUPT HEAP" po transferze).
+#define SZ_CTRL_Q_SLOTS 8
+#define SZ_CTRL_Q_LEN 96
+static portMUX_TYPE g_ctrlMux = portMUX_INITIALIZER_UNLOCKED;
+static char g_ctrlQ[SZ_CTRL_Q_SLOTS][SZ_CTRL_Q_LEN];
+static uint16_t g_ctrlQLen[SZ_CTRL_Q_SLOTS];
+static uint16_t g_ctrlHead = 0;  // producent: task hosta NimBLE
+static uint16_t g_ctrlTail = 0;  // konsument: pętla główna
+
+class SzCtrlCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+    std::string v = c->getValue();  // ten sam task, który zmienił m_value — bez wyścigu
+    if (v.empty()) return;
+    if (v.length() >= SZ_CTRL_Q_LEN) v.resize(SZ_CTRL_Q_LEN - 1);
+    portENTER_CRITICAL(&g_ctrlMux);
+    uint16_t next = (uint16_t)((g_ctrlHead + 1) % SZ_CTRL_Q_SLOTS);
+    if (next != g_ctrlTail) {  // gdy pełna, gubimy nową komendę (pętla nadąża)
+      memcpy(g_ctrlQ[g_ctrlHead], v.data(), v.length());
+      g_ctrlQ[g_ctrlHead][v.length()] = '\0';
+      g_ctrlQLen[g_ctrlHead] = (uint16_t)v.length();
+      g_ctrlHead = next;
+    }
+    portEXIT_CRITICAL(&g_ctrlMux);
+  }
+};
+static SzCtrlCallbacks szCtrlCallbacks;
+
 void BleFiles::begin(Storage* storage) {
   storage_ = storage;
   allocStreamMem();
@@ -48,9 +79,18 @@ void BleFiles::begin(Storage* storage) {
   chrInfo = svc->createCharacteristic(SZ_UUID_INFO, NIMBLE_PROPERTY::READ);
   chrCtrl = svc->createCharacteristic(SZ_UUID_CTRL,
                                       NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  chrCtrl->setCallbacks(&szCtrlCallbacks);
   chrData = svc->createCharacteristic(SZ_UUID_DATA, NIMBLE_PROPERTY::NOTIFY);
   chrStat = svc->createCharacteristic(SZ_UUID_STAT,
                                       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+  // Rozgrzej pojemność buforów wartości do maksimum, żeby późniejsze setValue()
+  // z pętli głównej nie robiło realloc() równolegle z odczytem z taska hosta
+  // (ten sam wyścig, który niszczy stertę przy CTRL — patrz SzCtrlCallbacks).
+  {
+    std::string pad(480, ' ');
+    chrInfo->setValue(pad.c_str());
+    chrStat->setValue(pad.c_str());
+  }
   refreshInfo();
   setStatus("ok");
   svc->start();
@@ -293,12 +333,22 @@ void BleFiles::poll() {
       SZ_LOGIF("BLE disconn reason=%d", g_discReason);
     }
   }
-  // Odczyt i skonsumowanie komendy zamiast callbacku — bez ryzyka API callbacks.
-  std::string v = chrCtrl->getValue();
-  String cmd(v.c_str());
-  if (cmd.length()) {
-    chrCtrl->setValue("");
-    handleCommand(cmd);
+  // Konsumuj komendy z kolejki onWrite (patrz SzCtrlCallbacks). Nie czytamy
+  // chrCtrl->getValue() tutaj — to wyścig ze setValue() w tasku hosta NimBLE.
+  while (true) {
+    char cmd[SZ_CTRL_Q_LEN];
+    uint16_t len;
+    portENTER_CRITICAL(&g_ctrlMux);
+    if (g_ctrlTail == g_ctrlHead) {
+      portEXIT_CRITICAL(&g_ctrlMux);
+      break;
+    }
+    len = g_ctrlQLen[g_ctrlTail];
+    memcpy(cmd, g_ctrlQ[g_ctrlTail], len);
+    cmd[len] = '\0';
+    g_ctrlTail = (uint16_t)((g_ctrlTail + 1) % SZ_CTRL_Q_SLOTS);
+    portEXIT_CRITICAL(&g_ctrlMux);
+    handleCommand(String(cmd));
   }
   if (transferring_) pumpStream();
 }

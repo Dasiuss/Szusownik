@@ -266,8 +266,21 @@ SETMINBEEP:<60-120>            — minimalna prędkość pikania w km/h (NVS) + 
 
 Ponowne wysłanie `SETVOL`, `SETFREQ`, `SETTIMING` lub `SETMINBEEP` z tą samą wartością również
 odtwarza feedback. `SETTIMING` odtwarza trzy pełne wzory 120 km/h, aby można było
-ocenić długości i odstępy. Firmware konsumuje komendę po odczycie, więc identyczna
-komenda może zostać wysłana ponownie bez dodatkowego numeru.
+ocenić długości i odstępy. Każdy zapis CTRL to jedna pełna komenda (PWA wysyła
+jedną komendę na zapis i czeka na STATUS), więc identyczna komenda może być
+wysłana ponownie bez dodatkowego numeru.
+
+**Odbiór komend CTRL (2026-09-27, naprawa `CORRUPT HEAP`):** komendy są
+przechwytywane w `NimBLECharacteristicCallbacks::onWrite` i wrzucane do
+pierścieniowej kolejki (`g_ctrlQ`), którą konsumuje pętla główna. NIE wolno
+czytać `chrCtrl->getValue()` z pętli głównej: w NimBLE-Arduino 2.5.1
+`writeEvent()` woła w tasku hosta `setValue()` (realloc `m_value`), a `getValue()`
+robi `deepCopy()` czytające `source.m_capacity` poza sekcją krytyczną i kopiujące
+`m_attr_len + 1` bajtów — równoległy odczyt z zapisem przepełnia bufor i niszczy
+stertę (objaw: `CORRUPT HEAP ... got 0x00767363` = końcówka `...csv` komendy
+`START_FILE`). Z tego samego powodu bufory `INFO` i `STATUS` są rozgrzewane
+(`setValue` z 480-bajtowym wypełnieniem w `begin()`), żeby późniejsze `setValue`
+z pętli nie robiło `realloc` w trakcie odczytu przez hosta.
 
 INFO niesie `volLow/volHigh`, `freqShort/freqLong`,
 `beepShortMs/beepLongMs/beepGapMs/signalGapMs` oraz `minBeepKmh`. PWA nie odpytuje
