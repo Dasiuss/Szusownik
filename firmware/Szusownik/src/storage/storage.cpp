@@ -207,6 +207,11 @@ bool Storage::openRead(const String& name) {
     closeRead();
     return false;
   }
+  // Bufor stdio 512 B wymusza odczyt pojedynczych sektorów (CMD17). Domyślny
+  // bufor 4096 B sprawia, że FatFs scala odczyt w multi-sektorowy transfer
+  // (CMD18, disk_read z count>1), który na tej karcie/złączu zawodzi: pliki
+  // >= 1 KB zwracały read=0, a <=1 KB (jeden sektor na raz) czytały się.
+  readFile.setBufferSize(512);
   readSize_ = readFile.size();
   readOpen_ = true;
   readName_ = p;
