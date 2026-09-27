@@ -47,7 +47,10 @@ najnowszej wersji firmware i PWA. Dlatego:
    Androidzie.
 3. Nie traktuj bufora aplikacyjnego ramek jako kolejki wewnętrznej NimBLE.
    Stabilność transferu wynika ze stałego pacingu, a nie z prób sterowania
-   licznikiem mbufów.
+   licznikiem mbufów. W `pumpStream` **najpierw opróżniaj `pend_`** (wyślij pełne
+   ramki), a dopiero potem dopisuj output kompresora — odwrotna kolejność przy
+   zablokowanym pacingu przepełnia `pend_[512]` i crashuje przy plikach
+   wieloramkowych.
 4. Firmware zapisuje dane surowe. Ciężkie przetwarzanie, cięcie zjazdów,
    wygładzanie, map-matching i statystyki należą do PWA.
 5. PWA i firmware muszą mieć identyczne definicje wspólnego protokołu,

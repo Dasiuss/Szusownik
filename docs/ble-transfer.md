@@ -331,6 +331,21 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 - CRC32 liczone w locie podczas streamingu (nie przy zamykaniu pliku);
   wynik w STATUS `done`; PWA porównuje z własnym CRC po dekompresji.
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.
+- **Odczyt SD pojedynczymi sektorami** (2026-09-27): `Storage::openRead` ustawia
+  bufor pliku na `512 B` (`File::setBufferSize(512)`). Domyślny bufor stdio 4 KB
+  sprawia, że FatFs scala pełne sektory w jeden multi-sektorowy transfer `CMD18`
+  (`disk_read` z `count>1`), który na tej karcie/złączu zawodził: pliki >= 1 KB
+  dawały `read=0` przy `pos=0`, a <= 1 KB (odpowiednio `count=1`, `CMD17`)
+  czytały się. Numery klastrów nie miały znaczenia. Nie usuwaj tego bufora
+  „bo domyślny jest szybszy" — bez niego każdy transfer pliku > 1 KB wraca do
+  multi-sektorowego odczytu.
+- **Kolejność w `pumpStream` (staging `pend_`)** (2026-09-27): najpierw wysyłaj
+  pełne ramki ze stagingu, a output kompresora dopisuj tylko, gdy `pendLen_ < 240`.
+  Odwrotna kolejność (dopisz, potem wyślij) przy zablokowanym pacingu (`emitFrame`
+  zwraca `false` i funkcja robi `return`) pozwalała stagingowi rosnąć między
+  `poll()` i przepełnić `pend_[512]` — crash `StoreProhibited` dopiero przy
+  plikach wieloramkowych. `pend_` jest wymiarowany na 256 B output + częściową
+  ramkę 240 B (razem <= 496).
 - Błędy mają jawne kody (`err:open`, `err:read`, `err:deflate`, `err:ack-timeout`,
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
   `err:read` = `read()` zwrócił 0 mimo `pos < size` (uszkodzony/nośnik), a nie EOF —
