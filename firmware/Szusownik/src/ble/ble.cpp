@@ -221,7 +221,12 @@ void BleFiles::handleCommand(const String& cmd) {
     since.trim();
     StorageEntry entries[SZ_BLE_LIST_MAX];
     uint32_t n = storage_ ? storage_->listCsv(since, SZ_BLE_LIST_MAX, entries) : 0;
-    String msg = "list";
+    // Echo kursora: PWA czeka na status z DOKŁADNIE swoim `since`. Bez tego
+    // pollStatus łapie poprzednią odpowiedź `list ...` (ten sam prefiks) i lista
+    // "nie posuwa kursora" (ostatnia nazwa nie rośnie). "0" jest mniejsze od
+    // każdej nazwy YYYYMMDD_..., więc reprezentuje puste `since`.
+    String msg = "list ";
+    msg += since.length() ? since : String("0");
     for (uint32_t i = 0; i < n; i++) {
       msg += ' ';
       msg += entries[i].name;

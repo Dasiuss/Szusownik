@@ -74,8 +74,8 @@ najnowszej wersji firmware i PWA. Dlatego:
 12. Nie wkładaj pełnej listy plików do INFO. Wartość atrybutu ATT ma limit 512 B
     (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE — PWA
     dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
-    pobiera się stronicowanym `LIST:<since>` (STATUS `list <nazwa> <rozmiar> ...`,
-    do 12 wpisów). Kursor = największa rozwiązana nazwa; pusta lista = brak
+    pobiera się stronicowanym `LIST:<since>` (STATUS `list <since> <nazwa> <rozmiar> ...`,
+    echo kursora, "0" = puste, do 12 wpisów). Kursor = największa rozwiązana nazwa; pusta lista = brak
     nowych. Nieudane pobrania wracają po nazwie z `pendingFiles` bez listowania.
     Szczegóły w `docs/ble-transfer.md` §10.
 13. PWA liczy zjazdy ze **scalonego śladu wszystkich plików** (jedna oś czasu,

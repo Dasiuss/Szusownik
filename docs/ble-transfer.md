@@ -244,9 +244,12 @@ Komendy CTRL:
 
 ```text
 LIST:<since>          — pliki o nazwie > since, rosnąco, do SZ_BLE_LIST_MAX (12)
-                        na odpowiedź: STATUS "list <nazwa> <rozmiar> ...".
-                        Puste since = od najstarszego; pusta lista = brak nowych.
-                        PWA pyta dalej z since = ostatnia nazwa, aż dostanie pustą.
+                        na odpowiedź: STATUS "list <since> <nazwa> <rozmiar> ...".
+                        Firmware echo-uje since ("0", gdy puste) — PWA czeka na
+                        status z DOKŁADNIE swoim kursorem, inaczej odczytałaby
+                        poprzednią odpowiedź (ten sam prefiks `list`) i kursor
+                        nie rósłby. Pusta lista = "list <since>"; PWA pyta dalej
+                        z since = ostatnia nazwa, aż dostanie pustą.
 ROTATE                — zamknij bieżący plik na SD + odśwież INFO
 DRYRUN:<nazwa>        — lokalny test SD+miniz+CRC bez radia (wynik w STATUS/logu)
 START_FILE:<nazwa>    — start strumienia (plik najpierw zamykany = kompletny)
@@ -309,7 +312,8 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   przekroczenie limitu zeruje wartość w NimBLE (`setValue` → `append` odrzuca
   `len > max`) i PWA dostaje 0 B („Unexpected end of JSON input"). Dlatego INFO
   niesie tylko `fileCount`, a metadane plików zwraca stronicowane
-  `LIST:<since>` (STATUS `list <nazwa> <rozmiar> ...`, do `SZ_BLE_LIST_MAX=12`
+  `LIST:<since>` (STATUS `list <since> <nazwa> <rozmiar> ...` z echem kursora,
+  do `SZ_BLE_LIST_MAX=12`
   wpisów ~30 B każdy). Filtr po nazwie `YYYYMMDD_HHMMSS` (UTC z GNSS) jest
   naturalnym kursorem: PWA pyta o nazwy > ostatnio rozwiązana i dostaje pustą
   listę, gdy nie ma nic nowego — O(nowe), a nie O(ile jest). Odporne na

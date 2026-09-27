@@ -144,23 +144,36 @@ function bareName(name: string): string {
   return name.replace(/^\//, "");
 }
 
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Pusty kursor firmware echo-uje jako "0" (mniejsze od każdej nazwy YYYYMMDD_). */
+function listEcho(since: string): string {
+  return since || "0";
+}
+
 /**
- * Parsuje STATUS odpowiedzi na LIST:<since>. "list" = pusta lista. Rzuca przy
- * odpowiedzi niezgodnej z formatem (zabezpieczenie przed cichym pominięciem).
+ * Parsuje STATUS odpowiedzi na LIST:<since> z echem kursora:
+ * "list <echo> <nazwa> <rozmiar> ..." albo "list <echo>" (pusta lista).
+ * Echo pozwala odróżnić odpowiedź na bieżące żądanie od poprzedniej (oba mają
+ * prefiks `list`) — bez tego pollStatus łapie stale i kursor nie rośnie.
+ * Rzuca przy odpowiedzi niezgodnej z formatem (zabezpieczenie przed cichym
+ * pominięciem).
  */
-export function parseListStatus(status: string): FileMeta[] {
-  if (!status.startsWith("list")) throw new Error(`Zła odpowiedź listy plików: ${status}`);
-  const tokens = status.slice(4).trim();
-  if (!tokens) return [];
-  const parts = tokens.split(/\s+/);
-  if (parts.length % 2 !== 0 || parts.length / 2 > LIST_PAGE_MAX) {
+export function parseListStatus(status: string, echo: string): FileMeta[] {
+  if (!status.startsWith("list ")) throw new Error(`Zła odpowiedź listy plików: ${status}`);
+  const parts = status.slice(5).split(/\s+/);
+  if (parts[0] !== echo) throw new Error(`Zła odpowiedź listy plików: ${status}`);
+  const rest = parts.slice(1);
+  if (rest.length % 2 !== 0 || rest.length / 2 > LIST_PAGE_MAX) {
     throw new Error(`Zła odpowiedź listy plików: ${status}`);
   }
   const out: FileMeta[] = [];
-  for (let i = 0; i < parts.length; i += 2) {
-    const size = Number(parts[i + 1]);
+  for (let i = 0; i < rest.length; i += 2) {
+    const size = Number(rest[i + 1]);
     if (!Number.isFinite(size)) throw new Error(`Zły rozmiar w liście: ${status}`);
-    out.push({ name: parts[i], size });
+    out.push({ name: rest[i], size });
   }
   return out;
 }
@@ -597,10 +610,13 @@ export class SzusownikBle {
     const out: FileMeta[] = [];
     let cursor = since;
     for (let page = 0; page < LIST_PAGE_LIMIT; page++) {
+      const echo = listEcho(cursor);
       await this.writeCtrl(`LIST:${cursor}`);
-      const status = await this.pollStatus(/^list( |$)/);
+      // Czekamy na echo NASZEGO kursora. Bez tego pollStatus zwróciłby poprzednią
+      // odpowiedź `list ...` (identyczny prefiks), a `last` nie posunąłby kursora.
+      const status = await this.pollStatus(new RegExp(`^list ${escapeRegex(echo)}( |$)`));
       if (status.startsWith("err:")) throw new Error(`Błąd listowania plików: ${status}`);
-      const entries = parseListStatus(status);
+      const entries = parseListStatus(status, echo);
       if (entries.length === 0) return out; // pusta lista = nic nowego
       for (const entry of entries) out.push(entry);
       // Nazwy są rosnące i muszą posuwać kursor, inaczej pętla nieskończona.
