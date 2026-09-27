@@ -48,6 +48,8 @@ class Storage {
   unsigned long readSize() const { return readSize_; }
   void closeRead();
   bool readOpen() const { return readOpen_; }
+  // Ustawiane, gdy read() zwrócił 0 mimo pos < size (realny błąd nośnika, nie EOF).
+  bool readError() const { return readError_; }
   uint32_t writeErrors() const { return writeErrors_; }  // nieudane println (np. karta out)
   unsigned long syncMaxMs() const { return syncMaxMs_; }  // najgorszy flush w oknie
   void resetSyncStats() { syncMaxMs_ = 0; }
@@ -59,6 +61,7 @@ class Storage {
   String readName_;
   unsigned long readSize_ = 0;
   bool readOpen_ = false;
+  bool readError_ = false;  // read()=0 mimo pos<size (uszkodzony plik/nośnik)
   uint32_t writeErrors_ = 0;
   unsigned long syncMaxMs_ = 0;
   bool fileRotationArmed_ = false;  // false na starcie: pierwsza rolka po realnym ruchu

@@ -198,6 +198,7 @@ uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* 
 bool Storage::openRead(const String& name) {
   closeRead();
   if (!ready_) return false;
+  readError_ = false;
   String p = name;
   p.trim();
   if (!p.startsWith("/")) p = "/" + p;
@@ -224,6 +225,7 @@ size_t Storage::readBytes(uint8_t* buf, size_t maxLen) {
   size_t n = readFile.read(buf, maxLen);
   if (n == 0 && pos < readSize_) {
     // Realny błąd odczytu (nie normalny EOF na końcu pliku).
+    readError_ = true;
     File probe = SD.open(readName_, FILE_READ);
     uint8_t one = 0;
     size_t pn = probe ? probe.read(&one, 1) : 0;

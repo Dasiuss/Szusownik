@@ -361,19 +361,19 @@ void BleFiles::poll() {
 bool BleFiles::startStream(const String& name) {
   if (transferring_) abortStream("restart");
   if (!storage_) {
-    setStatus("err:no-storage");
+    setStatus("err:no-storage " + name);
     return false;
   }
   storage_->rotateForSync();  // plik do pobrania zawsze kompletny/zamknięty
   activeFile_ = name;
   if (!storage_->openRead(name)) {
     SZ_LOGEF("BLE START open fail name=%s", name.c_str());
-    setStatus("err:open");
+    setStatus("err:open " + name);
     return false;
   }
   if (!comp_ || !window_) {
     storage_->closeRead();
-    setStatus("err:nomem");
+    setStatus("err:nomem " + name);
     return false;
   }
   tdefl_status st = tdefl_init(comp_, nullptr, nullptr,
@@ -382,7 +382,7 @@ bool BleFiles::startStream(const String& name) {
   if (st != TDEFL_STATUS_OKAY) {
     SZ_LOGE("BLE START tdefl_init fail");
     storage_->closeRead();
-    setStatus("err:deflate");
+    setStatus("err:deflate " + name);
     return false;
   }
   compActive_ = true;
@@ -406,7 +406,7 @@ bool BleFiles::startStream(const String& name) {
   lastNotifyMs_ = 0;
   transferring_ = true;
   refreshInfo();
-  setStatus("streaming");
+  setStatus("streaming " + name);
   SZ_LOGIF("BLE START name=%s raw=%lu", name.c_str(), (unsigned long)storage_->readSize());
   return true;
 }
@@ -416,16 +416,18 @@ void BleFiles::abortStream(const String& reason) {
   transferring_ = false;
   compActive_ = false;
   replaying_ = false;
-  setStatus(reason);
+  // Dołącz nazwę pliku, żeby PWA odróżniła błąd bieżącego transferu od
+  // poprzedniego (nazwy plików są unikalne).
+  setStatus(activeFile_.length() ? reason + " " + activeFile_ : reason);
   SZ_LOGWF("BLE abort (%s)", reason.c_str());
 }
 
 void BleFiles::finishStream() {
   uint32_t crc = szCrc32Final(fileCrc_);
-  char msg[128];
-  snprintf(msg, sizeof(msg), "done raw=%lu comp=%lu frames=%lu crc=%08lX",
-           (unsigned long)rawBytes_, (unsigned long)compBytes_, (unsigned long)frameCount_,
-           (unsigned long)crc);
+  char msg[160];
+  snprintf(msg, sizeof(msg), "done %s raw=%lu comp=%lu frames=%lu crc=%08lX",
+           activeFile_.c_str(), (unsigned long)rawBytes_, (unsigned long)compBytes_,
+           (unsigned long)frameCount_, (unsigned long)crc);
   if (storage_) storage_->closeRead();
   transferring_ = false;
   compActive_ = false;
@@ -506,6 +508,11 @@ void BleFiles::pumpStream() {
         inLen_ = storage_ ? storage_->readBytes(inBuf_, sizeof(inBuf_)) : 0;
         inPos_ = 0;
         if (inLen_ == 0) {
+          if (storage_ && storage_->readError()) {
+            // Realny błąd nośnika — nie raportuj pustego pliku jako sukcesu.
+            abortStream("err:read");
+            return;
+          }
           inputEof_ = true;
           SZ_LOGIF("BLE input EOF raw=%lu", (unsigned long)rawBytes_);
         } else {

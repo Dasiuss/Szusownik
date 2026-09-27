@@ -17,6 +17,8 @@ export const SZ_BLE_HEADER = 4;
 export const SZ_BLE_PAYLOAD = 240;
 export const SZ_BLE_ACK_BLOCK = 32;
 const TRANSFER_TIMEOUT_MS = 120000;
+const TRANSFER_START_TIMEOUT_MS = 4000;
+const TRANSFER_DONE_TIMEOUT_MS = 5000;
 const SETTINGS_TIMEOUT_MS = 2000;
 const SETTINGS_POLL_MS = 50;
 
@@ -337,6 +339,27 @@ export class SzusownikBle {
     return result;
   }
 
+  // Statusy transferu niosą nazwę pliku (`streaming <nazwa>`, `done <nazwa> ...`,
+  // `err:... <nazwa>`). Czekamy wyłącznie na status dotyczący TEGO pliku — bez
+  // tego przy dwóch kolejnych błędach startu odczytalibyśmy stary `err:`.
+  private async pollTransfer(name: string, accept: RegExp, timeoutMs: number): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    let status = "";
+    for (;;) {
+      status = await this.readStatus();
+      if (status.includes(name) && (accept.test(status) || status.startsWith("err:"))) return status;
+      if (Date.now() >= deadline) return status;
+      await new Promise((resolve) => setTimeout(resolve, SETTINGS_POLL_MS));
+    }
+  }
+
+  private classifyTransferError(status: string): Error {
+    if (status.startsWith("err:open")) return new FileGoneError(`Plik zniknął z karty (${status})`);
+    // err:read = urządzenie nie potrafi odczytać pliku (np. zła karta/nośnik).
+    // Błąd przejściowy: plik zostaje na karcie, ponawiamy przy następnym sync.
+    return new Error(`Urządzenie przerwało transfer (${status})`);
+  }
+
   private static parseVolume(status: string): Volume {
     const m = /vol low=(\d+) high=(\d+)/.exec(status);
     if (!m) throw new Error(`Zła odpowiedź głośności: ${status}`);
@@ -521,6 +544,14 @@ export class SzusownikBle {
 
     try {
       await this.writeCtrl(`START_FILE:${meta.name}`);
+      // Krótkie okno na start albo natychmiastowy błąd (otwarcie/odczyt SD).
+      // Dopuszczamy też `done` — bardzo mały plik może się skończyć, zanim
+      // odczytamy `streaming`.
+      const started = await this.pollTransfer(meta.name, /^(streaming|done) /, TRANSFER_START_TIMEOUT_MS);
+      if (started.startsWith("err:")) throw this.classifyTransferError(started);
+      if (!started.startsWith("streaming") && !started.startsWith("done")) {
+        throw new Error(`Brak startu transferu (${started || "brak statusu"})`);
+      }
       for (;;) {
         await chain;
         if (failed) throw failed;
@@ -529,14 +560,10 @@ export class SzusownikBle {
         if (failed) throw failed;
       }
       // Walidacja end-to-end: rozmiar (STATUS done raw=), CRC, schemat CSV.
-      const status = await this.pollStatus(/crc=[0-9A-Fa-f]{8}/);
-      if (status.startsWith("err:open")) {
-        // Plik zniknął z karty (np. FIFO skasowało go, gdy czekał w kolejce).
-        throw new FileGoneError(`Plik zniknął z karty (${status})`);
-      }
-      if (status.startsWith("err:")) {
-        // Błąd urządzenia (np. err:ack-timeout/err:nomem/err:busy) — przejściowy.
-        throw new Error(`Urządzenie przerwało transfer (${status})`);
+      const status = await this.pollTransfer(meta.name, /^done /, TRANSFER_DONE_TIMEOUT_MS);
+      if (status.startsWith("err:")) throw this.classifyTransferError(status);
+      if (!status.startsWith("done ")) {
+        throw new Error(`Brak potwierdzenia transferu (${status || "brak statusu"})`);
       }
       const mCrc = /crc=([0-9A-Fa-f]{8})/.exec(status);
       if (!mCrc) {

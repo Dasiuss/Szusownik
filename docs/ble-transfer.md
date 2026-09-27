@@ -236,8 +236,12 @@ Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: "Szusownik")
 INFO:    3f9a0002-...  READ    — JSON {proto, fw, fileCount, ...ustawienia}
 CTRL:    3f9a0003-...  WRITE   — komendy tekstowe (patrz niżej)
 DATA:    3f9a0004-...  NOTIFY  — ramki 244 B (seq LE32 + do 240 B payload)
-STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów ("ok", "streaming",
-                          "done raw=.. comp=.. frames=.. crc=..", "err:..")
+STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów. Statusy transferu niosą
+                          nazwę pliku, żeby PWA odróżniła odpowiedź bieżącego
+                          transferu od poprzedniego: "streaming <nazwa>",
+                          "done <nazwa> raw=.. comp=.. frames=.. crc=..",
+                          "err:<kod> <nazwa>" (np. err:open, err:read,
+                          err:ack-timeout, err:no-storage).
 ```
 
 Komendy CTRL:
@@ -327,8 +331,10 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
 - CRC32 liczone w locie podczas streamingu (nie przy zamykaniu pliku);
   wynik w STATUS `done`; PWA porównuje z własnym CRC po dekompresji.
 - Kompresor i okno retransmisji w **PSRAM** (~165 KB + ~31 KB), nie w DRAM.
-- Błędy mają jawne kody (`err:open`, `err:deflate`, `err:ack-timeout`,
+- Błędy mają jawne kody (`err:open`, `err:read`, `err:deflate`, `err:ack-timeout`,
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
+  `err:read` = `read()` zwrócił 0 mimo `pos < size` (uszkodzony/nośnik), a nie EOF —
+  firmware nie raportuje wtedy pustego pliku jako sukcesu.
 - **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`listCsv` listują
   wyłącznie CSV z plikiem towarzyszącym `<nazwa>.csv.meta`, który powstaje po
   potwierdzonym ruchu (`docs/wymagania-ESP.md` §7). Pliki postojowe są ukryte, więc
@@ -344,8 +350,10 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   rozmiar/CRC, zły nagłówek i brak próbek rzucają `PermanentDownloadError`, a
   `STATUS err:open` (plik zniknął z karty) rzuca `FileGoneError`; oba trafiają do
   `ignoredFiles` (zero ponowień) z jednorazowym ostrzeżeniem. Timeout, rozłączenie
-  oraz pozostałe kody `err:` są przejściowe i lądują w `pendingFiles`. PWA nie
-  bramkuje tego po wersji firmware.
+  oraz pozostałe kody `err:` (w tym `err:read`) są przejściowe i lądują w
+  `pendingFiles`. Statusy transferu niosą nazwę pliku, więc PWA wykrywa błąd
+  startu (otwarcie/odczyt SD) w kilka sekund, zamiast czekać na timeout transferu.
+  PWA nie bramkuje tego po wersji firmware.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw
