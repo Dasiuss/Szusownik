@@ -88,3 +88,68 @@ test("ikony jakości mają odrębne symbole, a status widać po wypełnieniu", a
   await expect(passed).toHaveCSS("background-color", "rgb(47, 134, 93)");
   await expect(passed).toHaveCSS("color", "rgb(255, 255, 255)");
 });
+
+// Zoom/pan wykresów (Ctrl+kółko, przeciąganie, dwuklik = reset). Gesty nie mają
+// widocznych kontrolek, więc e2e jest głównym nośnikiem weryfikacji.
+async function readDistanceTicks(page: Page, chartIndex: number): Promise<string[]> {
+  return page
+    .locator(".chart-wrap")
+    .nth(chartIndex)
+    .locator(".recharts-xAxis .recharts-cartesian-axis-tick-value")
+    .allTextContents();
+}
+
+async function ctrlWheel(page: Page, chartIndex: number, deltaY: number): Promise<void> {
+  await page.locator(".chart-wrap").nth(chartIndex).evaluate((element, dy) => {
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: dy,
+        ctrlKey: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, deltaY);
+}
+
+test("szczegóły zjazdu: Ctrl+kółko przybliża, przeciąganie przesuwa, dwuklik resetuje", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator(".run-card").first()).toBeVisible();
+  await page.locator(".run-card").first().click();
+  await expect(page.locator(".recharts-surface").first()).toBeVisible();
+
+  const initial = await readDistanceTicks(page, 0);
+  expect(initial.length).toBeGreaterThan(2);
+
+  await ctrlWheel(page, 0, -600);
+  await expect.poll(() => readDistanceTicks(page, 0)).not.toEqual(initial);
+
+  const zoomed = await readDistanceTicks(page, 0);
+
+  const box = await page.locator(".chart-wrap").first().boundingBox();
+  if (!box) throw new Error("brak wykresu");
+  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.5, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => readDistanceTicks(page, 0)).not.toEqual(zoomed);
+
+  await page.locator(".chart-wrap").first().dblclick({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect.poll(() => readDistanceTicks(page, 0)).toEqual(initial);
+});
+
+test("cały dzień: Ctrl+kółko przybliża i dwuklik resetuje", async ({ page }) => {
+  await page.goto("./");
+  await page.getByText("Cały dzień").click();
+  await expect(page.locator(".recharts-surface").first()).toBeVisible();
+
+  const initial = await readDistanceTicks(page, 0);
+  await ctrlWheel(page, 0, -600);
+  await expect.poll(() => readDistanceTicks(page, 0)).not.toEqual(initial);
+
+  await page.locator(".chart-wrap").first().dblclick({ position: { x: 100, y: 80 } });
+  await expect.poll(() => readDistanceTicks(page, 0)).toEqual(initial);
+});

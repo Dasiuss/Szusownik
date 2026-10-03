@@ -12,11 +12,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { getDistanceAxis } from "../lib/chart.ts";
+import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
 import { formatDayLabel, formatDistance, formatDuration, getRunsForDay } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
+import { useChartViewport } from "../lib/useChartViewport.ts";
 
 interface ChartPoint {
   d: number;
@@ -61,6 +63,13 @@ export default function DaySummaryView() {
   );
   const segments = useMemo(() => buildRunSegments(chronologicalRuns), [chronologicalRuns]);
   const chartData = useMemo(() => buildChartData(chronologicalRuns), [chronologicalRuns]);
+  const dataMaxKm = segments.length > 0 ? segments[segments.length - 1].endD : 0;
+  const axisMaxKm = getDistanceAxis(dataMaxKm).domain[1];
+  const { domain, apply, reset } = useChartViewport(axisMaxKm);
+  const distanceAxis = useMemo(
+    () => getDistanceAxisForDomain(domain[0], domain[1]),
+    [domain],
+  );
   const confirmedSpeeds = runs.flatMap((run) =>
     run.confirmedMaxSpeed === null ? [] : [run.confirmedMaxSpeed],
   );
@@ -83,7 +92,6 @@ export default function DaySummaryView() {
 
   const yMax = maxRawSpeed > 100 ? 150 : 100;
   const altitudeDomain = getAltitudeDomain(chartData);
-  const distanceAxis = getDistanceAxis((segments.at(-1)?.endD ?? 0));
   const startT = chronologicalRuns[0]?.startT ?? runs[0].startT;
   const endT = chronologicalRuns.at(-1)?.endT ?? runs[0].endT;
 
@@ -113,11 +121,11 @@ export default function DaySummaryView() {
           <div><span className="eyebrow">Profil całego dnia</span><h2>Prędkość na wszystkich zjazdach</h2></div>
           <span className="chart-legend legend-speed"><i /> prędkość</span>
         </div>
-        <div className="chart-wrap">
+        <ChartZoomSurface className="chart-wrap" dataMaxKm={axisMaxKm} domain={domain} onDomainChange={apply} onReset={reset}>
           <ResponsiveContainer height="100%" width="100%">
             <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <XAxis allowDataOverflow axisLine={false} dataKey="d" domain={domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
               <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
@@ -125,7 +133,7 @@ export default function DaySummaryView() {
               <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
+        </ChartZoomSurface>
         <div className="chart-axis-label">Dystans [km]</div>
       </section>
 
@@ -134,18 +142,18 @@ export default function DaySummaryView() {
           <div><span className="eyebrow">Profil wysokości całego dnia</span><h2>Wysokość na wszystkich zjazdach</h2></div>
           <span className="chart-legend legend-altitude"><i /> wysokość</span>
         </div>
-        <div className="chart-wrap">
+        <ChartZoomSurface className="chart-wrap" dataMaxKm={axisMaxKm} domain={domain} onDomainChange={apply} onReset={reset}>
           <ResponsiveContainer height="100%" width="100%">
             <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
               <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis axisLine={false} dataKey="d" domain={distanceAxis.domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
+              <XAxis allowDataOverflow axisLine={false} dataKey="d" domain={domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
               <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
               <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
               {segments.slice(0, -1).map((segment) => <ReferenceLine key={`altitude-${segment.run.id}`} stroke="#8fb7ac" strokeDasharray="4 4" x={segment.endD} />)}
               <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
+        </ChartZoomSurface>
         <div className="chart-axis-label">Dystans [km] · wysokość [m]</div>
       </section>
 

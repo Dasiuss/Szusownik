@@ -178,7 +178,8 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .chart-legend { display: inline-flex; align-items: center; gap: 5px; color: #82979a; font-size: 10px; white-space: nowrap; }
 .chart-legend i { width: 7px; height: 7px; border-radius: 50%; background: #ed7657; }
 .legend-altitude i { background: #358866; }
-.chart-wrap { height: 220px; margin-top: 12px; }
+.chart-wrap { position: relative; height: 220px; margin-top: 12px; touch-action: pan-y; overscroll-behavior: contain; cursor: grab; user-select: none; -webkit-user-select: none; }
+.chart-wrap:active { cursor: grabbing; }
 .chart-axis-label { padding: 2px 48px 0; color: #9aabab; font-size: 9px; text-align: right; }
 .run-segments-card { padding: 15px 13px 13px; border: 1px solid #dbe9e6; border-radius: 21px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
 .run-segments-heading h2 { margin-top: 3px; font-size: 15px; }

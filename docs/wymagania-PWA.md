@@ -54,6 +54,16 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   kliknięcie segmentu otwiera szczegóły zjazdu.
 - Oś prędkości **0-based**: domyślnie 0–100 km/h; przy przekroczeniu 100 — skala 0–150 km/h,
   a zakres **100–150 na lekko czerwonym tle** (wyróżnienie).
+- Wykresy można **przybliżać i przesuwać po osi dystansu**: na desktopie Ctrl+kółko
+  (oraz pinch na trackpadzie, który przychodzi jako Ctrl+wheel) i przeciąganie, na
+  dotyku pinch i przeciąganie poziome jednym palcem (ruch pionowy przewija stronę).
+  Podwójny klik/tap resetuje do pełnego zakresu. Oba wykresy dzielą jeden zakres X,
+  a przybliżenie ograniczone jest do zakresu danych i nie jest zapamiętywane — wejście
+  w widok zawsze pokazuje pełny zjazd/dzień.
+- Skala ticków dystansu dostosowuje się do szerokości widocznego okna: oprócz progów
+  0,25/0,5/1 km dochodzą **0,1 km i 0,05 km** przy mocnym przybliżeniu; przy skrajnym
+  przybliżeniu krok zagęszcza się automatycznie, żeby ticki nie znikały. Zakres osi przy
+  przybliżeniu nie jest rozciągany poza widoczne okno.
 
 ## 6. Przetwarzanie danych (wycinanie zjazdów)
 
