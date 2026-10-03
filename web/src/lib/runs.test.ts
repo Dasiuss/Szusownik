@@ -79,9 +79,21 @@ describe("splitRuns", () => {
       const runs = splitRuns(enriched);
       expect(runs).toHaveLength(lifts + 1);
 
-      // Jedno cięcie na dołku: odcinki są ciągłe i pokrywają cały ślad.
+      // Odcinki pokrywają cały ślad, ale dystans zjazdu liczy tylko część
+      // schodzącą (wyciągi zostają na wykresie, nie w dystansie).
+      const full = enriched[enriched.length - 1].cumDistM;
       const total = runs.reduce((sum, run) => sum + run.distanceM, 0);
-      expect(total).toBeCloseTo(enriched[enriched.length - 1].cumDistM, 3);
+      expect(total).toBeGreaterThan(0);
+      expect(total).toBeLessThan(full);
+
+      for (const run of runs) {
+        const peakIndex = run.samples.reduce(
+          (best, sample, index, all) => (sample.altSm > all[best].altSm ? index : best),
+          0,
+        );
+        const last = run.samples[run.samples.length - 1];
+        expect(run.distanceM).toBeCloseTo(last.cumDistM - run.samples[peakIndex].cumDistM, 3);
+      }
 
       // Każdy zjazd po pierwszym zaczyna się na dole i zawiera podejście.
       for (const run of runs.slice(1)) {

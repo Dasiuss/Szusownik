@@ -93,8 +93,9 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   oraz ponowną analizę. Usunięcie zjazdu nie usuwa surowego pliku.
 - Dla każdego zjazdu: dystans (haversine z lat/lon), max prędkość, max nachylenie.
 - **Nachylenie w stopniach**, liczone z **Δwysokości / Δdystansu**.
-- „Dystans w dół" = suma długości zjazdów; ponieważ „Zjazd X" obejmuje wyciąg,
-  dystans zawiera też odcinki podejść (cały przebyty ślad).
+- „Dystans w dół" = suma długości części **schodzących** (od najwyższego punktu
+  segmentu do jego końca). Wyciąg zostaje na wykresie jako część „Zjazdu X", ale
+  nie wchodzi do dystansu.
 - **Cięcie dla Strava** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia, maksymalnie **bieżący dzień**.
 

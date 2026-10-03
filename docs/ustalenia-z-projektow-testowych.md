@@ -157,8 +157,8 @@ Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
   częstotliwości próbkowania, a szum nie rozbija zjazdu;
 - dystans liczyć z kolejnych współrzędnych, najlepiej haversine lub Turf;
 - nachylenie liczyć z różnicy wysokości i dystansu;
-- dystans aktywności to suma długości zjazdów („Zjazd X" = wyciąg + zjazd, więc
-  obejmuje też odcinki podejść);
+- dystans aktywności to suma długości części schodzących zjazdów; `samples`
+  segmentu obejmują wyciąg (wykres), ale dystans liczy się od szczytu w dół;
 - wykresy prezentować względem dystansu, nie czasu;
 - wygładzać wysokość, nachylenie i prędkość dopiero w PWA;
 - surowe próbki zachować bez zmian do eksportu i ponownej analizy.

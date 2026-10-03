@@ -462,10 +462,11 @@ function runSegments(enriched: EnrichedSample[], pivots: AltitudePivot[]): Array
 /**
  * Cięcie na zjazdy (ZigZag z histerezą): granica wypada na **początku
  * podejścia** (dołku), więc "Zjazd X" obejmuje wyciąg i następujący po nim
- * zjazd, a odcinki są ciągłe. Zwroty wykrywane są progiem działającym jak
- * histereza, więc zaszumione próbki nie rozbijają zjazdu, a wynik nie zależy
- * od częstotliwości próbkowania (liczy się tylko `altSm`). Przerwa >= 1 h
- * zamyka odcinek, a ślad bez żadnego zwrotu >= T to jeden zjazd.
+ * zjazd, a odcinki są ciągłe. Dystans i nachylenie liczone są tylko po części
+ * schodzącej (od najwyższego punktu segmentu w dół). Zwroty wykrywane są progiem
+ * działającym jak histereza, więc zaszumione próbki nie rozbijają zjazdu, a wynik
+ * nie zależy od częstotliwości próbkowania (liczy się tylko `altSm`). Przerwa
+ * >= 1 h zamyka odcinek, a ślad bez żadnego zwrotu >= T to jeden zjazd.
  */
 export function splitRuns(enriched: EnrichedSample[], reversalM = REVERSAL_THRESHOLD_M): Run[] {
   const segments = runSegments(enriched, findAltitudePivots(enriched, reversalM));
@@ -473,10 +474,16 @@ export function splitRuns(enriched: EnrichedSample[], reversalM = REVERSAL_THRES
   for (const [start, end] of segments) {
     const part = enriched.slice(start, end);
     if (part.length < 2) continue;
+    // Dystans liczy tylko część schodzącą: od najwyższego punktu segmentu w dół.
+    // Podejście (wyciąg) zostaje w `samples` na wykresie, ale nie w dystansie.
+    let peakIndex = start;
+    for (let i = start + 1; i < end; i++) {
+      if (enriched[i].altSm > enriched[peakIndex].altSm) peakIndex = i;
+    }
     let distanceM = 0;
+    for (let i = peakIndex + 1; i < end; i++) distanceM += enriched[i].distM;
     let maxGradeDown = 0;
     for (let i = start; i < end; i++) {
-      distanceM += enriched[i].distM;
       if (-enriched[i].gradeSm > maxGradeDown) maxGradeDown = -enriched[i].gradeSm;
     }
     const peak = analyzePeak(part);
