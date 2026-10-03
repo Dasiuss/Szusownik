@@ -72,8 +72,10 @@ najnowszej wersji firmware i PWA. Dlatego:
     urządzenia PWA czyta wprost z INFO (odświeżanego po każdym `SET*`); komendy
     `GETVOL/GETFREQ/GETTIMING/GETMINBEEP` zostały usunięte z firmware. Nie
     przywracaj fallbacków wersji ani komend `GET*`.
-11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo. Build weryfikuje
-    sam użytkownik i zgłasza, jeśli coś się nie powiodło.
+11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo i nie wspominaj,
+    że tego nie zrobiłeś(-aś) — to domyślne zachowanie, nie trzeba o nim
+    przypominać. Build weryfikuje sam użytkownik i zgłasza, jeśli coś się nie
+    powiodło.
 12. Nie wkładaj pełnej listy plików do INFO. Wartość atrybutu ATT ma limit 512 B
     (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE — PWA
     dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
