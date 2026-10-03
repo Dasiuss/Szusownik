@@ -15,7 +15,7 @@ import {
 import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
-import { buildDayChartData, buildDayRunSegments } from "../lib/dayChart.ts";
+import { buildDayChartData, buildDayRunSegments, runSampleSpanM } from "../lib/dayChart.ts";
 import { formatDayLabel, formatDistance, formatDuration, getRunsForDay } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
@@ -156,7 +156,7 @@ export default function DaySummaryView() {
               <Link
                 className="run-segment"
                 key={segment.run.id}
-                style={{ flexGrow: Math.max(segment.run.distanceM, 1) }}
+                style={{ flexGrow: Math.max(runSampleSpanM(segment.run), 1) }}
                 to={`/zjazd/${encodeURIComponent(segment.run.id)}`}
               >
                 <strong>Zjazd {segment.index + 1}</strong>
