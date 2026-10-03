@@ -168,6 +168,21 @@ Nie odwracać kolejności (monitor → upload kończy się błędem zajętego po
 - Deep sleep **nie odcina 3V3** — GNSS dalej pobiera ~30 mA i dogrzewa. Na
   stoku nieistotne; przy testach w domu nie trzymać szczelnej obudowy.
 
+## Praca w worktree (zależności PWA)
+
+`node_modules` nie jest współdzielone między worktree. Domyślna zasada:
+
+1. W worktree **nie instaluj** — zrób junction `web\node_modules` do
+   `web\node_modules` w głównym checkoutcie:
+   `New-Item -ItemType Junction -Path web\node_modules -Target <glowny-checkout>\web\node_modules`
+   (junction, nie symlink — nie wymaga admina).
+2. Brakuje zależności? `npm i` w worktree — zapis idzie przez junction, link
+   zostaje i jest szybko.
+3. Zmienił się `web/package-lock.json`? Wtedy `npm ci` **w katalogu głównym**
+   (deterministycznie, nie modyfikuje locka) — odświeży shared `node_modules`
+   dla wszystkich worktree.
+4. Nie uruchamiaj instalacji równolegle w kilku worktree — to ten sam katalog.
+
 ## Aktualne ograniczenia odziedziczone z testów
 
 - `BleTest` nie ma jeszcze pełnego testu wszystkich MTU ani kontrolowanej utraty
