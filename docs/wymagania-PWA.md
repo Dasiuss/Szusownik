@@ -96,6 +96,9 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - „Dystans w dół" = suma długości części **schodzących** (od najwyższego punktu
   segmentu do jego końca). Wyciąg zostaje na wykresie jako część „Zjazdu X", ale
   nie wchodzi do dystansu.
+- Oś dystansu na wykresie **„Cały dzień"** liczona jest po `cumDistM` próbek
+  (z wyciągami), więc jest ciągła i nie cofa się na granicach zjazdów. Nie używać
+  do tego `distanceM` (bo nie zawiera wyciągów).
 - **Cięcie dla Strava** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia, maksymalnie **bieżący dzień**.
 

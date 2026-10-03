@@ -15,22 +15,11 @@ import {
 import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
+import { buildDayChartData, buildDayRunSegments } from "../lib/dayChart.ts";
 import { formatDayLabel, formatDistance, formatDuration, getRunsForDay } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
 import { useChartViewport } from "../lib/useChartViewport.ts";
-
-interface ChartPoint {
-  d: number;
-  v: number;
-  h: number;
-}
-
-interface RunSegment {
-  endD: number;
-  index: number;
-  run: StoredRun;
-}
 
 export default function DaySummaryView() {
   const { dayKey } = useParams();
@@ -61,8 +50,8 @@ export default function DaySummaryView() {
     () => [...runs].sort((a, b) => Date.parse(a.startT) - Date.parse(b.startT)),
     [runs],
   );
-  const segments = useMemo(() => buildRunSegments(chronologicalRuns), [chronologicalRuns]);
-  const chartData = useMemo(() => buildChartData(chronologicalRuns), [chronologicalRuns]);
+  const segments = useMemo(() => buildDayRunSegments(chronologicalRuns), [chronologicalRuns]);
+  const chartData = useMemo(() => buildDayChartData(chronologicalRuns), [chronologicalRuns]);
   const dataMaxKm = segments.length > 0 ? segments[segments.length - 1].endD : 0;
   const axisMaxKm = getDistanceAxis(dataMaxKm).domain[1];
   const { domain, apply, reset } = useChartViewport(axisMaxKm);
@@ -179,31 +168,6 @@ export default function DaySummaryView() {
       </section>
     </div>
   );
-}
-
-function buildRunSegments(runs: StoredRun[]): RunSegment[] {
-  let distanceOffsetM = 0;
-  return runs.map((run, index) => {
-    distanceOffsetM += run.distanceM;
-    return { endD: distanceOffsetM / 1000, index, run };
-  });
-}
-
-function buildChartData(runs: StoredRun[]): ChartPoint[] {
-  const points: ChartPoint[] = [];
-  let distanceOffsetM = 0;
-  for (const run of runs) {
-    const firstDistance = run.samples[0]?.cumDistM ?? 0;
-    for (const sample of run.samples) {
-      points.push({
-        d: (distanceOffsetM + sample.cumDistM - firstDistance) / 1000,
-        v: Math.round(sample.speedSm * 10) / 10,
-        h: Math.round(sample.altSm * 10) / 10,
-      });
-    }
-    distanceOffsetM += run.distanceM;
-  }
-  return points;
 }
 
 function formatClockRange(startT: string, endT: string): string {
