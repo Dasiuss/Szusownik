@@ -15,13 +15,19 @@ import {
   SZ_WIRE_PROTO,
 } from "./protocol.ts";
 
+// Git na Windows (core.autocrlf) potrafi zamienić LF na CRLF przy checkout,
+// więc porównujemy treść niezależnie od końców linii — liczy się zawartość.
+function readNormalized(path: string): string {
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+}
+
 describe("wspólny spec protokołu", () => {
   it("wygenerowany protocol.ts jest aktualny", () => {
-    expect(readFileSync(TS_OUTPUT, "utf8")).toBe(renderProtocolTs());
+    expect(readNormalized(TS_OUTPUT)).toBe(renderProtocolTs());
   });
 
   it("wygenerowany protocol.h jest aktualny", () => {
-    expect(readFileSync(HEADER_OUTPUT, "utf8")).toBe(renderProtocolHeader());
+    expect(readNormalized(HEADER_OUTPUT)).toBe(renderProtocolHeader());
   });
 
   it("nagłówek CSV ma jedną definicję (PWA == spec == firmware)", () => {
