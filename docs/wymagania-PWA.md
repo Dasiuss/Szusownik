@@ -33,6 +33,8 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   na górze widoku „Dzisiaj”; użytkownik zatwierdza pobranie wszystkich jednym kliknięciem.
 - **Statystyki całej aktywności:** dystans w dół (suma zjazdów), max prędkość.
 - **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie; najnowszy zjazd jest pierwszy.
+  Numeracja jest **chronologiczna** (`runNumbers`): „Zjazd 1" to pierwszy zjazd dnia, niezależnie
+  od kolejności na liście. Ten sam numer pokazuje podsumowanie dnia i ekran szczegółów.
 - Kafelek **„Cały dzień”** otwiera połączone statystyki i wykresy wszystkich zjazdów tego dnia.
 - Klik w zjazd → ekran szczegółów.
 - Historia grupuje zjazdy według lokalnej strefy czasowej telefonu. Zjazd może mieć krótką,

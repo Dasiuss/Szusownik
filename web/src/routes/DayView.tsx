@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Icon } from "../components/Icon.tsx";
-import { formatClock, formatDayLabel, formatDistance, formatDuration, formatFileSize, getRunsForDay, localDayKey, statsFromRuns } from "../lib/data.ts";
+import { formatClock, formatDayLabel, formatDistance, formatDuration, formatFileSize, getRunsForDay, localDayKey, runNumbers, statsFromRuns } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
 import type { Run } from "../lib/runs.ts";
@@ -33,6 +33,9 @@ export default function DayView() {
   }, [selectedDayKey, device.dataRevision]);
 
   const stats = useMemo(() => statsFromRuns(runs), [runs]);
+  // Lista jest od najnowszego, ale numerujemy chronologicznie (Zjazd 1 = pierwszy
+  // dnia) — tak samo jak podsumowanie dnia i widok szczegółów.
+  const runNumberById = useMemo(() => runNumbers(runs), [runs]);
   const isToday = selectedDayKey === todayKey;
   const dateLabel = formatDayLabel(selectedDayKey, !isToday);
 
@@ -93,7 +96,7 @@ export default function DayView() {
                 <div className="run-list">
                 {stats.runs.map((run, index) => {
                   const stored = runs[index];
-                  return stored ? <RunCard key={run.id} run={run} stored={stored} index={index} /> : null;
+                  return stored ? <RunCard key={run.id} run={run} stored={stored} number={runNumberById.get(run.id) ?? index + 1} /> : null;
                 })}
                 </div>
               </>
@@ -190,13 +193,13 @@ function MetricCard({ icon, label, value }: { icon: "mountain" | "play"; label: 
   );
 }
 
-function RunCard({ run, stored, index }: { run: Run; stored: StoredRun; index: number }) {
-  const title = stored.label ?? `Zjazd ${index + 1}`;
+function RunCard({ run, stored, number }: { run: Run; stored: StoredRun; number: number }) {
+  const title = stored.label ?? `Zjazd ${number}`;
   return (
     <Link className="run-card" to={`/zjazd/${encodeURIComponent(run.id)}`}>
       <div className="run-card-topline">
         <div className="run-title-wrap">
-          <span className="run-number">{String(index + 1).padStart(2, "0")}</span>
+          <span className="run-number">{String(number).padStart(2, "0")}</span>
           <div>
             <strong>{title}</strong>
             <span className="run-time">{formatClock(run.startT)}–{formatClock(run.endT)} · {formatDuration(run.startT, run.endT)}</span>

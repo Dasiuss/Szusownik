@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { syntheticSample } from "../../test/fixtures.ts";
-import { analyzeDay, enrich, splitRuns } from "./runs.ts";
+import { analyzeDay, enrich, runNumbers, splitRuns } from "./runs.ts";
 
 function descent(count: number, startSecond = 0) {
   return Array.from({ length: count }, (_, index) =>
@@ -79,5 +79,22 @@ describe("analyzeDay", () => {
     expect(day.runs).toHaveLength(1);
     expect(day.downhillM).toBeCloseTo(day.runs[0].distanceM, 3);
     expect(day.confirmedMaxSpeed).toBe(day.runs[0].confirmedMaxSpeed);
+  });
+});
+
+describe("runNumbers", () => {
+  it("numeruje chronologicznie niezależnie od kolejności wejścia (Zjazd 1 = pierwszy)", () => {
+    const numbers = runNumbers([
+      { id: "późniejszy", startT: "2026-01-15T15:00:00.000Z" },
+      { id: "pierwszy", startT: "2026-01-15T09:00:00.000Z" },
+      { id: "środkowy", startT: "2026-01-15T12:00:00.000Z" },
+    ]);
+    expect(numbers.get("pierwszy")).toBe(1);
+    expect(numbers.get("środkowy")).toBe(2);
+    expect(numbers.get("późniejszy")).toBe(3);
+  });
+
+  it("pusta lista nie tworzy numerów", () => {
+    expect(runNumbers([]).size).toBe(0);
   });
 });

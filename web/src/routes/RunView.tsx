@@ -15,7 +15,7 @@ import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { QualityIndicators } from "../components/QualityIndicators.tsx";
 import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
-import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, renameRun } from "../lib/data.ts";
+import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, getRunsForDay, renameRun, runNumbers } from "../lib/data.ts";
 import { db, type StoredRun } from "../lib/db.ts";
 import { QUALITY_ANALYSIS_VERSION } from "../lib/runs.ts";
 import { useChartViewport } from "../lib/useChartViewport.ts";
@@ -24,6 +24,7 @@ export default function RunView() {
   const { runId } = useParams();
   const navigate = useNavigate();
   const [run, setRun] = useState<StoredRun | null>(null);
+  const [runNumber, setRunNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState("");
@@ -35,12 +36,19 @@ export default function RunView() {
       setLoading(false);
       return;
     }
-    db.runs.get(decodedRunId).then((stored) => {
+    void (async () => {
+      const stored = await db.runs.get(decodedRunId);
       if (!active) return;
-      setRun(stored?.analysisVersion === QUALITY_ANALYSIS_VERSION ? stored : null);
+      const valid = stored?.analysisVersion === QUALITY_ANALYSIS_VERSION ? stored : null;
+      setRun(valid);
       setLabel(stored?.label ?? "");
+      if (valid) {
+        const dayRuns = await getRunsForDay(valid.dayKey);
+        if (!active) return;
+        setRunNumber(runNumbers(dayRuns).get(valid.id) ?? null);
+      }
       setLoading(false);
-    });
+    })();
     return () => {
       active = false;
     };
@@ -103,7 +111,7 @@ export default function RunView() {
       <header className="detail-header">
         <div>
           <span className="eyebrow">{formatClock(run.startT)} · {formatDuration(run.startT, run.endT)}</span>
-          <h1>{run.label ?? "Zjazd"}</h1>
+          <h1>{run.label ?? (runNumber ? `Zjazd ${runNumber}` : "Zjazd")}</h1>
           <p className="page-subtitle">{formatDayLabel(run.dayKey, true)}</p>
         </div>
         <button aria-label="Usuń zjazd" className="icon-button icon-button-danger" onClick={() => void removeRun()}><Icon name="trash" size={19} /></button>

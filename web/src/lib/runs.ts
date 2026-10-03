@@ -443,6 +443,14 @@ export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_G
   return runs;
 }
 
+/** Numery zjazdów w obrębie jednego dnia: chronologicznie, „Zjazd 1" = pierwszy.
+ *  Kolejność wejściowa nie ma znaczenia (sortujemy po `startT`). Wspólne źródło
+ *  numeracji dla listy dnia, podsumowania dnia i widoku szczegółów. */
+export function runNumbers<T extends { id: string; startT: string }>(runs: T[]): Map<string, number> {
+  const ordered = [...runs].sort((first, second) => Date.parse(first.startT) - Date.parse(second.startT));
+  return new Map(ordered.map((run, index) => [run.id, index + 1]));
+}
+
 /** Lokalny klucz dnia (strefa czasowa telefonu) — grupowanie i cięcie per dzień. */
 export function localDayKey(iso: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
