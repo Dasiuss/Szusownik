@@ -105,8 +105,8 @@ najnowszej wersji firmware i PWA. Dlatego:
     odzyskania z karty na komputerze. Błędy przejściowe (timeout, rozłączenie,
     kody `err:`) zostają w kolejce do ponowienia. Szczegóły w
     `docs/wymagania-ESP.md` §6/§7 i `docs/wymagania-PWA.md` §7.
-16. Testy: ciężka logika unitowo, przepływy integracyjnie/e2e, uruchamiane
-    **lokalnie** (bez joba w CI, bez progu pokrycia). PWA: Vitest
+16. Testy: przepływy i funkcje integracyjnie/e2e, unitowe tylko dla cięższej
+    logiki, uruchamiane **lokalnie** (bez joba w CI, bez progu pokrycia). PWA: Vitest
     (`web/src/lib/*.test.ts`, integracja z `fake-indexeddb`) i Playwright
     (`web/e2e/`). Firmware: czysta logika w `firmware/Szusownik/src/core/`
     (bez `Arduino.h`) i testy hostowe Catch2
@@ -114,6 +114,20 @@ najnowszej wersji firmware i PWA. Dlatego:
     w `protocol/ble-file-v1.json`; po zmianie uruchom `node scripts/gen-protocol.mjs`
     — test `web/src/lib/protocol.test.ts` pilnuje zgodności wygenerowanych plików.
     Testy sprzętowe (docs §12/§10/§11) zostają manualne. Szczegóły w `docs/testy.md`.
+17. Praca test-first (TDD): bugi i nowe funkcje zaczynaj od testu.
+    - **Bug**: najpierw dodaj test, który go reprodukuje (czerwony), potem napraw.
+      Test zostaje jako regresyjny.
+    - **Nowa funkcja / zmiana zachowania**: najpierw test (czerwony), potem
+      implementacja (zielony).
+    - Warstwę dobieraj wiernie wobec problemu, ale preferuj integracyjne/e2e;
+      unitowe tylko dla izolowanej, cięższej logiki.
+    - **Refaktor** opiera się na istniejących testach; test charakteryzujący dodaj
+      tylko, gdy brakuje pokrycia.
+    - Nie wszystko da się przetestować (sprzęt, render OLED, realne BLE, wygląd
+      mapy). Wtedy agent decyduje sam i krótko uzasadnia brak testu w zmianie/
+      commicie. Zanim uzna zmianę za nietestowalną, próbuje wydzielić czystą
+      logikę do `core/` albo czystych helperów, żeby dała się pokryć.
+    - Testy sprzętowe zostają manualne (`docs/testy.md`).
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

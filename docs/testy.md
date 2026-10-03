@@ -1,6 +1,7 @@
 # Testy
 
-Strategia: **ciężka logika unitowo, przepływy integracyjnie/e2e**. Testy są
+Strategia: **przepływy i funkcje integracyjnie/e2e, unitowe tylko dla cięższej,
+izolowanej logiki**. Testy są
 uruchamiane **lokalnie** — nie ma joba testowego w GitHub Actions (deploy Pages
 buduje tylko PWA). Pokrycie mierzymy dla orientacji, bez progu minimalnego.
 
