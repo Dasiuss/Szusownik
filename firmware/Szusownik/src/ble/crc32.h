@@ -1,8 +1,10 @@
 #pragma once
-#include <Arduino.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // CRC32 (IEEE 802.3, zgodny z zlib) do walidacji transferu BLE end-to-end.
 // PWA liczy CRC32 po dekompresji i porównuje z wartością ze STATUS "done".
+// Nagłówek bez zależności od Arduino, żeby dał się testować hostowo (src/core).
 // Tablica generowana w runtime standardowym algorytmem (bez ryzyka literówki
 // w przepisywanej tabeli).
 static const uint32_t SZ_CRC32_INIT = 0xFFFFFFFFu;

@@ -1,21 +1,53 @@
 import { db } from "./db.ts";
 import { DEVICE_CSV_V2_HEADER } from "./csv.ts";
+import {
+  SZ_BEEP_GAP_MAX_MS,
+  SZ_BEEP_GAP_MIN_MS,
+  SZ_BEEP_INTERVAL_MAX_MS,
+  SZ_BEEP_INTERVAL_MIN_MS,
+  SZ_BEEP_LONG_MAX_MS,
+  SZ_BEEP_LONG_MIN_MS,
+  SZ_BEEP_MIN_KMH_MAX,
+  SZ_BEEP_MIN_KMH_MIN,
+  SZ_BEEP_SHORT_MAX_MS,
+  SZ_BEEP_SHORT_MIN_MS,
+  SZ_BLE_ACK_BLOCK,
+  SZ_BLE_HEADER_SIZE,
+  SZ_BLE_LIST_MAX,
+  SZ_CMD_ACK,
+  SZ_CMD_LIST,
+  SZ_CMD_NACK,
+  SZ_CMD_ROTATE,
+  SZ_CMD_SETFREQ_LONG,
+  SZ_CMD_SETFREQ_SHORT,
+  SZ_CMD_SETMINBEEP,
+  SZ_CMD_SETTIMING_GAP,
+  SZ_CMD_SETTIMING_INTERVAL,
+  SZ_CMD_SETTIMING_LONG,
+  SZ_CMD_SETTIMING_SHORT,
+  SZ_CMD_SETVOL_HIGH,
+  SZ_CMD_SETVOL_LOW,
+  SZ_CMD_START_FILE,
+  SZ_CMD_STOP,
+  SZ_ERR_OPEN,
+  SZ_FREQ_MAX_HZ,
+  SZ_FREQ_MIN_HZ,
+  SZ_ST_ERR,
+  SZ_UUID_CTRL,
+  SZ_UUID_DATA,
+  SZ_UUID_INFO,
+  SZ_UUID_STAT,
+  SZ_UUID_SVC,
+} from "./protocol.ts";
 
 // BLE v1 Szusownika — transfer plików (faza C).
-// Kontrakt z firmware/src/config/config.h i docs/ble-transfer.md:
+// Kontrakt z firmware/src/config/protocol.h i docs/ble-transfer.md:
 // zlib/DEFLATE strumieniowo, ramki 244 B (seq LE32 + 240 B payload),
 // skumulowany ACK co 32, NACK z pierwszą brakującą, end marker (sam nagłówek),
-// STATUS "done raw=.. comp=.. frames=.. crc=..", walidacja end-to-end.
-export const SZ_UUID_SVC = "3f9a0001-7c4e-4b2a-9e11-000000000001";
-export const SZ_UUID_INFO = "3f9a0002-7c4e-4b2a-9e11-000000000002";
-export const SZ_UUID_CTRL = "3f9a0003-7c4e-4b2a-9e11-000000000003";
-export const SZ_UUID_DATA = "3f9a0004-7c4e-4b2a-9e11-000000000004";
-export const SZ_UUID_STAT = "3f9a0005-7c4e-4b2a-9e11-000000000005";
+// STATUS "done <nazwa> raw=.. comp=.. frames=.. crc=..", walidacja end-to-end.
+// Stałe protokołu pochodzą z GENEROWANEGO ./protocol.ts (SSOT:
+// protocol/ble-file-v1.json), więc nie duplikuj ich tutaj.
 
-export const SZ_BLE_FRAME = 244;
-export const SZ_BLE_HEADER = 4;
-export const SZ_BLE_PAYLOAD = 240;
-export const SZ_BLE_ACK_BLOCK = 32;
 const TRANSFER_TIMEOUT_MS = 120000;
 const TRANSFER_START_TIMEOUT_MS = 4000;
 const TRANSFER_DONE_TIMEOUT_MS = 5000;
@@ -58,33 +90,8 @@ export interface Timing {
   interval: number;
 }
 
-export const SZ_FREQ_MIN_HZ = 600;
-export const SZ_FREQ_MAX_HZ = 1500;
-export const SZ_FREQ_STEP_HZ = 25;
-export const SZ_VOL_LOW_DEFAULT = 20;
-export const SZ_VOL_HIGH_DEFAULT = 70;
-export const SZ_FREQ_SHORT_DEFAULT = 880;
-export const SZ_FREQ_LONG_DEFAULT = 1100;
-export const SZ_TIMING_SHORT_MIN_MS = 20;
-export const SZ_TIMING_SHORT_MAX_MS = 200;
-export const SZ_TIMING_SHORT_STEP_MS = 5;
-export const SZ_TIMING_SHORT_DEFAULT_MS = 56;
-export const SZ_TIMING_LONG_MIN_MS = 40;
-export const SZ_TIMING_LONG_MAX_MS = 500;
-export const SZ_TIMING_LONG_STEP_MS = 5;
-export const SZ_TIMING_LONG_DEFAULT_MS = 140;
-export const SZ_TIMING_GAP_MIN_MS = 0;
-export const SZ_TIMING_GAP_MAX_MS = 500;
-export const SZ_TIMING_GAP_STEP_MS = 5;
-export const SZ_TIMING_GAP_DEFAULT_MS = 60;
-export const SZ_TIMING_INTERVAL_MIN_MS = 100;
-export const SZ_TIMING_INTERVAL_MAX_MS = 5000;
-export const SZ_TIMING_INTERVAL_STEP_MS = 50;
-export const SZ_TIMING_INTERVAL_DEFAULT_MS = 1000;
-export const SZ_MIN_BEEP_KMH = 60;
-export const SZ_MAX_BEEP_KMH = 120;
-export const SZ_MIN_BEEP_STEP_KMH = 1;
-export const SZ_MIN_BEEP_DEFAULT_KMH = 60;
+// Zakresy i wartości domyślne ustawień dźwięku są w GENEROWANYM ./protocol.ts
+// (SSOT: protocol/ble-file-v1.json) — wspólne z firmware/src/config/protocol.h.
 
 export interface SyncProgress {
   file: string;
@@ -136,8 +143,8 @@ export class FileGoneError extends Error {
   }
 }
 
-/** Musi zgadzać się z SZ_BLE_LIST_MAX w firmware (config.h). */
-const LIST_PAGE_MAX = 12;
+/** Musi zgadzać się z firmware (protokół). */
+const LIST_PAGE_MAX = SZ_BLE_LIST_MAX;
 /** Zabezpieczenie przed zapętleniem listowania przy błędnym firmware. */
 const LIST_PAGE_LIMIT = 10000;
 const CURSOR_KEY = "syncCursor";
@@ -320,7 +327,7 @@ export class SzusownikBle {
     let status = "";
     for (;;) {
       status = await this.readStatus();
-      if (pattern.test(status) || status.startsWith("err:")) return status;
+      if (pattern.test(status) || status.startsWith(SZ_ST_ERR)) return status;
       if (Date.now() >= deadline) return status;
       await new Promise((resolve) => setTimeout(resolve, SETTINGS_POLL_MS));
     }
@@ -347,14 +354,14 @@ export class SzusownikBle {
     let status = "";
     for (;;) {
       status = await this.readStatus();
-      if (status.includes(name) && (accept.test(status) || status.startsWith("err:"))) return status;
+      if (status.includes(name) && (accept.test(status) || status.startsWith(SZ_ST_ERR))) return status;
       if (Date.now() >= deadline) return status;
       await new Promise((resolve) => setTimeout(resolve, SETTINGS_POLL_MS));
     }
   }
 
   private classifyTransferError(status: string): Error {
-    if (status.startsWith("err:open")) return new FileGoneError(`Plik zniknął z karty (${status})`);
+    if (status.startsWith(SZ_ERR_OPEN)) return new FileGoneError(`Plik zniknął z karty (${status})`);
     // err:read = urządzenie nie potrafi odczytać pliku (np. zła karta/nośnik).
     // Błąd przejściowy: plik zostaje na karcie, ponawiamy przy następnym sync.
     return new Error(`Urządzenie przerwało transfer (${status})`);
@@ -374,7 +381,7 @@ export class SzusownikBle {
   async setVolume(which: "low" | "high", value: number): Promise<Volume> {
     const v = Math.max(0, Math.min(100, Math.round(value)));
     const status = await this.settingStatus(
-      which === "low" ? `SETVOL:LOW:${v}` : `SETVOL:HIGH:${v}`,
+      which === "low" ? `${SZ_CMD_SETVOL_LOW}${v}` : `${SZ_CMD_SETVOL_HIGH}${v}`,
       /vol low=\d+ high=\d+/,
     );
     return SzusownikBle.parseVolume(status);
@@ -406,7 +413,7 @@ export class SzusownikBle {
   async setFrequency(which: "short" | "long", value: number): Promise<Freq> {
     const v = Math.max(SZ_FREQ_MIN_HZ, Math.min(SZ_FREQ_MAX_HZ, Math.round(value)));
     const status = await this.settingStatus(
-      which === "short" ? `SETFREQ:SHORT:${v}` : `SETFREQ:LONG:${v}`,
+      which === "short" ? `${SZ_CMD_SETFREQ_SHORT}${v}` : `${SZ_CMD_SETFREQ_LONG}${v}`,
       /freq short=\d+ long=\d+/,
     );
     return SzusownikBle.parseFreq(status);
@@ -419,21 +426,21 @@ export class SzusownikBle {
    */
   async setTiming(which: keyof Timing, value: number): Promise<Timing> {
     const limits = {
-      short: [SZ_TIMING_SHORT_MIN_MS, SZ_TIMING_SHORT_MAX_MS],
-      long: [SZ_TIMING_LONG_MIN_MS, SZ_TIMING_LONG_MAX_MS],
-      gap: [SZ_TIMING_GAP_MIN_MS, SZ_TIMING_GAP_MAX_MS],
-      interval: [SZ_TIMING_INTERVAL_MIN_MS, SZ_TIMING_INTERVAL_MAX_MS],
+      short: [SZ_BEEP_SHORT_MIN_MS, SZ_BEEP_SHORT_MAX_MS],
+      long: [SZ_BEEP_LONG_MIN_MS, SZ_BEEP_LONG_MAX_MS],
+      gap: [SZ_BEEP_GAP_MIN_MS, SZ_BEEP_GAP_MAX_MS],
+      interval: [SZ_BEEP_INTERVAL_MIN_MS, SZ_BEEP_INTERVAL_MAX_MS],
     } as const;
     const [min, max] = limits[which];
     const v = Math.max(min, Math.min(max, Math.round(value)));
     const command = {
-      short: "SETTIMING:SHORT",
-      long: "SETTIMING:LONG",
-      gap: "SETTIMING:GAP",
-      interval: "SETTIMING:INTERVAL",
+      short: SZ_CMD_SETTIMING_SHORT,
+      long: SZ_CMD_SETTIMING_LONG,
+      gap: SZ_CMD_SETTIMING_GAP,
+      interval: SZ_CMD_SETTIMING_INTERVAL,
     }[which];
     const status = await this.settingStatus(
-      `${command}:${v}`,
+      `${command}${v}`,
       /timing short=\d+ long=\d+ gap=\d+ interval=\d+/,
     );
     return SzusownikBle.parseTiming(status);
@@ -441,8 +448,8 @@ export class SzusownikBle {
 
   /** Minimalna prędkość pikania (firmware 1.4+); wzór dla danej prędkości pozostaje bez zmian. */
   async setMinBeepKmh(value: number): Promise<number> {
-    const v = Math.max(SZ_MIN_BEEP_KMH, Math.min(SZ_MAX_BEEP_KMH, Math.round(value)));
-    const status = await this.settingStatus(`SETMINBEEP:${v}`, /beep min=\d+/);
+    const v = Math.max(SZ_BEEP_MIN_KMH_MIN, Math.min(SZ_BEEP_MIN_KMH_MAX, Math.round(value)));
+    const status = await this.settingStatus(`${SZ_CMD_SETMINBEEP}${v}`, /beep min=\d+/);
     return SzusownikBle.parseMinBeep(status);
   }
 
@@ -487,27 +494,27 @@ export class SzusownikBle {
     };
 
     const handleFrame = async (bytes: Uint8Array) => {
-      if (bytes.length < SZ_BLE_HEADER) return;
+      if (bytes.length < SZ_BLE_HEADER_SIZE) return;
       const seq =
         bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] * 0x1000000);
-      const payload = bytes.slice(SZ_BLE_HEADER);
-      if (bytes.length === SZ_BLE_HEADER) {
+      const payload = bytes.slice(SZ_BLE_HEADER_SIZE);
+      if (bytes.length === SZ_BLE_HEADER_SIZE) {
         // End marker. Duplikat po zakończeniu też ACK-ujemy (znany problem §11).
         if (seq === expected && !finished) {
           await writer.close();
           await drain;
           finalAck = seq + 1;
-          await this.writeCtrl(`ACK:${finalAck}`);
+          await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
           finish();
         } else if (finished && seq === finalAck - 1) {
-          await this.writeCtrl(`ACK:${finalAck}`);
+          await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
         }
         return;
       }
       if (finished) return;
       if (seq < expected) return; // duplikat — nie pchaj drugi raz do dekompresora
       if (seq > expected) {
-        await this.writeCtrl(`NACK:${expected}`);
+        await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
         return;
       }
       if (expected < 16) {
@@ -522,7 +529,7 @@ export class SzusownikBle {
       expected++;
       onFrames(expected);
       if (expected % SZ_BLE_ACK_BLOCK === 0) {
-        await this.writeCtrl(`ACK:${expected}`);
+        await this.writeCtrl(`${SZ_CMD_ACK}${expected}`);
       }
     };
 
@@ -543,12 +550,12 @@ export class SzusownikBle {
     }, TRANSFER_TIMEOUT_MS);
 
     try {
-      await this.writeCtrl(`START_FILE:${meta.name}`);
+      await this.writeCtrl(`${SZ_CMD_START_FILE}${meta.name}`);
       // Krótkie okno na start albo natychmiastowy błąd (otwarcie/odczyt SD).
       // Dopuszczamy też `done` — bardzo mały plik może się skończyć, zanim
       // odczytamy `streaming`.
       const started = await this.pollTransfer(meta.name, /^(streaming|done) /, TRANSFER_START_TIMEOUT_MS);
-      if (started.startsWith("err:")) throw this.classifyTransferError(started);
+      if (started.startsWith(SZ_ST_ERR)) throw this.classifyTransferError(started);
       if (!started.startsWith("streaming") && !started.startsWith("done")) {
         throw new Error(`Brak startu transferu (${started || "brak statusu"})`);
       }
@@ -569,7 +576,7 @@ export class SzusownikBle {
           } catch {
             current = ""; // chwilowy błąd odczytu STATUS nie może psuć transferu
           }
-          if (current.includes(meta.name) && current.startsWith("err:")) {
+          if (current.includes(meta.name) && current.startsWith(SZ_ST_ERR)) {
             throw this.classifyTransferError(current);
           }
         }
@@ -578,7 +585,7 @@ export class SzusownikBle {
       }
       // Walidacja end-to-end: rozmiar (STATUS done raw=), CRC, schemat CSV.
       const status = await this.pollTransfer(meta.name, /^done /, TRANSFER_DONE_TIMEOUT_MS);
-      if (status.startsWith("err:")) throw this.classifyTransferError(status);
+      if (status.startsWith(SZ_ST_ERR)) throw this.classifyTransferError(status);
       if (!status.startsWith("done ")) {
         throw new Error(`Brak potwierdzenia transferu (${status || "brak statusu"})`);
       }
@@ -627,7 +634,7 @@ export class SzusownikBle {
       if (!finished) {
         // Transfer nie doszedł do końca — zatrzymaj firmware, żeby nie replayował.
         try {
-          await this.writeCtrl("STOP");
+          await this.writeCtrl(SZ_CMD_STOP);
         } catch {
           /* połączenie mogło już paść */
         }
@@ -655,11 +662,11 @@ export class SzusownikBle {
     let cursor = since;
     for (let page = 0; page < LIST_PAGE_LIMIT; page++) {
       const echo = listEcho(cursor);
-      await this.writeCtrl(`LIST:${cursor}`);
+      await this.writeCtrl(`${SZ_CMD_LIST}${cursor}`);
       // Czekamy na echo NASZEGO kursora. Bez tego pollStatus zwróciłby poprzednią
       // odpowiedź `list ...` (identyczny prefiks), a `last` nie posunąłby kursora.
       const status = await this.pollStatus(new RegExp(`^list ${escapeRegex(echo)}( |$)`));
-      if (status.startsWith("err:")) throw new Error(`Błąd listowania plików: ${status}`);
+      if (status.startsWith(SZ_ST_ERR)) throw new Error(`Błąd listowania plików: ${status}`);
       const entries = parseListStatus(status, echo);
       if (entries.length === 0) return out; // pusta lista = nic nowego
       for (const entry of entries) out.push(entry);
@@ -677,7 +684,7 @@ export class SzusownikBle {
    * rosnąco. Kursor = największa rozwiązana nazwa (files ∪ ignoredFiles).
    */
   async collectNewFiles(): Promise<FileMeta[]> {
-    await this.writeCtrl("ROTATE");
+    await this.writeCtrl(SZ_CMD_ROTATE);
     await this.pollStatus(/^ok$/);
     const known = new Set<string>(
       [

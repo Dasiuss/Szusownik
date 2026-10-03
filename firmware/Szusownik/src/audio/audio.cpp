@@ -39,10 +39,7 @@ void Beeper::begin() {
 }
 
 uint8_t Beeper::volumeFor(float kmh) const {
-  if (kmh <= SZ_VOL_LOW_KMH) return volLow_;
-  if (kmh >= SZ_VOL_HIGH_KMH) return volHigh_;
-  float t = (kmh - SZ_VOL_LOW_KMH) / (SZ_VOL_HIGH_KMH - SZ_VOL_LOW_KMH);
-  return (uint8_t)(volLow_ + t * (volHigh_ - volLow_) + 0.5f);
+  return core::beeperVolumeFor(kmh, volLow_, volHigh_, SZ_VOL_LOW_KMH, SZ_VOL_HIGH_KMH);
 }
 
 static uint8_t clampVol(int v) {
@@ -151,23 +148,9 @@ void Beeper::buildPattern(float kmh) {
   seqIdx_ = 0;
   playVol_ = volumeFor(kmh);
   patternLoaded_ = true;
-  if (kmh < minBeepKmh_) return;
-  uint8_t cont = 0, beeps = 0;
-  if (kmh < 100.0f) {
-    // Im szybciej, tym więcej: 60-69:1, 70-79:2, 80-89:3, 90-99:4.
-    beeps = kmh < 70.0f ? 1 : kmh < 80.0f ? 2 : kmh < 90.0f ? 3 : 4;
-  } else {
-    cont = (uint8_t)((kmh - 100.0f) / 50.0f) + 1;
-    if (cont > 3) cont = 3;
-    beeps = (uint8_t)(((int)kmh % 50) / 10);
-  }
-  for (uint8_t i = 0; i < cont && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {freqLong_, beepLongMs_, beepGapMs_};
-  }
-  for (uint8_t i = 0; i < beeps && seqLen_ < 8; i++) {
-    seq_[seqLen_++] = {freqShort_, beepShortMs_, beepGapMs_};
-  }
-  if (seqLen_ > 0) seq_[seqLen_ - 1].gapAfter = 0;
+  core::BeeperPatternSettings settings{freqShort_, freqLong_, beepShortMs_, beepLongMs_, beepGapMs_,
+                                       minBeepKmh_};
+  seqLen_ = (uint8_t)core::beeperBuildPattern(kmh, settings, seq_, 8);
 }
 
 void Beeper::build120Pattern() {

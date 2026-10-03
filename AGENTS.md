@@ -105,6 +105,15 @@ najnowszej wersji firmware i PWA. Dlatego:
     odzyskania z karty na komputerze. Błędy przejściowe (timeout, rozłączenie,
     kody `err:`) zostają w kolejce do ponowienia. Szczegóły w
     `docs/wymagania-ESP.md` §6/§7 i `docs/wymagania-PWA.md` §7.
+16. Testy: ciężka logika unitowo, przepływy integracyjnie/e2e, uruchamiane
+    **lokalnie** (bez joba w CI, bez progu pokrycia). PWA: Vitest
+    (`web/src/lib/*.test.ts`, integracja z `fake-indexeddb`) i Playwright
+    (`web/e2e/`). Firmware: czysta logika w `firmware/Szusownik/src/core/`
+    (bez `Arduino.h`) i testy hostowe Catch2
+    (`firmware/test/host/run.ps1`, wymaga MinGW-w64). Wspólny protokół ma SSOT
+    w `protocol/ble-file-v1.json`; po zmianie uruchom `node scripts/gen-protocol.mjs`
+    — test `web/src/lib/protocol.test.ts` pilnuje zgodności wygenerowanych plików.
+    Testy sprzętowe (docs §12/§10/§11) zostają manualne. Szczegóły w `docs/testy.md`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "../core/health.h"
 
 class Storage;
 class Beeper;
@@ -25,5 +26,5 @@ class Health {
   Hud* hud_ = nullptr;
   Baro* baro_ = nullptr;
   unsigned long nextCheck_ = 0;
-  uint8_t overCount_ = 0;
+  core::HealthState health_;  // licznik potwierdzeń (czysta logika w src/core)
 };

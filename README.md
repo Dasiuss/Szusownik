@@ -26,3 +26,4 @@ i bicia rekordów prędkości. Wcześniejsza nazwa robocza projektu to `GpsSpeed
 - `docs/ble-transfer.md` — sprawdzony transfer BLE, kompresja i retransmisje.
 - `docs/hud-display.md` — OLED, layout i animacja trasy.
 - `docs/mapy-routing.md` — dane mapowe, wizualizacja i routing.
+- `docs/testy.md` — strategia i komendy testów (Vitest, Playwright, host firmware).

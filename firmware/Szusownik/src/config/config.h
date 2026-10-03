@@ -1,58 +1,21 @@
 #pragma once
 #include <Arduino.h>
+#include "protocol.h"
 
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md, docs/jakosc-danych.md.
 
 #define SZ_FW_VERSION "1.7.0-per-run-file"
-#define SZ_WIRE_PROTO "szusownik/ble-file-v1"
-#define SZ_CSV_HEADER "timestamp,lat,lon,speed,altitude_gps,heading,altitude_baro,gnss_fix_valid,gnss_fix_age_ms,gnss_satellites,gnss_satellites_age_ms,gnss_hdop,gnss_hdop_age_ms"
-
-// Plik towarzyszący "<nazwa>.csv.meta" powstaje dopiero po potwierdzonym ruchu
-// (> SZ_ROLL_REARM_ABOVE_KMH przez SZ_ROLL_HOLD_MS). Jego brak oznacza plik
-// "postojowy": firmware go nie listuje, więc PWA go nie pobiera. Format prosty
-// klucz=wartość (ini-podobny), rozszerzalny bez serializera JSON.
-#define SZ_CSV_META_SUFFIX ".meta"
+// SZ_WIRE_PROTO, SZ_CSV_HEADER i SZ_CSV_META_SUFFIX są w protocol.h.
 
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
 // 50-70:3Hz, 70-80:6Hz, >=80:10Hz. Histereza +/-3 km/h.
 static const float SZ_HYST_KMH = 3.0f;
 
-// Buzzer (pasywny piezo, GPIO10, sterowanie LEDC z głośnością):
-// domyślnie przerwa między sygnałami 1000 ms, cisza poniżej ustawionego progu.
-// Mapowanie: 60-69:1, 70-79:2, 80-89:3,
-// 90-99:4 krótkie; >=100: długie + krótkie (1 długi na każde 50, reszta
-// dziesiątek krótkimi — 120 = 1 długi + 2 krótkie). Im szybciej, tym więcej.
-#define SZ_BEEP_INTERVAL_DEFAULT_MS 1000
-#define SZ_BEEP_INTERVAL_MIN_MS 100
-#define SZ_BEEP_INTERVAL_MAX_MS 5000
-// Częstotliwości tonów (ustawialne z PWA przez SETFREQ, trzymane w NVS;
-// suwaki 600-1500 Hz, krok 25). Krótki i długi niezależne — użytkownik może
-// ustawić krótki >= długi (decyzja: pełna swoboda, bez ostrzeżeń).
-#define SZ_FREQ_SHORT_DEFAULT 880   // krótkie ("kropki")
-#define SZ_FREQ_LONG_DEFAULT 1100   // długie ("kreski")
-#define SZ_FREQ_MIN_HZ 600
-#define SZ_FREQ_MAX_HZ 1500
-#define SZ_BEEP_SHORT_DEFAULT_MS 56     // -30% względem MVP1 (było 80)
-#define SZ_BEEP_SHORT_MIN_MS 20
-#define SZ_BEEP_SHORT_MAX_MS 200
-#define SZ_BEEP_LONG_DEFAULT_MS 140     // -30% względem MVP1 (było 200)
-#define SZ_BEEP_LONG_MIN_MS 40
-#define SZ_BEEP_LONG_MAX_MS 500
-#define SZ_BEEP_GAP_DEFAULT_MS 60       // -50% względem MVP1 (było 120)
-#define SZ_BEEP_GAP_MIN_MS 0
-#define SZ_BEEP_GAP_MAX_MS 500
-#define SZ_BEEP_MIN_KMH_DEFAULT 60
-#define SZ_BEEP_MIN_KMH_MIN 60
-#define SZ_BEEP_MIN_KMH_MAX 120
+// Buzzer: mapowanie prędkość -> wzór jest w audio.cpp; zakresy i wartości
+// domyślne (częstotliwości, czasy tonów/przerw, próg pikania, głośność) są
+// w protocol.h — PWA i firmware czytają te same liczby.
 
-// Głośność adaptacyjna 0..100 (kwadratowe mapowanie na duty LEDC, max 50%).
-// Kotwice: volLow przy 60 km/h, volHigh przy 120 km/h, pomiędzy liniowo,
-// powyżej 120 wartość z 120. Ustawiane z PWA (SETVOL), trzymane w NVS.
-#define SZ_VOL_LOW_KMH 60.0f
-#define SZ_VOL_HIGH_KMH 120.0f
-#define SZ_VOL_LOW_DEFAULT 20
-#define SZ_VOL_HIGH_DEFAULT 70
 
 // Rotacja pliku na postoju (wymagania-ESP.md §7). Gdy prędkość spadnie poniżej
 // SZ_ROLL_STOP_BELOW_KMH i utrzyma się przez SZ_ROLL_HOLD_MS, bieżący plik jest
@@ -101,26 +64,7 @@ static const float SZ_HYST_KMH = 3.0f;
 // danych przy odcięciu zasilania w trakcie jazdy; koniec jazdy chroni rolka.
 #define SZ_SD_COMMIT_MS 10000UL
 
-// BLE — profil ZAMROŻONY (docs/ble-transfer.md). Zmiana tylko po benchmarku
+// BLE — profil ZAMROŻONY (docs/ble-transfer.md). Wszystkie stałe protokołu
+// (ramki, okno, ACK, UUID, nazwa) są w protocol.h — zmiana tylko po benchmarku
 // na rzeczywistym ESP32 + Androidzie.
-#define SZ_BLE_FRAME_SIZE 244
-#define SZ_BLE_HEADER_SIZE 4
-#define SZ_BLE_PAYLOAD_SIZE 240
-#define SZ_BLE_ACK_BLOCK 32
-#define SZ_BLE_WINDOW 128
-#define SZ_BLE_NOTIFY_MS 4
-#define SZ_BLE_ACK_TIMEOUT_MS 500
-#define SZ_BLE_ACK_RETRY 3
-#define SZ_BLE_INPUT_CHUNK 512
-// LIST:<since>: ile plików mieści się w jednej odpowiedzi STATUS. Nazwa (<=20 B)
-// + rozmiar (<=8 cyfr) to ~30 B/wpis, a odczyt atrybutu ATT ma limit 512 B;
-// 12 wpisów (~360 B) zostawia margines. PWA dopyta o kolejny fragment.
-#define SZ_BLE_LIST_MAX 12
 
-// BLE UUID v1 Szusownika — NOWE, nie mieszać z testowymi 7e6d… / 5f8a….
-#define SZ_UUID_SVC "3f9a0001-7c4e-4b2a-9e11-000000000001"
-#define SZ_UUID_INFO "3f9a0002-7c4e-4b2a-9e11-000000000002"
-#define SZ_UUID_CTRL "3f9a0003-7c4e-4b2a-9e11-000000000003"
-#define SZ_UUID_DATA "3f9a0004-7c4e-4b2a-9e11-000000000004"
-#define SZ_UUID_STAT "3f9a0005-7c4e-4b2a-9e11-000000000005"
-#define SZ_BLE_NAME "Szusownik"

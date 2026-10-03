@@ -2,6 +2,7 @@
 #include "../config/pins.h"
 #include "../config/config.h"
 #include "../config/log.h"
+#include "../core/gnss_rate.h"
 
 bool Gnss::begin(long baud) {
   baud_ = baud;
@@ -118,32 +119,16 @@ unsigned long Gnss::locationAgeMs() const {
   return gps_.location.isValid() ? gps_.location.age() : 0UL;
 }
 
-int Gnss::bandOf(float kmh) {
-  if (kmh < 20.0f) return 0;
-  if (kmh < 50.0f) return 1;
-  if (kmh < 70.0f) return 2;
-  if (kmh < 80.0f) return 3;
-  return 4;
-}
+int Gnss::bandOf(float kmh) { return core::gnssBandOf(kmh); }
 
-unsigned long Gnss::bandIntervalMs(int band) {
-  static const unsigned long iv[5] = {2000, 1000, 333, 166, 100};
-  if (band < 0) band = 0;
-  if (band > 4) band = 4;
-  return iv[band];
-}
+unsigned long Gnss::bandIntervalMs(int band) { return core::gnssBandIntervalMs(band); }
 
 void Gnss::updateAdaptiveRate(float kmh) {
-  static const float bounds[4] = {20.0f, 50.0f, 70.0f, 80.0f};
-  static const int hz[5] = {0, 1, 3, 6, 10};  // 0 = 0.5 Hz
-  int want = bandOf(kmh);
-  if (want == band_) return;
-  bool cross = want > band_ ? (kmh >= bounds[want - 1] + SZ_HYST_KMH)
-                            : (kmh <= bounds[want] - SZ_HYST_KMH);
-  if (!cross) return;  // histereza: czekaj na przekroczenie progu +/-3
+  int want = core::gnssNextBand(band_, kmh, SZ_HYST_KMH);
+  if (want < 0) return;  // bez zmiany pasma (albo histereza jeszcze trzyma)
   band_ = want;
-  rateHz_ = hz[band_];
-  logIntervalMs_ = bandIntervalMs(band_);
+  rateHz_ = core::gnssBandRateHz(band_);
+  logIntervalMs_ = core::gnssBandIntervalMs(band_);
   SZ_LOGIF("GNSS pasmo -> b%d, interwal %lums", band_, logIntervalMs_);
   if (configured_) {
     if (!ubxSetRate((uint16_t)logIntervalMs_)) {

@@ -1,11 +1,17 @@
 # Node / PWA
 web/node_modules/
 web/dist/
+web/test-results/
+web/playwright-report/
+web/coverage/
 
 # Arduino CLI build cache (poza repo, ale na wszelki wypadek)
 *.hex
 *.elf
 *.bin
+
+# Testy hostowe firmware (binarka budowana lokalnie)
+firmware/test/host/host_tests.exe
 
 # System / edytory
 .DS_Store

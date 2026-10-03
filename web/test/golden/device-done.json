@@ -1,0 +1,8 @@
+{
+  "file": "20260926_181420.csv",
+  "raw": 216651,
+  "comp": 43772,
+  "frames": 183,
+  "crc": "CF1B7DB8",
+  "line": "BLE done 20260926_181420.csv raw=216651 comp=43772 frames=183 crc=CF1B7DB8 name=20260926_181420.csv replay=9 ackTimeout=2"
+}

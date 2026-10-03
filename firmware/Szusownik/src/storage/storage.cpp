@@ -2,6 +2,7 @@
 #include "../config/pins.h"
 #include "../config/config.h"
 #include "../config/log.h"
+#include "../core/csv_line.h"
 #include <SPI.h>
 #include <SD.h>
 
@@ -36,25 +37,21 @@ bool Storage::openLog(const String& stamp) {
 void Storage::writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                           float hdg, float altBaro, const GnssSampleQuality& quality) {
   if (!ready_ || !fileOpen_) return;
-  char fixAge[16] = "";
-  char satellites[16] = "";
-  char satellitesAge[16] = "";
-  char hdop[16] = "";
-  char hdopAge[16] = "";
-  if (quality.fixAgeValid) snprintf(fixAge, sizeof(fixAge), "%lu", (unsigned long)quality.fixAgeMs);
-  if (quality.satellitesValid) {
-    snprintf(satellites, sizeof(satellites), "%lu", (unsigned long)quality.satellites);
-  }
-  if (quality.satellitesAgeValid) {
-    snprintf(satellitesAge, sizeof(satellitesAge), "%lu", (unsigned long)quality.satellitesAgeMs);
-  }
-  if (quality.hdopValid) snprintf(hdop, sizeof(hdop), "%.2f", quality.hdop);
-  if (quality.hdopAgeValid) snprintf(hdopAge, sizeof(hdopAge), "%lu", (unsigned long)quality.hdopAgeMs);
+  core::CsvQuality q{};
+  q.fixValid = quality.fixValid;
+  q.fixAgeValid = quality.fixAgeValid;
+  q.fixAgeMs = quality.fixAgeMs;
+  q.satellitesValid = quality.satellitesValid;
+  q.satellites = quality.satellites;
+  q.satellitesAgeValid = quality.satellitesAgeValid;
+  q.satellitesAgeMs = quality.satellitesAgeMs;
+  q.hdopValid = quality.hdopValid;
+  q.hdop = quality.hdop;
+  q.hdopAgeValid = quality.hdopAgeValid;
+  q.hdopAgeMs = quality.hdopAgeMs;
 
   char line[256];
-  snprintf(line, sizeof(line), "%s,%.6f,%.6f,%.1f,%.1f,%.0f,%.1f,%d,%s,%s,%s,%s,%s",
-           utc.c_str(), lat, lon, kmh, altGps, hdg, altBaro, quality.fixValid ? 1 : 0, fixAge,
-           satellites, satellitesAge, hdop, hdopAge);
+  core::csvLine(line, sizeof(line), utc.c_str(), lat, lon, kmh, altGps, hdg, altBaro, q);
   size_t want = strlen(line) + 2;  // println dopisuje CRLF
   size_t got = logFile.println(line);
   if (got != want) {
@@ -89,34 +86,10 @@ void Storage::close() {
 }
 
 void Storage::updateFileRotation(float kmh, bool fixValid) {
-  // Rolka na postoju: domyka plik, gdy stoimy. Bez poprawnego fixa nie znamy
-  // prędkości (przy braku fixa kmh = 0), więc nie rolujemy — inaczej zanik fixa
-  // w ruchu (tunel, garaż) fałszywie ciąłby przejazd.
-  if (!fixValid) {
-    stoppedSince_ = 0;
-    movingSince_ = 0;
-    return;
-  }
-  const unsigned long now = millis();
-  if (kmh < SZ_ROLL_STOP_BELOW_KMH) {
-    movingSince_ = 0;
-    if (stoppedSince_ == 0) stoppedSince_ = now;
-    if (fileRotationArmed_ && now - stoppedSince_ >= SZ_ROLL_HOLD_MS) {
-      SZ_LOGIF("SD rolka (postoj) zamyka %s", currentName_.c_str());
-      close();  // main otworzy nowy plik przy kolejnej próbce
-      fileRotationArmed_ = false;
-    }
-  } else if (kmh > SZ_ROLL_REARM_ABOVE_KMH) {
-    stoppedSince_ = 0;
-    if (movingSince_ == 0) movingSince_ = now;
-    if (!fileRotationArmed_ && now - movingSince_ >= SZ_ROLL_HOLD_MS) {
-      fileRotationArmed_ = true;
-    }
-  } else {
-    // Strefa histerezy (STOP_BELOW .. REARM_ABOVE): ani bezruch, ani uzbrajający
-    // ruch — zeruj liczniki, ale nie zmieniaj stanu uzbrojenia.
-    stoppedSince_ = 0;
-    movingSince_ = 0;
+  const core::RotationConfig config{SZ_ROLL_STOP_BELOW_KMH, SZ_ROLL_REARM_ABOVE_KMH, SZ_ROLL_HOLD_MS};
+  if (rotation_.update(kmh, fixValid, millis(), config)) {
+    SZ_LOGIF("SD rolka (postoj) zamyka %s", currentName_.c_str());
+    close();  // main otworzy nowy plik przy kolejnej próbce
   }
 }
 
@@ -124,7 +97,7 @@ void Storage::ensureMeta() {
   // Warunek: otwarty plik + potwierdzony ruch (uzbrojenie rolki) + brak .meta.
   // Kolejność jest istotna: .meta powstaje i jest domykane (flush) w chwili
   // potwierdzenia ruchu, więc brak .meta niezawodnie znaczy "brak jazdy".
-  if (!ready_ || !fileOpen_ || !fileRotationArmed_ || metaWritten_) return;
+  if (!ready_ || !fileOpen_ || !rotation_.armed || metaWritten_) return;
   String p = currentName_;
   if (!p.startsWith("/")) p = "/" + p;
   String metaPath = p + SZ_CSV_META_SUFFIX;
@@ -177,16 +150,7 @@ uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* 
       String n = String(f.name());
       if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n) && n > since) {
         // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
-        uint32_t pos = 0;
-        while (pos < count && String(out[pos].name) < n) pos++;
-        if (pos < maxCount) {
-          uint32_t newCount = count < maxCount ? count + 1 : count;
-          for (uint32_t j = newCount - 1; j > pos; --j) out[j] = out[j - 1];
-          strncpy(out[pos].name, n.c_str(), sizeof(out[pos].name) - 1);
-          out[pos].name[sizeof(out[pos].name) - 1] = '\0';
-          out[pos].size = (unsigned long)f.size();
-          count = newCount;
-        }
+        count = (uint32_t)core::listInsert(out, count, maxCount, n.c_str(), (unsigned long)f.size());
       }
     }
     f.close();

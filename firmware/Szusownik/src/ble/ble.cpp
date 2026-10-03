@@ -5,6 +5,7 @@
 #include "../config/config.h"
 #include "../config/log.h"
 #include <NimBLEDevice.h>
+#include <cstring>
 
 static NimBLECharacteristic* chrInfo = nullptr;
 static NimBLECharacteristic* chrCtrl = nullptr;
@@ -92,7 +93,7 @@ void BleFiles::begin(Storage* storage) {
     chrStat->setValue(pad.c_str());
   }
   refreshInfo();
-  setStatus("ok");
+  setStatus(SZ_ST_OK);
   svc->start();
   srv->advertiseOnDisconnect(true);  // NimBLE 2.x domyślnie NIE wznawia reklamowania
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
@@ -156,7 +157,7 @@ void BleFiles::refreshInfo() {
 
 void BleFiles::reportVolume() {
   if (!beeper_) {
-    setStatus("err:no-beeper");
+    setStatus(SZ_ERR_NO_BEEPER);
     return;
   }
   char msg[48];
@@ -168,7 +169,7 @@ void BleFiles::reportVolume() {
 
 void BleFiles::reportFreq() {
   if (!beeper_) {
-    setStatus("err:no-beeper");
+    setStatus(SZ_ERR_NO_BEEPER);
     return;
   }
   char msg[48];
@@ -181,7 +182,7 @@ void BleFiles::reportFreq() {
 
 void BleFiles::reportTiming() {
   if (!beeper_) {
-    setStatus("err:no-beeper");
+    setStatus(SZ_ERR_NO_BEEPER);
     return;
   }
   char msg[96];
@@ -195,7 +196,7 @@ void BleFiles::reportTiming() {
 
 void BleFiles::reportMinBeep() {
   if (!beeper_) {
-    setStatus("err:no-beeper");
+    setStatus(SZ_ERR_NO_BEEPER);
     return;
   }
   char msg[40];
@@ -214,10 +215,10 @@ void BleFiles::setStatus(const String& s) {
 }
 
 void BleFiles::handleCommand(const String& cmd) {
-  if (cmd.startsWith("LIST:")) {
+  if (cmd.startsWith(SZ_CMD_LIST)) {
     // Filtr po nazwie (YYYYMMDD_HHMMSS): zwracamy do SZ_BLE_LIST_MAX najstarszych
     // plików > since. Puste since = od najstarszego. Pusta lista = brak nowych.
-    String since = cmd.substring(5);
+    String since = cmd.substring((unsigned int)strlen(SZ_CMD_LIST));
     since.trim();
     StorageEntry entries[SZ_BLE_LIST_MAX];
     uint32_t n = storage_ ? storage_->listCsv(since, SZ_BLE_LIST_MAX, entries) : 0;
@@ -225,7 +226,7 @@ void BleFiles::handleCommand(const String& cmd) {
     // pollStatus łapie poprzednią odpowiedź `list ...` (ten sam prefiks) i lista
     // "nie posuwa kursora" (ostatnia nazwa nie rośnie). "0" jest mniejsze od
     // każdej nazwy YYYYMMDD_..., więc reprezentuje puste `since`.
-    String msg = "list ";
+    String msg = SZ_ST_LIST;
     msg += since.length() ? since : String("0");
     for (uint32_t i = 0; i < n; i++) {
       msg += ' ';
@@ -234,89 +235,89 @@ void BleFiles::handleCommand(const String& cmd) {
       msg += String(entries[i].size);
     }
     setStatus(msg);
-  } else if (cmd.startsWith("ROTATE")) {
+  } else if (cmd.startsWith(SZ_CMD_ROTATE)) {
     // Żądanie sync: zamknij bieżący plik, żeby transfer czytał kompletny plik.
     if (storage_) storage_->rotateForSync();
     refreshInfo();
-    setStatus("ok");
-  } else if (cmd.startsWith("DRYRUN:")) {
-    String name = cmd.substring(7);
+    setStatus(SZ_ST_OK);
+  } else if (cmd.startsWith(SZ_CMD_DRYRUN)) {
+    String name = cmd.substring((unsigned int)strlen(SZ_CMD_DRYRUN));
     name.trim();
     dryRun(name);
-  } else if (cmd.startsWith("START_FILE:")) {
-    String name = cmd.substring(11);
+  } else if (cmd.startsWith(SZ_CMD_START_FILE)) {
+    String name = cmd.substring((unsigned int)strlen(SZ_CMD_START_FILE));
     name.trim();
     startStream(name);
-  } else if (cmd.startsWith("STOP")) {
+  } else if (cmd.startsWith(SZ_CMD_STOP)) {
     if (transferring_) abortStream("stopped");
     activeFile_ = "";
-    setStatus("ok");
-  } else if (cmd.startsWith("ACK:")) {
-    onAck((uint32_t)cmd.substring(4).toInt());
-  } else if (cmd.startsWith("NACK:")) {
-    onNack((uint32_t)cmd.substring(5).toInt());
-  } else if (cmd.startsWith("SETVOL:LOW:")) {
+    setStatus(SZ_ST_OK);
+  } else if (cmd.startsWith(SZ_CMD_ACK)) {
+    onAck((uint32_t)cmd.substring((unsigned int)strlen(SZ_CMD_ACK)).toInt());
+  } else if (cmd.startsWith(SZ_CMD_NACK)) {
+    onNack((uint32_t)cmd.substring((unsigned int)strlen(SZ_CMD_NACK)).toInt());
+  } else if (cmd.startsWith(SZ_CMD_SETVOL_LOW)) {
     if (beeper_) {
-      beeper_->setVolLow(cmd.substring(11).toInt());  // feedback: sygnał 60
+      beeper_->setVolLow(cmd.substring((unsigned int)strlen(SZ_CMD_SETVOL_LOW)).toInt());  // feedback: sygnał 60
       reportVolume();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETVOL:HIGH:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETVOL_HIGH)) {
     if (beeper_) {
-      beeper_->setVolHigh(cmd.substring(12).toInt());  // feedback: sygnał 120
+      beeper_->setVolHigh(cmd.substring((unsigned int)strlen(SZ_CMD_SETVOL_HIGH)).toInt());  // feedback: sygnał 120
       reportVolume();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETFREQ:SHORT:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETFREQ_SHORT)) {
     if (beeper_) {
-      beeper_->setFreqShort(cmd.substring(14).toInt());  // feedback: 1 długi + 2 krótkie
+      beeper_->setFreqShort(cmd.substring((unsigned int)strlen(SZ_CMD_SETFREQ_SHORT)).toInt());  // feedback: 1 długi + 2 krótkie
       reportFreq();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETFREQ:LONG:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETFREQ_LONG)) {
     if (beeper_) {
-      beeper_->setFreqLong(cmd.substring(13).toInt());  // feedback: 1 długi + 2 krótkie
+      beeper_->setFreqLong(cmd.substring((unsigned int)strlen(SZ_CMD_SETFREQ_LONG)).toInt());  // feedback: 1 długi + 2 krótkie
       reportFreq();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETTIMING:SHORT:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETTIMING_SHORT)) {
     if (beeper_) {
-      beeper_->setBeepShortMs(cmd.substring(16).toInt());  // feedback: 3 x sygnał 120
+      beeper_->setBeepShortMs(cmd.substring((unsigned int)strlen(SZ_CMD_SETTIMING_SHORT)).toInt());  // feedback: 3 x sygnał 120
       reportTiming();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETTIMING:LONG:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETTIMING_LONG)) {
     if (beeper_) {
-      beeper_->setBeepLongMs(cmd.substring(15).toInt());  // feedback: 3 x sygnał 120
+      beeper_->setBeepLongMs(cmd.substring((unsigned int)strlen(SZ_CMD_SETTIMING_LONG)).toInt());  // feedback: 3 x sygnał 120
       reportTiming();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETTIMING:GAP:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETTIMING_GAP)) {
     if (beeper_) {
-      beeper_->setBeepGapMs(cmd.substring(14).toInt());  // feedback: 3 x sygnał 120
+      beeper_->setBeepGapMs(cmd.substring((unsigned int)strlen(SZ_CMD_SETTIMING_GAP)).toInt());  // feedback: 3 x sygnał 120
       reportTiming();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETTIMING:INTERVAL:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETTIMING_INTERVAL)) {
     if (beeper_) {
-      beeper_->setSignalGapMs(cmd.substring(19).toInt());  // feedback: 3 x sygnał 120
+      beeper_->setSignalGapMs(cmd.substring((unsigned int)strlen(SZ_CMD_SETTIMING_INTERVAL)).toInt());  // feedback: 3 x sygnał 120
       reportTiming();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
-  } else if (cmd.startsWith("SETMINBEEP:")) {
+  } else if (cmd.startsWith(SZ_CMD_SETMINBEEP)) {
     if (beeper_) {
-      beeper_->setMinBeepKmh(cmd.substring(11).toInt());
+      beeper_->setMinBeepKmh(cmd.substring((unsigned int)strlen(SZ_CMD_SETMINBEEP)).toInt());
       reportMinBeep();
     } else {
-      setStatus("err:no-beeper");
+      setStatus(SZ_ERR_NO_BEEPER);
     }
   }
 }
@@ -361,19 +362,19 @@ void BleFiles::poll() {
 bool BleFiles::startStream(const String& name) {
   if (transferring_) abortStream("restart");
   if (!storage_) {
-    setStatus("err:no-storage " + name);
+    setStatus(SZ_ERR_NO_STORAGE " " + name);
     return false;
   }
   storage_->rotateForSync();  // plik do pobrania zawsze kompletny/zamknięty
   activeFile_ = name;
   if (!storage_->openRead(name)) {
     SZ_LOGEF("BLE START open fail name=%s", name.c_str());
-    setStatus("err:open " + name);
+    setStatus(SZ_ERR_OPEN " " + name);
     return false;
   }
   if (!comp_ || !window_) {
     storage_->closeRead();
-    setStatus("err:nomem " + name);
+    setStatus(SZ_ERR_NOMEM " " + name);
     return false;
   }
   tdefl_status st = tdefl_init(comp_, nullptr, nullptr,
@@ -382,7 +383,7 @@ bool BleFiles::startStream(const String& name) {
   if (st != TDEFL_STATUS_OKAY) {
     SZ_LOGE("BLE START tdefl_init fail");
     storage_->closeRead();
-    setStatus("err:deflate " + name);
+    setStatus(SZ_ERR_DEFLATE " " + name);
     return false;
   }
   compActive_ = true;
@@ -406,7 +407,7 @@ bool BleFiles::startStream(const String& name) {
   lastNotifyMs_ = 0;
   transferring_ = true;
   refreshInfo();
-  setStatus("streaming " + name);
+  setStatus(SZ_ST_STREAMING + name);
   SZ_LOGIF("BLE START name=%s raw=%lu", name.c_str(), (unsigned long)storage_->readSize());
   return true;
 }
@@ -425,7 +426,7 @@ void BleFiles::abortStream(const String& reason) {
 void BleFiles::finishStream() {
   uint32_t crc = szCrc32Final(fileCrc_);
   char msg[160];
-  snprintf(msg, sizeof(msg), "done %s raw=%lu comp=%lu frames=%lu crc=%08lX",
+  snprintf(msg, sizeof(msg), SZ_ST_DONE "%s raw=%lu comp=%lu frames=%lu crc=%08lX",
            activeFile_.c_str(), (unsigned long)rawBytes_, (unsigned long)compBytes_,
            (unsigned long)frameCount_, (unsigned long)crc);
   if (storage_) storage_->closeRead();
@@ -522,7 +523,7 @@ void BleFiles::pumpStream() {
         if (inLen_ == 0) {
           if (storage_ && storage_->readError()) {
             // Realny błąd nośnika — nie raportuj pustego pliku jako sukcesu.
-            abortStream("err:read");
+            abortStream(SZ_ERR_READ);
             return;
           }
           inputEof_ = true;
@@ -570,7 +571,7 @@ void BleFiles::pumpStream() {
   // 3) timeout ACK -> replay od najstarszej niepotwierdzonej.
   if (millis() - lastProgressMs_ > SZ_BLE_ACK_TIMEOUT_MS) {
     if (ackRetries_ >= SZ_BLE_ACK_RETRY) {
-      abortStream("err:ack-timeout");
+      abortStream(SZ_ERR_ACK_TIMEOUT);
       return;
     }
     ackRetries_++;
@@ -616,21 +617,21 @@ void BleFiles::replayFrom(uint32_t seq) {
 void BleFiles::dryRun(const String& name) {
   // Lokalny test ścieżki SD + miniz + CRC bez telefonu: wynik w logu i STATUS.
   if (transferring_) {
-    setStatus("err:busy");
+    setStatus(SZ_ERR_BUSY);
     return;
   }
   if (!storage_) {
-    setStatus("err:no-storage");
+    setStatus(SZ_ERR_NO_STORAGE);
     return;
   }
   storage_->rotateForSync();
   if (!comp_) {
-    setStatus("err:nomem");
+    setStatus(SZ_ERR_NOMEM);
     return;
   }
   if (!storage_->openRead(name)) {
     SZ_LOGEF("BLE DRYRUN open fail name=%s", name.c_str());
-    setStatus("err:open");
+    setStatus(SZ_ERR_OPEN);
     return;
   }
   tdefl_compressor* c = comp_;  // współdzielony bufor (dryRun tylko gdy !busy)
@@ -638,7 +639,7 @@ void BleFiles::dryRun(const String& name) {
                  TDEFL_DEFAULT_MAX_PROBES | TDEFL_WRITE_ZLIB_HEADER | TDEFL_COMPUTE_ADLER32) !=
       TDEFL_STATUS_OKAY) {
     storage_->closeRead();
-    setStatus("err:deflate");
+    setStatus(SZ_ERR_DEFLATE);
     return;
   }
   uint32_t raw = 0, compBytes = 0, crc = SZ_CRC32_INIT;
@@ -674,7 +675,7 @@ void BleFiles::dryRun(const String& name) {
   }
   storage_->closeRead();
   char msg[128];
-  snprintf(msg, sizeof(msg), "dryrun raw=%lu comp=%lu crc=%08lX", (unsigned long)raw,
+  snprintf(msg, sizeof(msg), SZ_ST_DRYRUN "raw=%lu comp=%lu crc=%08lX", (unsigned long)raw,
            (unsigned long)compBytes, (unsigned long)szCrc32Final(crc));
   setStatus(String(msg));
   SZ_LOGIF("BLE %s name=%s", msg, name.c_str());

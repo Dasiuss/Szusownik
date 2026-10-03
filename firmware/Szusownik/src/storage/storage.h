@@ -1,16 +1,16 @@
 #pragma once
 #include <Arduino.h>
 #include "../gnss/gnss.h"
+#include "../core/list_buffer.h"
+#include "../core/rotation.h"
 
 // Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: domknięcie pliku na
 // postoju (chroni dane przed odcięciem zasilania) oraz na żądanie sync z PWA.
 // Bez kasowania po wysyłce. Pliki postojowe (bez .meta) nie są listowane.
+// Czysta logika (rotacja, bufor listy, format linii) mieszka w src/core/.
 
 // Wpis listy plików dla BLE (LIST:<since>). Nazwa FAT bez wiodącego ukośnika.
-struct StorageEntry {
-  char name[24];
-  unsigned long size;
-};
+using StorageEntry = core::ListEntry;
 
 class Storage {
  public:
@@ -64,8 +64,6 @@ class Storage {
   bool readError_ = false;  // read()=0 mimo pos<size (uszkodzony plik/nośnik)
   uint32_t writeErrors_ = 0;
   unsigned long syncMaxMs_ = 0;
-  bool fileRotationArmed_ = false;  // false na starcie: pierwsza rolka po realnym ruchu
+  core::RotationState rotation_;   // rolka na postoju (czysta logika w src/core)
   bool metaWritten_ = false;        // .meta bieżącego pliku już utworzony
-  unsigned long stoppedSince_ = 0;  // 0 = brak warunku bezruchu; inaczej millis() startu
-  unsigned long movingSince_ = 0;   // 0 = brak warunku ruchu; inaczej millis() startu
 };

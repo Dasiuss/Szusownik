@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { buildQueue, parseListStatus, PermanentDownloadError } from "./ble.ts";
 
 // Rozróżnienie trwałego uszkodzenia (pomijamy) od błędu przejściowego (ponawiamy)

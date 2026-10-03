@@ -23,7 +23,11 @@ void Health::tick(unsigned long nowMs) {
   float airC = 0.0f;
   if (baro_ && baro_->present() && baro_->read()) airC = baro_->tempC();
 
-  if (dieC >= SZ_HEALTH_TEMP_CRIT_C) {
+  const core::HealthConfig config{SZ_HEALTH_TEMP_WARN_C, SZ_HEALTH_TEMP_CRIT_C, SZ_HEALTH_HYST_C,
+                                  SZ_HEALTH_WARN_CONFIRM};
+  const core::HealthAction action = core::healthEvaluate(dieC, config, health_);
+
+  if (action == core::HealthAction::Critical) {
     SZ_LOGEF("HEALTH KRYTYCZNE die=%.1fC air=%.1fC -> SD close + deep sleep", dieC, airC);
     if (storage_) storage_->close();
     if (hud_) hud_->drawOverheat(dieC, airC);
@@ -32,17 +36,11 @@ void Health::tick(unsigned long nowMs) {
     return;
   }
 
-  if (dieC >= SZ_HEALTH_TEMP_WARN_C) {
-    if (overCount_ < 255) overCount_++;
-    if (overCount_ >= SZ_HEALTH_WARN_CONFIRM) {
-      SZ_LOGWF("HEALTH OSTRZEZENIE die=%.1fC air=%.1fC (potwierdzen=%u)", dieC, airC,
-               overCount_);
-      if (beeper_) beeper_->alarm(SZ_HEALTH_ALARM_MS);
-    }
-  } else if (dieC < SZ_HEALTH_TEMP_WARN_C - SZ_HEALTH_HYST_C) {
-    if (overCount_ >= SZ_HEALTH_WARN_CONFIRM) {
-      SZ_LOGIF("HEALTH ostyglo die=%.1fC air=%.1fC", dieC, airC);
-    }
-    overCount_ = 0;  // ostygło — rozbroj alarm
+  if (action == core::HealthAction::Warning) {
+    SZ_LOGWF("HEALTH OSTRZEZENIE die=%.1fC air=%.1fC (potwierdzen=%u)", dieC, airC,
+             health_.overCount);
+    if (beeper_) beeper_->alarm(SZ_HEALTH_ALARM_MS);
+  } else if (action == core::HealthAction::Cooldown) {
+    SZ_LOGIF("HEALTH ostyglo die=%.1fC air=%.1fC", dieC, airC);
   }
 }

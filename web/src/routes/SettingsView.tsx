@@ -2,34 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon.tsx";
 import {
+  SZ_BEEP_GAP_DEFAULT_MS,
+  SZ_BEEP_GAP_MAX_MS,
+  SZ_BEEP_GAP_MIN_MS,
+  SZ_BEEP_GAP_STEP_MS,
+  SZ_BEEP_INTERVAL_DEFAULT_MS,
+  SZ_BEEP_INTERVAL_MAX_MS,
+  SZ_BEEP_INTERVAL_MIN_MS,
+  SZ_BEEP_INTERVAL_STEP_MS,
+  SZ_BEEP_LONG_DEFAULT_MS,
+  SZ_BEEP_LONG_MAX_MS,
+  SZ_BEEP_LONG_MIN_MS,
+  SZ_BEEP_LONG_STEP_MS,
+  SZ_BEEP_MIN_KMH_DEFAULT,
+  SZ_BEEP_MIN_KMH_MAX,
+  SZ_BEEP_MIN_KMH_MIN,
+  SZ_BEEP_MIN_KMH_STEP,
+  SZ_BEEP_SHORT_DEFAULT_MS,
+  SZ_BEEP_SHORT_MAX_MS,
+  SZ_BEEP_SHORT_MIN_MS,
+  SZ_BEEP_SHORT_STEP_MS,
   SZ_FREQ_LONG_DEFAULT,
   SZ_FREQ_MAX_HZ,
   SZ_FREQ_MIN_HZ,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_FREQ_STEP_HZ,
-  SZ_MAX_BEEP_KMH,
-  SZ_MIN_BEEP_DEFAULT_KMH,
-  SZ_MIN_BEEP_KMH,
-  SZ_MIN_BEEP_STEP_KMH,
-  SZ_TIMING_GAP_DEFAULT_MS,
-  SZ_TIMING_GAP_MAX_MS,
-  SZ_TIMING_GAP_MIN_MS,
-  SZ_TIMING_GAP_STEP_MS,
-  SZ_TIMING_INTERVAL_DEFAULT_MS,
-  SZ_TIMING_INTERVAL_MAX_MS,
-  SZ_TIMING_INTERVAL_MIN_MS,
-  SZ_TIMING_INTERVAL_STEP_MS,
-  SZ_TIMING_LONG_DEFAULT_MS,
-  SZ_TIMING_LONG_MAX_MS,
-  SZ_TIMING_LONG_MIN_MS,
-  SZ_TIMING_LONG_STEP_MS,
-  SZ_TIMING_SHORT_DEFAULT_MS,
-  SZ_TIMING_SHORT_MAX_MS,
-  SZ_TIMING_SHORT_MIN_MS,
-  SZ_TIMING_SHORT_STEP_MS,
   SZ_VOL_HIGH_DEFAULT,
   SZ_VOL_LOW_DEFAULT,
-} from "../lib/ble.ts";
+} from "../lib/protocol.ts";
 import { useDevice } from "../lib/device.tsx";
 import type { Freq, Timing, Volume } from "../lib/ble.ts";
 import { clearPwaData } from "../lib/reset.ts";
@@ -171,10 +171,10 @@ export default function SettingsView() {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
-      await device.setTiming("short", SZ_TIMING_SHORT_DEFAULT_MS);
-      await device.setTiming("long", SZ_TIMING_LONG_DEFAULT_MS);
-      await device.setTiming("gap", SZ_TIMING_GAP_DEFAULT_MS);
-      setTiming(await device.setTiming("interval", SZ_TIMING_INTERVAL_DEFAULT_MS));
+      await device.setTiming("short", SZ_BEEP_SHORT_DEFAULT_MS);
+      await device.setTiming("long", SZ_BEEP_LONG_DEFAULT_MS);
+      await device.setTiming("gap", SZ_BEEP_GAP_DEFAULT_MS);
+      setTiming(await device.setTiming("interval", SZ_BEEP_INTERVAL_DEFAULT_MS));
     } catch (caught) {
       setSettingsError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -188,7 +188,7 @@ export default function SettingsView() {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
-      setMinBeepKmh(await device.setMinBeepKmh(SZ_MIN_BEEP_DEFAULT_KMH));
+      setMinBeepKmh(await device.setMinBeepKmh(SZ_BEEP_MIN_KMH_DEFAULT));
     } catch (caught) {
       setSettingsError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -289,17 +289,17 @@ export default function SettingsView() {
          <div className="settings-card">
           <div className="settings-card-heading"><div className="settings-icon settings-icon-coral"><Icon name="activity" size={19} /></div><div><h3>Czasy sygnału</h3><p>Każdy klik odtwarza trzy sygnały 120 km/h.</p></div><button className="button button-ghost settings-reset" disabled={!timing || settingsBusy} onClick={() => void resetTiming()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
           {timing ? <div className="sliders">
-              <SoundSlider label="Krótkie piknięcie" hint="długość tonu" value={timing.short} min={SZ_TIMING_SHORT_MIN_MS} max={SZ_TIMING_SHORT_MAX_MS} step={SZ_TIMING_SHORT_STEP_MS} onChange={(value) => changeTiming("short", value)} onPreview={(value) => testTiming("short", value)} suffix=" ms" />
-              <SoundSlider label="Długie piknięcie" hint="długość tonu" value={timing.long} min={SZ_TIMING_LONG_MIN_MS} max={SZ_TIMING_LONG_MAX_MS} step={SZ_TIMING_LONG_STEP_MS} onChange={(value) => changeTiming("long", value)} onPreview={(value) => testTiming("long", value)} suffix=" ms" />
-              <SoundSlider label="Przerwa w sygnale" hint="między piknięciami" value={timing.gap} min={SZ_TIMING_GAP_MIN_MS} max={SZ_TIMING_GAP_MAX_MS} step={SZ_TIMING_GAP_STEP_MS} onChange={(value) => changeTiming("gap", value)} onPreview={(value) => testTiming("gap", value)} suffix=" ms" />
-              <SoundSlider label="Przerwa między sygnałami" hint="między wzorami 120 km/h" value={timing.interval} min={SZ_TIMING_INTERVAL_MIN_MS} max={SZ_TIMING_INTERVAL_MAX_MS} step={SZ_TIMING_INTERVAL_STEP_MS} onChange={(value) => changeTiming("interval", value)} onPreview={(value) => testTiming("interval", value)} suffix=" ms" />
+              <SoundSlider label="Krótkie piknięcie" hint="długość tonu" value={timing.short} min={SZ_BEEP_SHORT_MIN_MS} max={SZ_BEEP_SHORT_MAX_MS} step={SZ_BEEP_SHORT_STEP_MS} onChange={(value) => changeTiming("short", value)} onPreview={(value) => testTiming("short", value)} suffix=" ms" />
+              <SoundSlider label="Długie piknięcie" hint="długość tonu" value={timing.long} min={SZ_BEEP_LONG_MIN_MS} max={SZ_BEEP_LONG_MAX_MS} step={SZ_BEEP_LONG_STEP_MS} onChange={(value) => changeTiming("long", value)} onPreview={(value) => testTiming("long", value)} suffix=" ms" />
+              <SoundSlider label="Przerwa w sygnale" hint="między piknięciami" value={timing.gap} min={SZ_BEEP_GAP_MIN_MS} max={SZ_BEEP_GAP_MAX_MS} step={SZ_BEEP_GAP_STEP_MS} onChange={(value) => changeTiming("gap", value)} onPreview={(value) => testTiming("gap", value)} suffix=" ms" />
+              <SoundSlider label="Przerwa między sygnałami" hint="między wzorami 120 km/h" value={timing.interval} min={SZ_BEEP_INTERVAL_MIN_MS} max={SZ_BEEP_INTERVAL_MAX_MS} step={SZ_BEEP_INTERVAL_STEP_MS} onChange={(value) => changeTiming("interval", value)} onPreview={(value) => testTiming("interval", value)} suffix=" ms" />
            </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
           </div>
 
           <div className="settings-card">
            <div className="settings-card-heading"><div className="settings-icon settings-icon-green"><Icon name="gauge" size={19} /></div><div><h3>Minimalna prędkość pikania</h3><p>Poniżej wybranego progu urządzenie zachowuje ciszę.</p></div><button className="button button-ghost settings-reset" disabled={minBeepKmh === null || settingsBusy} onClick={() => void resetMinBeepKmh()} type="button"><Icon name="refresh" size={14} /> Reset</button></div>
            {minBeepKmh !== null ? <div className="sliders">
-               <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_MIN_BEEP_KMH} max={SZ_MAX_BEEP_KMH} step={SZ_MIN_BEEP_STEP_KMH} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
+               <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_BEEP_MIN_KMH_MIN} max={SZ_BEEP_MIN_KMH_MAX} step={SZ_BEEP_MIN_KMH_STEP} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
             </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
           </div>
         </section>

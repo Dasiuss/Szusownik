@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "../config/config.h"
+#include "../core/beeper_pattern.h"
 
 // Pasywny buzzer piezo (GPIO10, LEDC 8-bit, głośność przez duty).
 // Mapowanie prędkości: poniżej ustawionego progu cisza; 60-69:1, 70-79:2,
@@ -52,11 +53,7 @@ class Beeper {
   uint8_t volumeFor(float kmh) const;
 
  private:
-  struct Step {
-    uint16_t freq;
-    uint16_t ms;
-    uint16_t gapAfter;
-  };
+  using Step = core::ToneStep;
   Step seq_[8];
   uint8_t seqLen_ = 0;
   uint8_t seqIdx_ = 0;
