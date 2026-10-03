@@ -89,10 +89,10 @@ najnowszej wersji firmware i PWA. Dlatego:
     per plik: rotacja na postoju rozbijałaby jeden zjazd na kilka. Identyfikator
     zjazdu jest stabilny (`dayKey::startT`), a etykiety (tabela `runLabels`) i
     usunięcia (tombstone `deletedRuns`) kluczują się tym id i muszą przeżyć
-    re-analizę. Reguła cięcia to **ZigZag z histerezą >= 5 m w modelu B**: zjazd
-    = szczyt → dołek wygładzonej wysokości, a podejście (wyciąg) jest luką i nie
-    należy do żadnego zjazdu. Próg nie jest liczony per próbka (odporność na szum
-    i częstotliwość próbkowania). Zmiana progu/reguły wymaga osobnego uzgodnienia.
+    re-analizę. Reguła cięcia: podejścia (wyciągi) >= 5 m wykrywamy histerezą
+    (ZigZag), ale cięcie robimy **jedno, na dołku** — „Zjazd X" = wyciąg + zjazd,
+    a odcinki są ciągłe. Próg nie jest liczony per próbka (odporność na szum i
+    częstotliwość próbkowania). Zmiana progu/reguły wymaga osobnego uzgodnienia.
     Szczegóły w `docs/wymagania-PWA.md` §6/§7.
 14. Logi mają poziomy `E/W/I/D` (`src/config/log.h`, próg `SZ_LOG_LEVEL`).
     Domyślny INFO = zdarzenia (fix acquired/lost, SD, cykl życia BLE, health,

@@ -400,8 +400,9 @@ function findAltitudePivots(enriched: EnrichedSample[], thresholdM: number): Alt
   for (let i = 1; i < enriched.length; i++) {
     const dt = (Date.parse(enriched[i].t) - Date.parse(enriched[i - 1].t)) / 1000;
     if (dt < 0 || dt >= MAX_SAMPLE_GAP_S) {
-      if (trend === 1) pivots.push({ index: highest, kind: "peak" });
-      else if (trend === -1) pivots.push({ index: lowest, kind: "valley" });
+      // Twarda granica: cięcie na pierwszej próbce po przerwie, żeby zjazd
+      // nie przeszedł przez lukę w danych.
+      pivots.push({ index: i, kind: "valley" });
       trend = 0;
       highest = i;
       lowest = i;
@@ -442,57 +443,39 @@ function findAltitudePivots(enriched: EnrichedSample[], thresholdM: number): Alt
 }
 
 /**
- * Z listy zwrotów buduje odcinki zjazdów (szczyt -> dołek, model B): podejścia
- * (dołek -> szczyt) są lukami między zjazdami. Skrajne odcinki dopełniane są
- * brakującym ekstremum, żeby pierwszy i ostatni zjazd nie zniknęły.
+ * Cięcia na dołkach (początek każdego podejścia): "Zjazd X" = wyciąg + zjazd.
+ * Odcinki są ciągłe i pokrywają cały ślad (brak luk na wykresie). Skrajne
+ * granice to początek i koniec śladu.
  */
 function runSegments(enriched: EnrichedSample[], pivots: AltitudePivot[]): Array<[number, number]> {
   const n = enriched.length;
-  if (pivots.length === 0) return [[0, n - 1]];
-  const altAt = (index: number) => enriched[index].altSm;
-  const sequence = pivots.slice();
-
-  if (sequence[0].kind === "valley") {
-    let highest = 0;
-    for (let i = 1; i <= sequence[0].index; i++) if (altAt(i) > altAt(highest)) highest = i;
-    if (highest < sequence[0].index) sequence.unshift({ index: highest, kind: "peak" });
-  }
-  const last = sequence[sequence.length - 1];
-  if (last.kind === "peak") {
-    let lowest = last.index;
-    for (let i = last.index + 1; i < n; i++) if (altAt(i) < altAt(lowest)) lowest = i;
-    if (lowest > last.index) sequence.push({ index: lowest, kind: "valley" });
-  }
-
+  const cuts = new Set<number>([0, n]);
+  for (const pivot of pivots) if (pivot.kind === "valley") cuts.add(pivot.index);
+  const ordered = [...cuts].sort((a, b) => a - b);
   const segments: Array<[number, number]> = [];
-  for (let i = 0; i < sequence.length - 1; i++) {
-    if (sequence[i].kind === "peak" && sequence[i + 1].kind === "valley") {
-      const start = sequence[i].index;
-      const end = sequence[i + 1].index;
-      if (end - start >= 1) segments.push([start, end]);
-    }
+  for (let i = 0; i < ordered.length - 1; i++) {
+    if (ordered[i + 1] - ordered[i] >= 2) segments.push([ordered[i], ordered[i + 1]]);
   }
-  return segments.length > 0 ? segments : [[0, n - 1]];
+  return segments.length > 0 ? segments : [[0, n]];
 }
 
 /**
- * Cięcie na zjazdy v2 (ZigZag z histerezą, model B): zjazd to odcinek
- * szczyt -> dołek wygładzonej wysokości. Podejście (dołek -> szczyt) o
- * wysokości >= T jest luką między zjazdami i nie należy do żadnego z nich
- * ("dystans w dół" bez wyciągów, wymagania-PWA §6). Próg T działa jak
+ * Cięcie na zjazdy (ZigZag z histerezą): granica wypada na **początku
+ * podejścia** (dołku), więc "Zjazd X" obejmuje wyciąg i następujący po nim
+ * zjazd, a odcinki są ciągłe. Zwroty wykrywane są progiem działającym jak
  * histereza, więc zaszumione próbki nie rozbijają zjazdu, a wynik nie zależy
- * od częstotliwości próbkowania (liczy się tylko `altSm`). Gdy ślad nie ma
- * żadnego zwrotu >= T, zwracamy jeden zjazd na całości.
+ * od częstotliwości próbkowania (liczy się tylko `altSm`). Przerwa >= 1 h
+ * zamyka odcinek, a ślad bez żadnego zwrotu >= T to jeden zjazd.
  */
 export function splitRuns(enriched: EnrichedSample[], reversalM = REVERSAL_THRESHOLD_M): Run[] {
   const segments = runSegments(enriched, findAltitudePivots(enriched, reversalM));
   const runs: Run[] = [];
   for (const [start, end] of segments) {
-    const part = enriched.slice(start, end + 1);
+    const part = enriched.slice(start, end);
     if (part.length < 2) continue;
     let distanceM = 0;
     let maxGradeDown = 0;
-    for (let i = start + 1; i <= end; i++) {
+    for (let i = start; i < end; i++) {
       distanceM += enriched[i].distM;
       if (-enriched[i].gradeSm > maxGradeDown) maxGradeDown = -enriched[i].gradeSm;
     }

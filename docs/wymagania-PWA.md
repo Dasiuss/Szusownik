@@ -80,21 +80,21 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   rotacją pliku (przerwa rzędu sekund) składa się z powrotem w **jeden** zjazd,
   a małe pliki „postojowe" nie tworzą osobnych zjazdów. `cumDistM`/`distM` są
   liczone po scaleniu, nigdy przez sklejanie już wzbogaconych próbek z plików.
-- **Reguła cięcia (ZigZag z histerezą, model B):** zjazd to odcinek **szczyt →
-  dołek** wygładzonej wysokości; podejście (dołek → szczyt) o wysokości **>= 5 m**
-  jest **luką** między zjazdami i nie należy do żadnego z nich. Próg działa jak
-  histereza, więc pojedyncze zaszumione próbki (nawet 10 Hz) nie rozbijają zjazdu,
-  a wynik nie zależy od częstotliwości próbkowania. Granica zjazdu to potwierdzony
-  szczyt (po spadku >= 5 m), koniec to potwierdzony dołek (po wzroście >= 5 m);
-  skrajne odcinki dopełniane są brakującym ekstremum. Przerwa w danych >= 1 h
-  zamyka bieżący zwrot (zjazd nie przechodzi przez lukę). Gdy ślad nie ma żadnego
-  zwrotu >= 5 m, zwracamy jeden zjazd na całości.
+- **Reguła cięcia (ZigZag z histerezą):** podejścia (wyciągi) o wysokości **>= 5 m**
+  wykrywamy jako zwroty histerezą, ale cięcie robimy **jedno, na dołku** (początku
+  podejścia). Dzięki temu „Zjazd X" = **wyciąg + zjazd**, a odcinki są ciągłe i
+  pokrywają cały ślad (brak luk na wykresie). Próg działa jak histereza, więc
+  pojedyncze zaszumione próbki (nawet 10 Hz) nie rozbijają zjazdu, a wynik nie
+  zależy od częstotliwości próbkowania. Przerwa w danych >= 1 h zamyka odcinek
+  (zjazd nie przechodzi przez lukę). Gdy ślad nie ma żadnego podejścia >= 5 m,
+  zwracamy jeden zjazd na całości.
 - **Stabilny identyfikator zjazdu:** `${dayKey}::${startT}`. Etykiety użytkownika i
   usunięcia (tombstone) kluczują się tym id i przeżywają dodanie kolejnego pliku
   oraz ponowną analizę. Usunięcie zjazdu nie usuwa surowego pliku.
 - Dla każdego zjazdu: dystans (haversine z lat/lon), max prędkość, max nachylenie.
 - **Nachylenie w stopniach**, liczone z **Δwysokości / Δdystansu**.
-- „Dystans w dół" = suma dystansów zjazdów (bez podjazdów/wyciągów).
+- „Dystans w dół" = suma długości zjazdów; ponieważ „Zjazd X" obejmuje wyciąg,
+  dystans zawiera też odcinki podejść (cały przebyty ślad).
 - **Cięcie dla Strava** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia, maksymalnie **bieżący dzień**.
 

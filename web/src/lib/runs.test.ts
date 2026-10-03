@@ -73,20 +73,22 @@ describe("splitRuns", () => {
     expect(runs).toHaveLength(2);
   });
 
-  it("generator z K wyciągami daje K+1 zjazdów, a wyciągi są lukami", () => {
+  it("generator z K wyciągami daje K+1 ciągłych zjazdów (wyciąg + zjazd)", () => {
     for (const lifts of [1, 2, 3, 5]) {
       const enriched = enrich(syntheticRollingSamples({ lifts }));
       const runs = splitRuns(enriched);
       expect(runs).toHaveLength(lifts + 1);
-      for (const run of runs) {
-        const first = run.samples[0];
-        const last = run.samples[run.samples.length - 1];
-        expect(last.altSm).toBeLessThan(first.altSm);
+
+      // Jedno cięcie na dołku: odcinki są ciągłe i pokrywają cały ślad.
+      const total = runs.reduce((sum, run) => sum + run.distanceM, 0);
+      expect(total).toBeCloseTo(enriched[enriched.length - 1].cumDistM, 3);
+
+      // Każdy zjazd po pierwszym zaczyna się na dole i zawiera podejście.
+      for (const run of runs.slice(1)) {
+        const start = run.samples[0].altSm;
+        const highest = Math.max(...run.samples.map((sample) => sample.altSm));
+        expect(highest).toBeGreaterThan(start + 5);
       }
-      const downhill = runs.reduce((sum, run) => sum + run.distanceM, 0);
-      const full = enriched[enriched.length - 1].cumDistM;
-      expect(downhill).toBeGreaterThan(0);
-      expect(downhill).toBeLessThan(full);
     }
   });
 

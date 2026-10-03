@@ -151,13 +151,14 @@ Urządzenie powinno:
 
 Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 
-- zjazd to odcinek **szczyt → dołek** wygładzonej wysokości, a podejście (dołek →
-  szczyt) o wysokości co najmniej 5 m jest **luką** między zjazdami (próg testowy
-  dla nagrań z auta); zwroty wykrywane są histerezą (ZigZag), więc wynik nie
-  zależy od częstotliwości próbkowania, a szum nie rozbija zjazdu;
+- podejścia (wyciągi) o wysokości co najmniej 5 m wykrywamy histerezą (ZigZag),
+  ale cięcie robimy jedno, na dołku (początku podejścia); „Zjazd X" = wyciąg +
+  zjazd, odcinki ciągłe (próg testowy dla nagrań z auta); wynik nie zależy od
+  częstotliwości próbkowania, a szum nie rozbija zjazdu;
 - dystans liczyć z kolejnych współrzędnych, najlepiej haversine lub Turf;
 - nachylenie liczyć z różnicy wysokości i dystansu;
-- dystans aktywności to suma dystansów zjazdów, bez wyciągów;
+- dystans aktywności to suma długości zjazdów („Zjazd X" = wyciąg + zjazd, więc
+  obejmuje też odcinki podejść);
 - wykresy prezentować względem dystansu, nie czasu;
 - wygładzać wysokość, nachylenie i prędkość dopiero w PWA;
 - surowe próbki zachować bez zmian do eksportu i ponownej analizy.
