@@ -486,6 +486,7 @@ export class SzusownikBle {
     let expected = 0;
     let finished = false;
     let finalAck = 0;
+    let nackSentFor = -1;
     let failed: unknown = null;
     let chain: Promise<void> = Promise.resolve();
 
@@ -514,7 +515,15 @@ export class SzusownikBle {
       if (finished) return;
       if (seq < expected) return; // duplikat — nie pchaj drugi raz do dekompresora
       if (seq > expected) {
-        await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
+        // Luka: prosimy o retransmisję TYLKO RAZ na daną dziurę. Każdy NACK to
+        // zapis CTRL z potwierdzeniem (kilkadziesiąt ms), a pojedyncza zgubiona
+        // ramka pociąga za sobą wiele ramek poza kolejnością — lawina NACK-ów
+        // blokuje odbiór, pogłębia gubienie i kończy się błędem GATT
+        // (NotSupportedError). Retransmisję odzyskuje też timeout ACK firmware.
+        if (nackSentFor !== expected) {
+          nackSentFor = expected;
+          await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
+        }
         return;
       }
       if (expected < 16) {

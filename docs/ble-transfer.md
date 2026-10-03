@@ -346,6 +346,16 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `poll()` i przepełnić `pend_[512]` — crash `StoreProhibited` dopiero przy
   plikach wieloramkowych. `pend_` jest wymiarowany na 256 B output + częściową
   ramkę 240 B (razem <= 496).
+- **NACK raz na dziurę + scalanie replay** (2026-10-03): pojedyncza zgubiona
+  ramka pociąga wiele ramek poza kolejnością, a PWA wysyłała NACK dla każdej z
+  nich. Każdy NACK to zapis CTRL z potwierdzeniem (kilkadziesiąt ms), więc
+  lawina NACK-ów blokowała odbiór, pogłębiała gubienie i kończyła się błędem
+  GATT `NotSupportedError` przy ~28. ramce. Teraz PWA wysyła NACK **tylko raz na
+  daną dziurę** (`nackSentFor`), a firmware ignoruje NACK, gdy replay od <= e już
+  trwa (`replaying_ && replayPos_ <= e`) — restart cofałby wysyłkę i dusił łącze.
+  Test integracyjny pilnuje liczby NACK-ów (3 dziury => dokładnie 3 żądania,
+  wcześniej 74). Profil ramek/pacingu bez zmian; odzyskiwanie uzupełnia timeout
+  ACK firmware.
 - Błędy mają jawne kody (`err:open`, `err:read`, `err:deflate`, `err:ack-timeout`,
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
   `err:read` = `read()` zwrócił 0 mimo `pos < size` (uszkodzony/nośnik), a nie EOF —

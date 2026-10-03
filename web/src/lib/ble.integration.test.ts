@@ -199,7 +199,11 @@ describe("NACK/replay i duplikaty", () => {
     const stored = await db.files.get(`/${golden.file}`);
     expect(stored?.raw).toBe(new TextDecoder().decode(bytes));
     expect(stored?.raw.length).toBe(golden.raw);
-    expect(emulator.commands.some((cmd) => cmd.startsWith("NACK:"))).toBe(true);
+    // Jeden NACK na dziurę (throttle w downloadFile), a nie NACK na każdą ramkę
+    // poza kolejnością — inaczej zapis CTRL blokuje odbiór i łącze się dusi.
+    const nacks = emulator.commands.filter((cmd) => cmd.startsWith("NACK:"));
+    // Trzy porzucone sekwencje (5, 40, 120) => dokładnie trzy żądania.
+    expect(nacks).toEqual(["NACK:5", "NACK:40", "NACK:120"]);
   });
 
   it("ignoruje zdublowane ramki", async () => {

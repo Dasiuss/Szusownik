@@ -603,6 +603,10 @@ void BleFiles::onNack(uint32_t e) {
     SZ_LOGWF("BLE NACK:%lu poza zakresem - ignoruje", (unsigned long)e);
     return;
   }
+  // PWA wysyła NACK dla każdej ramki poza kolejnością (chroniony throttle po jej
+  // stronie). Gdy replay od <= e już trwa, żądanie jest już pokryte — restart od
+  // e cofałby wysyłkę i dusił łącze. Replay dojdzie do e, bo e < nextSeq_.
+  if (replaying_ && replayPos_ <= e) return;
   SZ_LOGIF("BLE NACK:%lu - replay", (unsigned long)e);
   replayFrom(e);
 }
