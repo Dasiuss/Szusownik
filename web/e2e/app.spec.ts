@@ -48,3 +48,43 @@ test("szczegóły zjazdu: zmiana nazwy i usunięcie", async ({ page }) => {
   await page.getByRole("button", { name: "Usuń zjazd" }).click();
   await expect(page).toHaveURL(/#\/dzien\//);
 });
+
+test("wskaźniki jakości pokazują objaśnienie po najechaniu i kliknięciu", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator(".run-card").first()).toBeVisible();
+  await page.locator(".run-card").first().click();
+
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toHaveCount(0);
+
+  await page.getByRole("img", { name: /^Przyspieszenie:/ }).first().hover();
+  await expect(tooltip).toBeVisible();
+  const title = tooltip.locator(".quality-tooltip-title");
+  await expect(title).toHaveText("Przyspieszenie");
+  await expect(title).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(tooltip.locator(".quality-tooltip-text")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(tooltip).toContainText("1 g");
+
+  await page.getByRole("img", { name: /^Jakość fixa GNSS:/ }).first().click();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip.locator(".quality-tooltip-title")).toHaveText("Jakość fixa GNSS");
+  await expect(tooltip).toContainText("HDOP");
+
+  await page.getByRole("heading", { level: 1 }).click();
+  await expect(tooltip).toHaveCount(0);
+});
+
+test("ikony jakości mają odrębne symbole, a status widać po wypełnieniu", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator(".run-card").first()).toBeVisible();
+  await page.locator(".run-card").first().click();
+
+  await expect(page.locator(".quality-glyph-g").first()).toBeVisible();
+  await expect(page.locator(".quality-glyph-g").first()).toHaveCSS("font-weight", "400");
+  await expect(page.locator(".quality-glyph-curve").first()).toBeVisible();
+  await expect(page.locator(".quality-glyph-satellite").first()).toBeVisible();
+
+  const passed = page.locator(".quality-indicator-passed").first();
+  await expect(passed).toHaveCSS("background-color", "rgb(47, 134, 93)");
+  await expect(passed).toHaveCSS("color", "rgb(255, 255, 255)");
+});

@@ -248,9 +248,13 @@ nie wyświetlamy tekstu „potwierdzony/niepotwierdzony” ani procentu.
 
 Ikonki oznaczają kolejno:
 
-1. dodatnie przyspieszenie;
-2. GNSS (ważny fix, satelity, HDOP i ich świeżość);
-3. kształt piku.
+1. dodatnie przyspieszenie — litera „g”;
+2. GNSS (ważny fix, satelity, HDOP i ich świeżość) — sylwetka satelity;
+3. kształt piku — łuk.
+
+Symbole są odrębne dla każdego kryterium. Status widać po wypełnieniu tła:
+spełnione to pełne zielone tło z białym symbolem, niespełnione — blade tło z
+czerwonym symbolem. Kolor nie jest więc jedynym nośnikiem statusu.
 
 W szczegółach zjazdu pokazujemy potwierdzony wynik z ikonkami. Jeżeli surowe
 maksimum jest wyższe lub nie ma żadnego potwierdzonego wyniku, pokazujemy je
@@ -265,8 +269,10 @@ odczytu.
 - Dzisiaj, Historia i Cały dzień agregują wyłącznie potwierdzone rekordy.
 - Ikony jakości pojawiają się tylko w szczegółach zjazdu, obok odpowiedniej
   wartości prędkości. Nie dodajemy ikon na stronie głównej.
-- Każda ikona ma dostępny opis dla technologii asystujących; nie dodaje to
-  widocznego tekstowego statusu.
+- Każda ikona ma dostępny opis dla technologii asystujących oraz objaśnienie
+  pokazywane po najechaniu lub kliknięciu: nazwę kryterium i jego limit. Popover
+  nie zawiera statusu spełnienia (widać go po symbolu, wypełnieniu i kolorze
+  ikony) i nie dodaje widocznego tekstowego statusu.
 
 ## 7. CSV i zgodność danych
 

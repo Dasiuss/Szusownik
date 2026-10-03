@@ -156,9 +156,16 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .detail-metrics small { font-size: 10px; }
 .detail-metrics .confirmed-speed-metric { gap: 5px; }
 .quality-indicators { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; }
-.quality-indicator { display: inline-grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; }
-.quality-indicator-passed { color: #2f865d; background: #e5f5eb; }
-.quality-indicator-failed { color: #b14f42; background: #fff0eb; }
+.quality-indicators .quality-indicator-wrap { display: inline-flex; }
+.quality-indicators .quality-indicator { display: inline-grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; cursor: pointer; }
+.quality-indicators .quality-indicator-passed { color: #fff; background: #2f865d; }
+.quality-indicators .quality-indicator-failed { color: #b14f42; background: #fff0eb; }
+.quality-indicators .quality-glyph { display: inline-grid; place-items: center; color: inherit; line-height: 1; }
+.quality-indicators .quality-glyph-g { font-size: 11px; font-weight: 400; transform: translateY(-1px); }
+.quality-indicators .quality-tooltip { position: fixed; z-index: 40; width: max-content; max-width: 230px; padding: 8px 10px; border-radius: 10px; color: #fff; background: #17363b; box-shadow: 0 10px 25px #17363b33; font-size: 10px; font-weight: 400; line-height: 1.45; text-align: left; }
+.quality-indicators .quality-tooltip-title { display: block; margin-bottom: 3px; overflow: visible; color: #fff; font-size: 11px; font-weight: 800; text-overflow: clip; white-space: normal; }
+.quality-indicators .quality-tooltip-text { display: block; color: #fff; font-size: 10px; font-weight: 400; }
+.quality-tooltip-above { transform: translateY(-100%); }
 .raw-peak-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border: 1px solid #f0d8cf; border-radius: 16px; background: #fffaf8; }
 .raw-peak-card > div { display: flex; flex-direction: column; gap: 5px; }
 .raw-peak-card > div > span { color: #9b7168; font-size: 10px; font-weight: 700; }

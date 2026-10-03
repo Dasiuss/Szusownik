@@ -1,10 +1,11 @@
-export type IconName = "activity" | "archive" | "bluetooth" | "chevron" | "download" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
+export type IconName = "activity" | "archive" | "bluetooth" | "chevron" | "curve" | "download" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
 
 const paths: Record<IconName, string> = {
   activity: "M3 12h4l2-7 4 14 2-7h6",
   archive: "M4 7h16v13H4z M3 4h18v3H3z M9 11h6",
   bluetooth: "M12 3v18l5-5-10-8 10-8-5-5 M7 8l10 8",
   chevron: "m9 18 6-6-6-6",
+  curve: "M3 18Q12 3 21 18",
   download: "M12 3v12m0 0 4-4m-4 4-4-4M4 21h16",
   gauge: "M4.9 19a9 9 0 1 1 14.2 0 M12 12l4-4",
   map: "m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-15v15m6-12v15",
@@ -13,6 +14,7 @@ const paths: Record<IconName, string> = {
   play: "m8 5 11 7-11 7V5Z",
   route: "M8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0m12-12a2 2 0 1 1-4 0 2 2 0 0 1 4 0M8 17c3-1 3-7 6-8 1-.3 2-.3 4-1",
   ruler: "M4 17 17 4m-9 0 4 4m-8 9 4 4m6-13 3 3",
+  satellite: "M13 7 9 3 5 7l4 4M17 11l4 4-4 4-4-4M8 12l4 4 6-6-4-4ZM16 8l3-3M9 21a6 6 0 0 0-6-6",
   search: "m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z",
   settings: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.5h.4A1.7 1.7 0 0 0 8 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h2.5V5a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.6 1h.2v2.5H21a1.7 1.7 0 0 0-1.6 1.5Z",
   trash: "M5 7h14m-9 4v6m4-6v6M9 7V4h6v3m-9 0 1 13h10l1-13",
