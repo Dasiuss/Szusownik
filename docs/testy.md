@@ -69,7 +69,8 @@ regeneruje je w pamięci i porównuje z zawartością na dysku — rozjazd wywal
 
 - Realne nagranie: `test data/20260926_181420.csv` (+ `.meta`). Golden transferu:
   `web/test/golden/device-done.json` (linia `BLE done ...` z monitora).
-- Generatory syntetyczne: `web/test/fixtures.ts` (zjazd, postój).
+- Generatory syntetyczne: `web/test/fixtures.ts` (zjazd, postój, przejazd z `lifts`
+  wyciągami — liczba zjazdów znana z góry, `lifts + 1`).
 - Fixture mapy/routingu: `web/test/skiArea.ts` (syntetyczny ośrodek, provider
   wysokości).
 - Symulatory urządzenia: `web/test/device-emulator.ts` (integracja; pełny

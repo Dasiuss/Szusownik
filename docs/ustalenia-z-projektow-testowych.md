@@ -151,9 +151,10 @@ Urządzenie powinno:
 
 Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 
-- skumulowany wzrost wygładzonej wysokości o co najmniej 5 m rozdziela dwa zjazdy
-  (próg testowy dla nagrań z auta), a granica jest początkiem tego wzrostu, nie jego
-  końcem; w ten sposób poprzedni zjazd kończy się przed wyciągiem;
+- zjazd to odcinek **szczyt → dołek** wygładzonej wysokości, a podejście (dołek →
+  szczyt) o wysokości co najmniej 5 m jest **luką** między zjazdami (próg testowy
+  dla nagrań z auta); zwroty wykrywane są histerezą (ZigZag), więc wynik nie
+  zależy od częstotliwości próbkowania, a szum nie rozbija zjazdu;
 - dystans liczyć z kolejnych współrzędnych, najlepiej haversine lub Turf;
 - nachylenie liczyć z różnicy wysokości i dystansu;
 - dystans aktywności to suma dystansów zjazdów, bez wyciągów;

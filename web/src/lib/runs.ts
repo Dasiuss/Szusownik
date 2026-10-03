@@ -377,61 +377,128 @@ function analyzePeak(samples: Sample[]): Pick<Run,
   };
 }
 
-const UPHILL_CUT_GAIN_M = 5;
-const UPHILL_TREND_EPSILON_M = 0.05;
+const REVERSAL_THRESHOLD_M = 5; // T: minimalny zwrot wysokości w ZigZagu
+const MAX_SAMPLE_GAP_S = 3600; // przerwa >= 1 h = twarda granica aktywności
+
+interface AltitudePivot {
+  index: number;
+  kind: "peak" | "valley";
+}
 
 /**
- * Cięcie na zjazdy v1: ciągły ruch W GÓRĘ osiągający co najmniej 5 m
- * rozdziela dwa zjazdy (wymagania-PWA §6). Wysokość jest już wygładzona,
- * więc próg dotyczy skumulowanego wzrostu, a epsilon tylko trendu między próbkami.
- * Próg jest wykrywany na końcu podjazdu, ale granica trafia na jego początek,
- * dzięki czemu poprzedni zjazd kończy się przed wyciągiem.
+ * Zwroty wysokości (ZigZag): histereza T sprawia, że pojedyncze zaszumione
+ * próbki nie zmieniają stanu, a przerwa >= 1 h zamyka bieżący zwrot i startuje
+ * śledzenie od nowa, żeby zjazd nie przeskoczył przez lukę w danych.
  */
-export function splitRuns(enriched: EnrichedSample[], uphillGainM = UPHILL_CUT_GAIN_M): Run[] {
-  const cuts: number[] = [0];
-  let climbStart = -1;
-  let waitingForDescent = false;
+function findAltitudePivots(enriched: EnrichedSample[], thresholdM: number): AltitudePivot[] {
+  const pivots: AltitudePivot[] = [];
+  if (enriched.length < 2) return pivots;
+  const altAt = (index: number) => enriched[index].altSm;
+  let trend = 0; // 0 = brak, 1 = rośnie (śledzimy szczyt), -1 = spada (śledzimy dołek)
+  let highest = 0;
+  let lowest = 0;
   for (let i = 1; i < enriched.length; i++) {
     const dt = (Date.parse(enriched[i].t) - Date.parse(enriched[i - 1].t)) / 1000;
-    if (dt < 0 || dt >= 3600) {
-      climbStart = -1;
-      waitingForDescent = false;
+    if (dt < 0 || dt >= MAX_SAMPLE_GAP_S) {
+      if (trend === 1) pivots.push({ index: highest, kind: "peak" });
+      else if (trend === -1) pivots.push({ index: lowest, kind: "valley" });
+      trend = 0;
+      highest = i;
+      lowest = i;
       continue;
     }
     if (dt === 0) continue;
 
-    const altDelta = enriched[i].altSm - enriched[i - 1].altSm;
-    if (waitingForDescent) {
-      if (altDelta < -UPHILL_TREND_EPSILON_M) waitingForDescent = false;
-      else continue;
-    }
-
-    if (altDelta > UPHILL_TREND_EPSILON_M) {
-      if (climbStart < 0) climbStart = i - 1;
-      const climbGain = enriched[i].altSm - enriched[climbStart].altSm;
-      if (climbGain >= uphillGainM) {
-        if (climbStart > cuts[cuts.length - 1]) cuts.push(climbStart);
-        climbStart = -1;
-        waitingForDescent = true;
+    const altitude = altAt(i);
+    if (trend === 0) {
+      if (altitude > altAt(highest)) highest = i;
+      if (altitude < altAt(lowest)) lowest = i;
+      if (altitude >= altAt(lowest) + thresholdM) {
+        pivots.push({ index: lowest, kind: "valley" });
+        trend = 1;
+        highest = i;
+      } else if (altitude <= altAt(highest) - thresholdM) {
+        pivots.push({ index: highest, kind: "peak" });
+        trend = -1;
+        lowest = i;
       }
-    } else if (altDelta < -UPHILL_TREND_EPSILON_M) {
-      climbStart = -1;
+    } else if (trend === 1) {
+      if (altitude > altAt(highest)) highest = i;
+      else if (altitude <= altAt(highest) - thresholdM) {
+        pivots.push({ index: highest, kind: "peak" });
+        trend = -1;
+        lowest = i;
+      }
+    } else {
+      if (altitude < altAt(lowest)) lowest = i;
+      else if (altitude >= altAt(lowest) + thresholdM) {
+        pivots.push({ index: lowest, kind: "valley" });
+        trend = 1;
+        highest = i;
+      }
     }
   }
-  cuts.push(enriched.length);
+  return pivots;
+}
+
+/**
+ * Z listy zwrotów buduje odcinki zjazdów (szczyt -> dołek, model B): podejścia
+ * (dołek -> szczyt) są lukami między zjazdami. Skrajne odcinki dopełniane są
+ * brakującym ekstremum, żeby pierwszy i ostatni zjazd nie zniknęły.
+ */
+function runSegments(enriched: EnrichedSample[], pivots: AltitudePivot[]): Array<[number, number]> {
+  const n = enriched.length;
+  if (pivots.length === 0) return [[0, n - 1]];
+  const altAt = (index: number) => enriched[index].altSm;
+  const sequence = pivots.slice();
+
+  if (sequence[0].kind === "valley") {
+    let highest = 0;
+    for (let i = 1; i <= sequence[0].index; i++) if (altAt(i) > altAt(highest)) highest = i;
+    if (highest < sequence[0].index) sequence.unshift({ index: highest, kind: "peak" });
+  }
+  const last = sequence[sequence.length - 1];
+  if (last.kind === "peak") {
+    let lowest = last.index;
+    for (let i = last.index + 1; i < n; i++) if (altAt(i) < altAt(lowest)) lowest = i;
+    if (lowest > last.index) sequence.push({ index: lowest, kind: "valley" });
+  }
+
+  const segments: Array<[number, number]> = [];
+  for (let i = 0; i < sequence.length - 1; i++) {
+    if (sequence[i].kind === "peak" && sequence[i + 1].kind === "valley") {
+      const start = sequence[i].index;
+      const end = sequence[i + 1].index;
+      if (end - start >= 1) segments.push([start, end]);
+    }
+  }
+  return segments.length > 0 ? segments : [[0, n - 1]];
+}
+
+/**
+ * Cięcie na zjazdy v2 (ZigZag z histerezą, model B): zjazd to odcinek
+ * szczyt -> dołek wygładzonej wysokości. Podejście (dołek -> szczyt) o
+ * wysokości >= T jest luką między zjazdami i nie należy do żadnego z nich
+ * ("dystans w dół" bez wyciągów, wymagania-PWA §6). Próg T działa jak
+ * histereza, więc zaszumione próbki nie rozbijają zjazdu, a wynik nie zależy
+ * od częstotliwości próbkowania (liczy się tylko `altSm`). Gdy ślad nie ma
+ * żadnego zwrotu >= T, zwracamy jeden zjazd na całości.
+ */
+export function splitRuns(enriched: EnrichedSample[], reversalM = REVERSAL_THRESHOLD_M): Run[] {
+  const segments = runSegments(enriched, findAltitudePivots(enriched, reversalM));
   const runs: Run[] = [];
-  for (let k = 0; k < cuts.length - 1; k++) {
-    const part = enriched.slice(cuts[k], cuts[k + 1]);
+  for (const [start, end] of segments) {
+    const part = enriched.slice(start, end + 1);
     if (part.length < 2) continue;
     let distanceM = 0;
     let maxGradeDown = 0;
-    for (const s of part) {
-      distanceM += s.distM;
-      if (-s.gradeSm > maxGradeDown) maxGradeDown = -s.gradeSm;
+    for (let i = start + 1; i <= end; i++) {
+      distanceM += enriched[i].distM;
+      if (-enriched[i].gradeSm > maxGradeDown) maxGradeDown = -enriched[i].gradeSm;
     }
     const peak = analyzePeak(part);
     runs.push({
-      id: `zjazd-${k + 1}`,
+      id: `zjazd-${runs.length + 1}`,
       startT: part[0].t,
       endT: part[part.length - 1].t,
       samples: part,

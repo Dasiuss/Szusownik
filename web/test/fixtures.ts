@@ -83,6 +83,70 @@ export function syntheticStandstillCsv(count = 5, startSecond = 0): string {
   return serializeDeviceCsvV2(samples);
 }
 
+export interface RollingRide {
+  /** Liczba wyciągów; zjazdów jest dokładnie o jeden więcej (`lifts + 1`). */
+  lifts: number;
+  /** Spadek pojedynczego zjazdu (domyślnie 30 m). */
+  descentM?: number;
+  /** Wzrost pojedynczego wyciągu (domyślnie 20 m). */
+  climbM?: number;
+  /** Zmiana wysokości na jedną próbkę (domyślnie 1 m). */
+  stepM?: number;
+}
+
+/**
+ * Syntetyczny dzień z `lifts` wyciągami: na zmianę zjazd w dół i podejście w
+ * górę, więc liczba zjazdów jest z góry znana (`lifts + 1`) i nie zależy od
+ * żadnego realnego ground truth. Wysokość zmienia się skokami o `stepM` na
+ * próbkę, żeby profil był przewidywalny w testach cięcia.
+ */
+export function syntheticRollingSamples(options: RollingRide): Sample[] {
+  const { lifts } = options;
+  const descentM = options.descentM ?? 30;
+  const climbM = options.climbM ?? 20;
+  const stepM = options.stepM ?? 1;
+  if (lifts < 0 || !(descentM > 0) || !(climbM > 0) || !(stepM > 0)) {
+    throw new Error("syntheticRollingSamples: lifts/descentM/climbM/stepM muszą być dodatnie");
+  }
+
+  const samples: Sample[] = [];
+  let index = 0;
+  let altitude = 1000;
+  const emit = () => {
+    samples.push(
+      syntheticSample(index, {
+        lat: 51.05 + index * 0.0002,
+        speed: 30,
+        altGps: altitude,
+        altBaro: altitude,
+      }),
+    );
+    index += 1;
+  };
+  const changeBy = (delta: number) => {
+    let remaining = Math.abs(delta);
+    const sign = Math.sign(delta);
+    while (remaining > 0) {
+      const step = Math.min(stepM, remaining);
+      altitude += sign * step;
+      remaining -= step;
+      emit();
+    }
+  };
+
+  emit();
+  for (let run = 0; run <= lifts; run += 1) {
+    changeBy(-descentM);
+    if (run < lifts) changeBy(climbM);
+  }
+  return samples;
+}
+
+export function syntheticRollingCsv(options: RollingRide): string {
+  return serializeDeviceCsvV2(syntheticRollingSamples(options));
+}
+
+
 export function bytesOf(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { syntheticSample } from "../../test/fixtures.ts";
+import { syntheticRollingSamples, syntheticSample } from "../../test/fixtures.ts";
+import type { Sample } from "./csv.ts";
 import { analyzeDay, enrich, runNumbers, splitRuns } from "./runs.ts";
 
 function descent(count: number, startSecond = 0) {
@@ -69,6 +70,53 @@ describe("splitRuns", () => {
       }),
     );
     const runs = splitRuns(enrich([...down, ...climb, ...down2]));
+    expect(runs).toHaveLength(2);
+  });
+
+  it("generator z K wyciągami daje K+1 zjazdów, a wyciągi są lukami", () => {
+    for (const lifts of [1, 2, 3, 5]) {
+      const enriched = enrich(syntheticRollingSamples({ lifts }));
+      const runs = splitRuns(enriched);
+      expect(runs).toHaveLength(lifts + 1);
+      for (const run of runs) {
+        const first = run.samples[0];
+        const last = run.samples[run.samples.length - 1];
+        expect(last.altSm).toBeLessThan(first.altSm);
+      }
+      const downhill = runs.reduce((sum, run) => sum + run.distanceM, 0);
+      const full = enriched[enriched.length - 1].cumDistM;
+      expect(downhill).toBeGreaterThan(0);
+      expect(downhill).toBeLessThan(full);
+    }
+  });
+
+  it("wynik nie zależy od częstotliwości próbkowania", () => {
+    const samples = syntheticRollingSamples({ lifts: 4 });
+    const count = (subset: Sample[]) => splitRuns(enrich(subset)).length;
+    const base = count(samples);
+    expect(base).toBe(5);
+    for (const stride of [2, 3, 5]) {
+      expect(count(samples.filter((_, index) => index % stride === 0))).toBe(base);
+    }
+  });
+
+  it("przerwa >= 1 h rozdziela aktywności zamiast scalać w jeden zjazd", () => {
+    const first = Array.from({ length: 10 }, (_, index) =>
+      syntheticSample(index, {
+        lat: 51.05 + index * 0.0002,
+        altGps: 1000 - index * 2,
+        altBaro: 1000 - index * 2,
+      }),
+    );
+    const gap = 2 * 3600;
+    const second = Array.from({ length: 10 }, (_, index) =>
+      syntheticSample(gap + index, {
+        lat: 51.05 + (10 + index) * 0.0002,
+        altGps: 1000 - index * 2,
+        altBaro: 1000 - index * 2,
+      }),
+    );
+    const runs = splitRuns(enrich([...first, ...second]));
     expect(runs).toHaveLength(2);
   });
 });
