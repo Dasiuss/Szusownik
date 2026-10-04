@@ -133,6 +133,37 @@ najnowszej wersji firmware i PWA. Dlatego:
       commicie. Zanim uzna zmianę za nietestowalną, próbuje wydzielić czystą
       logikę do `core/` albo czystych helperów, żeby dała się pokryć.
     - Testy sprzętowe zostają manualne (`docs/testy.md`).
+18. PWA **automatycznie dopasowuje zjazd do tras OSM** (uproszczony
+    map-matching, bez pytania użytkownika):
+    - tożsamość trasy to grupa OSM po `site + label` (jak `mapItemsFor` w
+      mapie); odcinki bez ref/nazwy trzymamy **osobno per `uid`**;
+    - dopasowanie bierze **tylko schodzącą część zjazdu** (od najwyższego
+      punktu w dół, więc jazda wyciągiem nie łapie trasy pod nim), najbliższą
+      trasę w promieniu **~50 m**, a trasę zalicza po **≥100 m wzdłuż jej
+      geometrii**; krótkie przerwy (poniżej ~60 m po śladzie) scala w jeden
+      odcinek. Fragment trasy w zupełności wystarcza — nie liczymy pokrycia;
+    - **brak ręcznej korekty** dopasowania: jak PWA policzy, tak zostaje;
+    - liczone raz przy **materializacji zjazdów** na cache OSM ładowanym **na
+      starcie aplikacji** (`loadCachedSkiData`). Odświeżenie cache OSM **nie**
+      przelicza zjazdów; gdy przy materializacji nie było jeszcze danych (np.
+      świeża instalacja/offline), dopasowanie **dorabia się raz** po ich
+      pobraniu (`ensureRouteMatchingBackfill`, marker `matching-osm-*`);
+    - auto-nazwa zjazdu to **sekwencja tras** (np. `15 → 8`). Własna nazwa
+      użytkownika **wygrywa**, a sekwencja pojawia się pod nią mniejszą
+      czcionką. W szczegółach zjazdu, na samym dole, sekcja „Poprzednie
+      przejazdy”: grupa **całej sekwencji** + osobne grupy **per trasa** (liczba
+      przejazdów, najlepszy czas odcinka, max prędkość), wiersze klikalne.
+    Nie traktuj tego jako pełnego map-matchingu (brak HMM/ciągłości per próbka)
+    ani zaliczania całej trasy. Szczegóły: `docs/wymagania-PWA.md` §6/§7 i
+    `docs/mapy-routing.md` §9.
+19. Demo PWA (`web/public/fixtures/ride.csv`) jest **generowane**, nie nagrane:
+    `node scripts/gen-demo-ride.mjs` (albo `npm run gen:demo`) buduje dzień na
+    prawdziwej geometrii Sölden z `scripts/data/demo-solden.json` (pętla
+    Gaislachkoglbahn II + `1 → 1a`, 3 zjazdy). Nie edytuj fixture ręcznie i nie
+    podmieniaj go na „realne” nagranie bez uzgodnienia — realne nagranie służy
+    testom (`test data/20260926_181420.csv`, patrz `docs/testy.md`). Format
+    pozostaje CSV v2 (`docs/jakosc-danych.md`); `web/src/lib/demoFixture.test.ts`
+    pilnuje zjazdów i dopasowania tras.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

@@ -194,7 +194,7 @@ function MetricCard({ icon, label, value }: { icon: "mountain" | "play"; label: 
 }
 
 function RunCard({ run, stored, number }: { run: Run; stored: StoredRun; number: number }) {
-  const title = stored.label ?? `Zjazd ${number}`;
+  const title = stored.label ?? stored.routeName ?? `Zjazd ${number}`;
   return (
     <Link className="run-card" to={`/zjazd/${encodeURIComponent(run.id)}`}>
       <div className="run-card-topline">
@@ -202,6 +202,7 @@ function RunCard({ run, stored, number }: { run: Run; stored: StoredRun; number:
           <span className="run-number">{String(number).padStart(2, "0")}</span>
           <div>
             <strong>{title}</strong>
+            {stored.label && stored.routeName && <span className="run-route">{stored.routeName}</span>}
             <span className="run-time">{formatClock(run.startT)}–{formatClock(run.endT)} · {formatDuration(run.startT, run.endT)}</span>
           </div>
         </div>

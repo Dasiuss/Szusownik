@@ -281,11 +281,12 @@ odczytu.
 - PWA parsuje wyłącznie CSV v2; pola jakości są opcjonalne, puste mapują się na
   `null`, a wiek/tempo liczymy z zapisanych timestampów bez przebudowy formatu.
   Nagłówek v1 nie jest już obsługiwany — firmware zawsze zapisuje v2.
-- Fixture PWA (`public/fixtures/ride.csv`) to rzeczywiste nagranie v2 z karty SD
-  urządzenia (`test data/LOG_1641.csv`), z prawdziwą wysokością barometryczną i
-  metrykami GNSS. PWA nie dopisuje żadnych syntetycznych pomiarów; przy
-  seedowaniu jedynie przesuwa timestampy do bieżącego czasu i zapisuje plik jako
-  `demo-ride.csv`. Osierocone pliki `demo-*` są usuwane.
+- Fixture demo PWA (`public/fixtures/ride.csv`) jest **generowany**
+  (`scripts/gen-demo-ride.mjs`) na prawdziwej geometrii Sölden — patrz
+  `docs/wymagania-PWA.md` §8. **Realne nagranie v2 z karty SD** (używane przez
+  testy jednostkowe, nie przez demo) to `test data/20260926_181420.csv`. Przy
+  seedowaniu PWA jedynie przesuwa timestampy do bieżącego czasu i zapisuje plik
+  jako `demo-ride.csv`; osierocone pliki `demo-*` są usuwane.
 - `materializeFile()` musi rozróżniać nową wersję analizy i nie może zwracać
   starych, zmaterializowanych rekordów jako potwierdzonych. Etykiety użytkownika
   nie mogą być kasowane przy rematerializacji.

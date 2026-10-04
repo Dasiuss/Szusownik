@@ -69,7 +69,7 @@ export default function HistoryView() {
                 </div>
                 {best && (
                   <div className="day-card-footer">
-                    <span><Icon name="gauge" size={15} /> Najlepszy: {best.label ?? "zjazd"}</span>
+                    <span><Icon name="gauge" size={15} /> Najlepszy: {best.label ?? best.routeName ?? "zjazd"}</span>
                     <span>{best.demo ? "Demo" : `${best.samples.length} próbek`}</span>
                   </div>
                 )}

@@ -1,8 +1,10 @@
 # Szusownik - mapy, wizualizacja i routing
 
 > Źródło wiedzy: `MapyTest/AGENTS.md` oraz implementacja `MapyTest/src/App.jsx`.
-> Status: wizualizacja i routing są referencyjnymi algorytmami; GPS,
-> map-matching i zaliczanie tras nie zostały jeszcze zaimplementowane.
+> Status: wizualizacja i routing są referencyjnymi algorytmami. W Szusowniku
+> działa GPS (kropka + surowy ślad 5 min) oraz **uproszczone dopasowanie zjazdu
+> do tras** (§9). Pełny map-matching per próbka (HMM/ciągłość) i zaliczanie
+> całej trasy nie są zaimplementowane.
 
 ## 1. Stack referencyjny
 
@@ -458,6 +460,33 @@ booleanPointInPolygon
 Nie wystarczy pojedynczy najbliższy punkt. Przy równoległych trasach lub
 skrzyżowaniach potrzebna jest ciągłość czasowa i kierunek, inaczej ślad będzie
 przeskakiwał między trasami.
+
+### Dopasowanie zjazdu do tras (zaimplementowane)
+
+`web/src/lib/routeMatching.ts` (czysta logika, testy `routeMatching.test.ts`):
+
+- tożsamość trasy: grupa OSM po `site + label` (spójna z `mapItemsFor` w
+  mapie); odcinki bez nazwy trzymane osobno per `uid`;
+- wejście: liniowe trasy (`SkiData.lines`, tylko `piste`) i ślad zjazdu
+  (`EnrichedSample[]`); dopasowywana jest wyłącznie schodząca część od
+  najwyższego punktu zjazdu (`altSm`) w dół, więc podejście wyciągiem nie
+  przypisuje trasy pod nim;
+- każda próbka trafia do najbliższej trasy w promieniu
+  `ROUTE_MATCH_RADIUS_M = 50` m; przerwy krótsze niż `ROUTE_MATCH_MERGE_M = 60`
+  m po śladzie są scalane z sąsiadami;
+- trasę zalicza odcinek co najmniej `MIN_ROUTE_DISTANCE_M = 100` m liczonych
+  **wzdłuż geometrii trasy**; pokrycie całej trasy nie jest wymagane;
+- wynik to spany `{routeKey, label, difficulty, startT, endT, distanceM,
+  durationS, maxSpeed}` oraz sekwencja tras (np. `15 → 8`).
+
+Dopasowanie liczone jest przy materializacji zjazdów (`web/src/lib/data.ts`)
+na cache OSM wczytanym na starcie (`mapData.loadCachedSkiData`). Brak cache →
+zjazdy powstają bez tras; po pobraniu `ensureRouteMatchingBackfill()` dorabia
+dopasowanie raz. Odświeżenie cache OSM nie przelicza już zmaterializowanych
+zjazdów. Ręcznej korekty dopasowania nie ma — wynik jest w pełni automatyczny.
+
+Czego nadal nie ma: dopasowania per próbka z ciągłością i kierunkiem (HMM),
+pokrycia/zaliczenia całej trasy, oceny warunków i score tras.
 
 ## 10. Wydajność
 

@@ -4,10 +4,12 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { demoRideCsv, syntheticSample } from "../../test/fixtures.ts";
+import { straightPiste } from "../../test/skiArea.ts";
 import {
   DEMO_SOURCE_FILE,
   deleteRun,
   ensureLocalData,
+  ensureRouteMatchingBackfill,
   getAllRuns,
   materializeAll,
   renameRun,
@@ -15,7 +17,34 @@ import {
 } from "./data.ts";
 import { serializeDeviceCsvV2 } from "./csv.ts";
 import { db } from "./db.ts";
+import { primeSkiDataForMatching, type SkiData, type SkiLineFeature } from "./mapData.ts";
 import { localDayKey } from "./runs.ts";
+import type { Position } from "./mapData.ts";
+
+function skiData(pistes: SkiLineFeature[]): SkiData {
+  return {
+    pistes: { type: "FeatureCollection", features: pistes },
+    lifts: { type: "FeatureCollection", features: [] },
+    lines: pistes,
+    stale: false,
+    savedAt: "",
+  };
+}
+
+function interpolate(start: Position, end: Position, count: number): Position[] {
+  return Array.from({ length: count }, (_, index) => [
+    start[0] + (end[0] - start[0]) * (index / (count - 1)),
+    start[1] + (end[1] - start[1]) * (index / (count - 1)),
+  ]);
+}
+
+function rideCsvAlong(start: Position, end: Position, count = 40): string {
+  return serializeDeviceCsvV2(
+    interpolate(start, end, count).map(([lon, lat], index) =>
+      syntheticSample(index, { lat, lon, speed: 40, altGps: 1000 - index, altBaro: 1000 - index }),
+    ),
+  );
+}
 
 async function freshDb(): Promise<void> {
   db.close();
@@ -35,6 +64,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  primeSkiDataForMatching(null);
 });
 
 describe("materializeAll", () => {
@@ -168,5 +198,52 @@ describe("ensureLocalData", () => {
   it("localDayKey jest deterministyczny dla próbki", () => {
     const sample = syntheticSample(0);
     expect(localDayKey(sample.t)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("dopasowanie tras przy materializacji", () => {
+  const PISTE = straightPiste("piste/A", [10.98, 46.97], [10.984, 46.966], {
+    label: "15",
+    site: "Sölden",
+    difficulty: "intermediate",
+  });
+
+  it("przypisuje zjazdowi trasy, gdy dane OSM są dostępne", async () => {
+    primeSkiDataForMatching(skiData([PISTE]));
+    await seed("20260115_100000.csv", rideCsvAlong([10.98, 46.97], [10.984, 46.966]), RECEIVED);
+    await materializeAll();
+
+    const [run] = await getAllRuns();
+    expect(run.routeName).toBe("15");
+    expect(run.routeSpans).toHaveLength(1);
+    expect(run.routeSequence.map((item) => item.key)).toEqual(["Sölden::15"]);
+  });
+
+  it("dorabia dopasowanie raz, gdy trasy dotrą po materializacji", async () => {
+    primeSkiDataForMatching(null);
+    await seed("20260115_100000.csv", rideCsvAlong([10.98, 46.97], [10.984, 46.966]), RECEIVED);
+    await materializeAll();
+    expect((await getAllRuns())[0].routeName).toBeNull();
+
+    primeSkiDataForMatching(skiData([PISTE]));
+    await ensureRouteMatchingBackfill();
+    expect((await getAllRuns())[0].routeName).toBe("15");
+
+    // Kolejne wejście z markerem "1" nic nie zmienia.
+    await ensureRouteMatchingBackfill();
+    expect((await getAllRuns())[0].routeName).toBe("15");
+  });
+
+  it("odświeżenie cache OSM nie przelicza już dopasowanych zjazdów", async () => {
+    primeSkiDataForMatching(skiData([PISTE]));
+    await seed("20260115_100000.csv", rideCsvAlong([10.98, 46.97], [10.984, 46.966]), RECEIVED);
+    await materializeAll();
+    expect((await getAllRuns())[0].routeName).toBe("15");
+
+    // Inna trasa w cache (odświeżenie) nie może nadpisać istniejącego wyniku.
+    const other = straightPiste("piste/Z", [10.98, 46.97], [10.984, 46.966], { label: "99", site: "Sölden" });
+    primeSkiDataForMatching(skiData([other]));
+    await ensureRouteMatchingBackfill();
+    expect((await getAllRuns())[0].routeName).toBe("15");
   });
 });

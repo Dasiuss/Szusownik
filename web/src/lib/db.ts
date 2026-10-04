@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { EnrichedSample, PeakQuality } from "./runs.ts";
+import type { RouteSequenceItem, RouteSpan } from "./routeMatching.ts";
 
 export interface StoredFile {
   name: string; // klucz: nazwa pliku z urządzenia (sync po nazwie)
@@ -24,6 +25,10 @@ export interface StoredRun {
   confirmedQuality: PeakQuality | null;
   maxGradeDown: number;
   samples: EnrichedSample[];
+  /** Trasy dopasowane automatycznie (map-matching); puste bez danych OSM. */
+  routeSpans: RouteSpan[];
+  routeSequence: RouteSequenceItem[];
+  routeName: string | null;
   label?: string;
   demo?: boolean;
   receivedAt: string;

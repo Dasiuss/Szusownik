@@ -69,6 +69,10 @@ regeneruje je w pamięci i porównuje z zawartością na dysku — rozjazd wywal
 
 - Realne nagranie: `test data/20260926_181420.csv` (+ `.meta`). Golden transferu:
   `web/test/golden/device-done.json` (linia `BLE done ...` z monitora).
+- Demo PWA: `web/public/fixtures/ride.csv` — generowany przez
+  `scripts/gen-demo-ride.mjs` (albo `npm run gen:demo` w `web/`) na prawdziwej
+  geometrii Sölden (`scripts/data/demo-solden.json`). Test `demoFixture.test.ts`
+  pilnuje, że plik daje 3 zjazdy i dopasowanie tras `1 → 1a`.
 - Generatory syntetyczne: `web/test/fixtures.ts` (zjazd, postój, przejazd z `lifts`
   wyciągami — liczba zjazdów znana z góry, `lifts + 1`).
 - Fixture mapy/routingu: `web/test/skiArea.ts` (syntetyczny ośrodek, provider

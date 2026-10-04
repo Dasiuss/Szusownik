@@ -55,7 +55,7 @@ test("CSV v2 maps blank optional quality fields to null and keeps explicit zero"
   assert.equal(samples[0].gnssHdopAgeMs, null);
 });
 
-test("the real demo trace is v2 with the device's own GNSS measurements", async () => {
+test("the demo trace is a valid v2 ski day with quality metadata", async () => {
   const fixture = await readFile(new URL("../../public/fixtures/ride.csv", import.meta.url), "utf8");
   const samples = parseDeviceCsv(fixture);
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Icon } from "./components/Icon.tsx";
-import { ensureLocalData } from "./lib/data.ts";
+import { ensureLocalData, ensureRouteMatchingBackfill } from "./lib/data.ts";
+import { loadCachedSkiData, loadSkiData } from "./lib/mapData.ts";
 import { DeviceProvider } from "./lib/device.tsx";
 
 export default function App() {
@@ -12,8 +13,15 @@ export default function App() {
   async function boot() {
     setBootError(null);
     try {
+      // Trasy z cache od razu — dopasowanie liczone przy materializacji.
+      loadCachedSkiData();
       await ensureLocalData();
       setReady(true);
+      // Odświeżenie cache w tle; jeśli OSM dotarło dopiero teraz, dorabiamy
+      // dopasowanie raz. Odświeżenie istniejącego cache nie przelicza zjazdów.
+      void loadSkiData()
+        .then(() => ensureRouteMatchingBackfill())
+        .catch(() => undefined);
     } catch (caught) {
       setBootError(caught instanceof Error ? caught.message : String(caught));
     }

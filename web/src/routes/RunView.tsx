@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Area,
@@ -15,8 +15,17 @@ import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { QualityIndicators } from "../components/QualityIndicators.tsx";
 import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
-import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, getRunsForDay, renameRun, runNumbers } from "../lib/data.ts";
+import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, getAllRuns, getRunsForDay, renameRun, runNumbers } from "../lib/data.ts";
 import { db, type StoredRun } from "../lib/db.ts";
+import { DIFFICULTY_COLORS } from "../lib/mapData.ts";
+import {
+  previousRidesForSequence,
+  routeHistories,
+  routeSequenceKey,
+  type PreviousRide,
+  type RouteSequenceItem,
+  type RunRouteRecord,
+} from "../lib/routeMatching.ts";
 import { QUALITY_ANALYSIS_VERSION } from "../lib/runs.ts";
 import { useChartViewport } from "../lib/useChartViewport.ts";
 
@@ -25,6 +34,8 @@ export default function RunView() {
   const navigate = useNavigate();
   const [run, setRun] = useState<StoredRun | null>(null);
   const [runNumber, setRunNumber] = useState<number | null>(null);
+  const [records, setRecords] = useState<RunRouteRecord[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState("");
@@ -47,12 +58,35 @@ export default function RunView() {
         if (!active) return;
         setRunNumber(runNumbers(dayRuns).get(valid.id) ?? null);
       }
+      const all = await getAllRuns();
+      if (!active) return;
+      setRecords(all.map((record) => ({
+        id: record.id,
+        startT: record.startT,
+        routeSpans: record.routeSpans ?? [],
+        routeSequence: record.routeSequence ?? [],
+      })));
       setLoading(false);
     })();
     return () => {
       active = false;
     };
   }, [decodedRunId]);
+
+  const sequence = useMemo(() => run?.routeSequence ?? [], [run]);
+  const sequenceKey = routeSequenceKey(sequence);
+  const prevSameSequence = useMemo(
+    () => (run ? previousRidesForSequence(records, sequence, run.id) : []),
+    [records, sequence, run],
+  );
+  const routeGroups = useMemo(
+    () => (run ? routeHistories(records, sequence, run.id).filter((group) => group.rideCount > 0) : []),
+    [records, sequence, run],
+  );
+
+  function toggleExpanded(key: string): void {
+    setExpanded((current) => ({ ...current, [key]: !current[key] }));
+  }
 
   async function saveLabel() {
     if (!run) return;
@@ -111,7 +145,23 @@ export default function RunView() {
       <header className="detail-header">
         <div>
           <span className="eyebrow">{formatClock(run.startT)} · {formatDuration(run.startT, run.endT)}</span>
-          <h1>{run.label ?? (runNumber ? `Zjazd ${runNumber}` : "Zjazd")}</h1>
+          {run.label ? (
+            <>
+              <h1>{run.label}</h1>
+              {sequence.length > 0 && <SequenceChips sequence={sequence} />}
+            </>
+          ) : sequence.length > 0 ? (
+            <h1 className="route-title">
+              {sequence.map((item, index) => (
+                <Fragment key={`${item.key}-${index}`}>
+                  {index > 0 && <span className="rt-arrow">→</span>}
+                  <span className="rt-num" style={{ color: routeColor(item.difficulty) }}>{item.label}</span>
+                </Fragment>
+              ))}
+            </h1>
+          ) : (
+            <h1>{runNumber ? `Zjazd ${runNumber}` : "Zjazd"}</h1>
+          )}
           <p className="page-subtitle">{formatDayLabel(run.dayKey, true)}</p>
         </div>
         <button aria-label="Usuń zjazd" className="icon-button icon-button-danger" onClick={() => void removeRun()}><Icon name="trash" size={19} /></button>
@@ -187,8 +237,146 @@ export default function RunView() {
         </ChartZoomSurface>
         <div className="chart-axis-label">Dystans [km] · wysokość [m]</div>
       </section>
+
+      {sequence.length > 0 && (
+        <section className="prev-section" aria-label="Poprzednie przejazdy">
+          <div className="prev-heading">
+            <div><span className="eyebrow">Historia tras</span><h2>Poprzednie przejazdy</h2></div>
+          </div>
+
+          {prevSameSequence.length > 0 && (
+            <RouteHistoryCard
+              heading={
+                <>
+                  {sequence.map((item, index) => (
+                    <Fragment key={`${item.key}-${index}`}>
+                      {index > 0 && <span className="group-arrow">→</span>}
+                      <span className="route-chip" style={{ background: routeColor(item.difficulty) }}>{item.label}</span>
+                    </Fragment>
+                  ))}
+                  <span className="route-group-name">Cała sekwencja</span>
+                </>
+              }
+              rideCount={prevSameSequence.length}
+              bestDurationS={Math.min(...prevSameSequence.map((ride) => ride.durationS))}
+              maxSpeed={prevSameSequence.reduce((max, ride) => Math.max(max, ride.maxSpeed), 0)}
+              rides={prevSameSequence}
+              expanded={Boolean(expanded[`seq:${sequenceKey}`])}
+              onToggle={() => toggleExpanded(`seq:${sequenceKey}`)}
+            />
+          )}
+
+          {routeGroups.map((group) => (
+            <RouteHistoryCard
+              key={group.route.key}
+              heading={
+                <>
+                  <span className="route-chip" style={{ background: routeColor(group.route.difficulty) }}>{group.route.label}</span>
+                  <span className="route-group-name">Trasa</span>
+                </>
+              }
+              rideCount={group.rideCount}
+              bestDurationS={group.bestDurationS}
+              maxSpeed={group.maxSpeed}
+              rides={group.rides}
+              expanded={Boolean(expanded[group.route.key])}
+              onToggle={() => toggleExpanded(group.route.key)}
+            />
+          ))}
+
+          {prevSameSequence.length === 0 && routeGroups.length === 0 && (
+            <div className="prev-empty">Brak wcześniejszych przejazdów tymi trasami.</div>
+          )}
+        </section>
+      )}
     </div>
   );
+}
+
+const PREVIEW_RIDES = 3;
+
+interface RouteHistoryCardProps {
+  heading: ReactNode;
+  rideCount: number;
+  bestDurationS: number | null;
+  maxSpeed: number;
+  rides: PreviousRide[];
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function RouteHistoryCard({ heading, rideCount, bestDurationS, maxSpeed, rides, expanded, onToggle }: RouteHistoryCardProps) {
+  const shown = expanded ? rides : rides.slice(0, PREVIEW_RIDES);
+  return (
+    <div className="route-group">
+      <div className="route-group-head">{heading}</div>
+      <div className="route-group-stats">
+        <span><b>{rideCount}</b> {rideWord(rideCount)}</span>
+        <span>najlepszy <b>{bestDurationS === null ? "—" : formatSeconds(bestDurationS)}</b></span>
+        <span>max <b>{maxSpeed.toFixed(0)}</b> km/h</span>
+      </div>
+      <ul className="ride-list">
+        {shown.map((ride) => (
+          <li className="ride-item" key={ride.runId}>
+            <Link className="ride-row" to={`/zjazd/${encodeURIComponent(ride.runId)}`}>
+              <span className="ride-when">
+                {formatRideWhen(ride.startT)}
+                <small>Odcinek {formatRideDistance(ride.distanceM)}</small>
+              </span>
+              <span className="ride-metric"><b>{ride.maxSpeed.toFixed(0)}<small> km/h</small></b><i>{formatSeconds(ride.durationS)}</i></span>
+              <span className="ride-chev">›</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {rides.length > PREVIEW_RIDES && (
+        <button className="show-all" type="button" onClick={onToggle}>
+          {expanded ? "Zwiń" : `Pokaż wszystkie (${rides.length})`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SequenceChips({ sequence }: { sequence: RouteSequenceItem[] }) {
+  return (
+    <div className="route-line">
+      <span className="route-line-label">Trasy</span>
+      {sequence.map((item, index) => (
+        <Fragment key={`${item.key}-${index}`}>
+          {index > 0 && <span className="route-arrow">→</span>}
+          <span className="route-chip" style={{ background: routeColor(item.difficulty) }}>{item.label}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+function routeColor(difficulty: string): string {
+  return DIFFICULTY_COLORS[difficulty] ?? DIFFICULTY_COLORS.unknown;
+}
+
+function formatSeconds(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function formatRideWhen(iso: string): string {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
+  const time = date.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day} · ${time}`;
+}
+
+function formatRideDistance(meters: number): string {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function rideWord(count: number): string {
+  if (count === 1) return "przejazd";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "przejazdy";
+  return "przejazdów";
 }
 
 function capitalize(value: string): string {

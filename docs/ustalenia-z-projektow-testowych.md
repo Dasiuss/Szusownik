@@ -174,8 +174,10 @@ Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 - ostatnie pięć minut próbek z plików jest rysowane jako surowy ślad względem
   czasu telefonu, bez map-matchingu;
 - zapis śladu lokalnie;
-- dopasowanie śladu do geometrii tras;
-- określenie pokrycia trasy i zaliczenia przejazdu.
+- dopasowanie śladu do geometrii tras (zaimplementowane jako uproszczone
+  przypisanie **zjazd → trasy** przy materializacji; patrz
+  `docs/mapy-routing.md` §9). To nie jest pełny map-matching per próbka;
+- określenie pokrycia trasy i zaliczenia przejazdu — **nadal nie**.
 
 Nie należy udawać, że obecny routing jest już map-matchingiem. Obecny graf
 wyznacza przejście po geometrii OSM, ale nie przypisuje rzeczywistych próbek GPS
@@ -277,7 +279,9 @@ startowi serwera dev.
 - Uproszczona obsługa relacji OSM nie obejmuje pełnych multipolygonów.
 - Brak DEM może dopuścić zły kierunek połączenia.
 - Graf i routing blokują główny wątek dla dużej liczby tras.
-- Obecny graf nie jest map-matchingiem śladu GPS.
+- Graf routingu nie jest map-matchingiem śladu GPS. Dopasowanie zjazdu do tras
+  jest osobną, uproszczoną logiką (`routeMatching.ts`, `docs/mapy-routing.md` §9)
+  — bez HMM/ciągłości per próbka i bez pokrycia całej trasy.
 - Nie ma jeszcze testów automatycznych algorytmu grafu, kosztu i progów snapowania.
 
 ## 8. Minimalna bramka jakości przed użyciem produkcyjnym

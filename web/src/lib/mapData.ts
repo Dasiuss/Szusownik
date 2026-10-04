@@ -111,6 +111,10 @@ interface CachedSkiData {
 const CACHE_KEY = "szusownik:ski-data:v3";
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
+// Ostatnio wczytane (cache/świeże) dane tras — używane przez dopasowanie
+// zjazdów do tras przy materializacji. Nie pobiera nic z sieci.
+let matchingSkiData: SkiData | null = null;
+
 function difficultyFor(tags: Record<string, string>): string {
   const difficulty = tags["piste:difficulty"] ?? tags.difficulty ?? "unknown";
   return DIFFICULTY_COLORS[difficulty] ? difficulty : "unknown";
@@ -283,16 +287,43 @@ async function fetchElements(): Promise<OverpassElement[]> {
 export async function loadSkiData(): Promise<SkiData> {
   const cached = readCache();
   if (cached && Date.now() - Date.parse(cached.savedAt) < MAP_DATA_TTL_MS) {
-    return normalizeSkiData(cached.elements, false, cached.savedAt);
+    matchingSkiData = normalizeSkiData(cached.elements, false, cached.savedAt);
+    return matchingSkiData;
   }
 
   try {
     const elements = await fetchElements();
     const fresh: CachedSkiData = { elements, savedAt: new Date().toISOString() };
     writeCache(fresh);
-    return normalizeSkiData(elements, false, fresh.savedAt);
+    matchingSkiData = normalizeSkiData(elements, false, fresh.savedAt);
+    return matchingSkiData;
   } catch (error) {
-    if (cached) return normalizeSkiData(cached.elements, true, cached.savedAt);
+    if (cached) {
+      matchingSkiData = normalizeSkiData(cached.elements, true, cached.savedAt);
+      return matchingSkiData;
+    }
     throw error;
   }
+}
+
+/**
+ * Cache bez sieci: zwraca znormalizowane trasy z localStorage, jeśli są, i
+ * zapamiętuje je do dopasowania. Null, gdy cache nie istnieje.
+ */
+export function loadCachedSkiData(): SkiData | null {
+  const cached = readCache();
+  if (!cached) return null;
+  const stale = Date.now() - Date.parse(cached.savedAt) >= MAP_DATA_TTL_MS;
+  matchingSkiData = normalizeSkiData(cached.elements, stale, cached.savedAt);
+  return matchingSkiData;
+}
+
+/** Trasy dostępne dla dopasowania (cache/ostatnie wczytanie) albo null. */
+export function getSkiDataForMatching(): SkiData | null {
+  return matchingSkiData;
+}
+
+/** Wstrzyknięcie tras do dopasowania (testy) — bez sieci i storage. */
+export function primeSkiDataForMatching(data: SkiData | null): void {
+  matchingSkiData = data;
 }

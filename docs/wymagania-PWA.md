@@ -7,7 +7,8 @@
 
 Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja działa offline
 (IndexedDB). Dane z urządzenia przez BLE; do developmentu i testów PWA służy
-**rzeczywiste nagranie z urządzenia** (plik CSV z karty SD wpięty jako fixture).
+**wbudowane demo** — generowany plik CSV osadzony na prawdziwych trasach Sölden
+(`scripts/gen-demo-ride.mjs`).
 
 ## 2. Zasady UI
 
@@ -25,8 +26,8 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 ## 4. Ekran główny (aktywność / dzień)
 
 - Przycisk **„Pobierz dane"** — pobiera nowe pliki z urządzenia przez BLE
-  (patrz „Transfer"); w trybie deweloperskim ładuje rzeczywiste nagranie-fixture
-  z pliku CSV.
+  (patrz „Transfer"); w trybie deweloperskim ładuje wbudowane demo
+  (generowany fixture CSV, patrz §8).
 - Po kliknięciu: PWA pobiera nowe pliki z urządzenia (patrz „Transfer"), przetwarza CSV
   (wycina zjazdy) i pokazuje **bieżącą aktywność (dzień)**.
 - Po połączeniu PWA automatycznie sprawdza listę plików. Nowe pliki są zapowiadane kartą
@@ -67,6 +68,14 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   0,25/0,5/1 km dochodzą **0,1 km i 0,05 km** przy mocnym przybliżeniu; przy skrajnym
   przybliżeniu krok zagęszcza się automatycznie, żeby ticki nie znikały. Zakres osi przy
   przybliżeniu nie jest rozciągany poza widoczne okno.
+- **Trasy zjazdu (auto):** tytuł to własna nazwa, a gdy jej brak — sekwencja
+  dopasowanych tras (np. `15 → 8`, kolory trudności). Gdy jest nazwa, sekwencja
+  pokazywana jest pod nią mniejszą czcionką.
+- **„Poprzednie przejazdy"** na samym dole szczegółów: grupa całej sekwencji
+  tras + osobne grupy per trasa. Każda grupa pokazuje liczbę przejazdów,
+  najlepszy czas odcinka i max prędkość, a pod nimi listę wierszy (data/godzina,
+  max prędkość, czas i dystans odcinka) od najnowszego, klikalną. Pełna lista
+  rozwija się inline („Pokaż wszystkie"), bez osobnego widoku.
 
 ## 6. Przetwarzanie danych (wycinanie zjazdów)
 
@@ -102,6 +111,19 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   do tego `distanceM` (bo nie zawiera wyciągów).
 - **Cięcie dla Strava** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia, maksymalnie **bieżący dzień**.
+
+### Dopasowanie zjazdu do tras (auto)
+
+- Zjazd dostaje automatycznie sekwencję tras OSM (grupa po `site + label`;
+  odcinki bez nazwy osobno per `uid`) oraz spany odcinków. Progi i algorytm:
+  `docs/mapy-routing.md` §9.
+- Liczone raz przy materializacji z cache OSM ładowanego na starcie. Brak cache
+  → zjazd bez tras, z jednorazowym dorobieniem po ich pobraniu; odświeżenie
+  cache OSM nie przelicza zjazdów. **Bez ręcznej korekty** dopasowania.
+- Sekwencja i spany są trwałe (przeżywają re-analizę jak etykiety). Auto-nazwa
+  (`routeName`) nie nadpisuje ręcznej etykiety użytkownika; gdy jest etykieta,
+  sekwencja jest tylko dopiskiem. Fragment trasy wystarcza — nie liczymy
+  pokrycia całej trasy.
 
 ### Wygładzanie (defaulty, do dostrojenia po realnych danych)
 
@@ -153,16 +175,29 @@ na nagraniach z auta defaulty wystarczą.
 - Materializacja jest idempotentna i wykonywana tylko wtedy, gdy zmienił się zbiór
   plików albo wersja analizy (`QUALITY_ANALYSIS_VERSION`); inaczej jest pomijana.
   Schemat Dexie v6: `files`, `runs`, `runLabels`, `deletedRuns`, `ignoredFiles`,
-  `pendingFiles`, `meta`.
+  `pendingFiles`, `meta`. `runs` niesie też dopasowanie tras: `routeSequence`,
+  `routeSpans`, `routeName` (patrz §6). Pola nie są indeksowane, a wersja logiki
+  dopasowania wchodzi do podpisu materializacji (`MATCHING_VERSION`).
 
-## 8. Dane testowe (rzeczywisty ślad, metryki GNSS z urządzenia)
+## 8. Dane demo (generowany ślad na prawdziwych trasach)
 
-- Plik **CSV nagrany urządzeniem** (np. przejazd autem) wpięty jako fixture
-  do developmentu PWA. Fixture to nagranie **v2** z rzeczywistymi metrykami GNSS
-  i wysokością barometryczną; PWA nie dopisuje żadnych syntetycznych pomiarów.
-- Nagłówek i semantykę pól v2 opisuje `docs/jakosc-danych.md`.
-- Fixture ma zawierać co najmniej **2 zjazdy** (jazda + postój/wolny odcinek
-  rozdzielający).
+- Fixture `web/public/fixtures/ride.csv` jest **generowany** przez
+  `scripts/gen-demo-ride.mjs`: syntetyczny dzień narciarski osadzony na
+  prawdziwej geometrii OSM Sölden (`scripts/data/demo-solden.json`, snapshot z
+  Overpass): pętla **Gaislachkoglbahn II** (wyciąg w górę) + zjazd trasami
+  **`1` → `1a`**, powtórzona 3 razy. Dzięki temu działają i wykresy, i
+  dopasowanie tras (sekwencja + „poprzednie przejazdy”).
+- Plik ma poprawny nagłówek i semantykę **CSV v2** (`docs/jakosc-danych.md`).
+  Wartości GNSS (satelity, HDOP, wiek pól) są **modelowane**, ale przechodzą
+  trzy kryteria jakości, więc demo ma potwierdzone maksimum prędkości.
+- Przy seedowaniu PWA tylko przesuwa timestampy do bieżącego czasu i zapisuje
+  plik jako `demo-ride.csv`; nie dopisuje innych pomiarów. Osierocone pliki
+  `demo-*` są usuwane.
+- Fixture ma zawierać co najmniej **2 zjazdy** (tu: 3 zjazdy, każdy = wyciąg +
+  zjazd). Zmiana geometrii/trasy: podmień snapshot i uruchom generator
+  (nagłówek i format muszą zostać zgodne z v2).
+- **Realne nagranie z urządzenia** (używane przez testy jednostkowe) to
+  `test data/20260926_181420.csv`; to nie jest demo PWA.
 
 ## 9. Stack technologiczny (potwierdzony 2026-09-11, `web/package.json`)
 

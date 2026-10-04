@@ -190,6 +190,40 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .run-segment strong { font-size: 12px; font-weight: 800; white-space: nowrap; }
 .run-segment span { color: #718b89; font-size: 10px; white-space: nowrap; }
 
+.run-route { display: block; margin-top: 2px; color: #4b8a74; font-size: 11px; font-weight: 700; }
+
+/* Dopasowanie tras: tytuł sekwencji + „Poprzednie przejazdy" */
+.route-title { display: flex; align-items: center; gap: 9px; }
+.route-title .rt-arrow { color: #b9c9c7; font-size: .62em; font-weight: 700; }
+.route-line { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.route-line-label { margin-right: 2px; color: #82979a; font-size: 10px; font-weight: 700; }
+.route-line .route-arrow { color: #b9c9c7; font-size: 11px; font-weight: 800; }
+.route-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; padding: 3px 8px; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 800; }
+
+.prev-section { display: flex; flex-direction: column; gap: 13px; }
+.prev-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.prev-heading h2 { margin-top: 3px; font-size: 20px; }
+.prev-empty { padding: 14px 4px; color: #82979a; font-size: 11px; }
+.route-group { padding: 14px; border: 1px solid #dbe9e6; border-radius: 20px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
+.route-group + .route-group { margin-top: 9px; }
+.route-group-head { display: flex; align-items: center; gap: 6px; }
+.route-group-head .group-arrow { color: #b9c9c7; font-size: 12px; font-weight: 800; }
+.route-group-name { margin-left: auto; color: #82979a; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.route-group-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 11px; padding-top: 10px; border-top: 1px solid #edf3f1; color: #82979a; font-size: 10.5px; }
+.route-group-stats b { color: #365d60; font-size: 12px; }
+.ride-list { margin-top: 11px; }
+.ride-item { border-top: 1px solid #edf3f1; }
+.ride-item:first-child { border-top: 0; }
+.ride-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; }
+.ride-when { flex: 1; min-width: 0; color: #365d60; font-size: 12px; font-weight: 700; }
+.ride-when small { display: block; margin-top: 1px; color: #9aabab; font-size: 9.5px; font-weight: 600; }
+.ride-metric { display: flex; flex-direction: column; align-items: flex-end; }
+.ride-metric b { color: #17363b; font-size: 14px; font-weight: 800; }
+.ride-metric b small { color: #82979a; font-size: 9px; font-weight: 700; }
+.ride-metric i { color: #9aabab; font-size: 9.5px; font-style: normal; }
+.ride-chev { color: #b9c9c7; font-size: 18px; font-weight: 700; line-height: 1; }
+.show-all { display: inline-flex; align-items: center; gap: 3px; margin-top: 10px; border: 0; padding: 0; color: #4b8a74; background: transparent; font-size: 11.5px; font-weight: 800; }
+
 .device-connect-card { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 18px; background: #fff; }
 .device-connect-card .button { grid-column: 2; justify-self: start; }
 .device-illustration { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 17px; color: #fff; background: #17363b; }

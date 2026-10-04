@@ -1,5 +1,7 @@
 import { db, type StoredFile, type StoredRun } from "./db.ts";
 import { parseDeviceCsv, serializeDeviceCsvV2, type Sample } from "./csv.ts";
+import { getSkiDataForMatching } from "./mapData.ts";
+import { matchRunRoutes, type RunRouteMatch } from "./routeMatching.ts";
 import {
   analyzeDay,
   analyzeMergedSamples,
@@ -16,6 +18,9 @@ export { localDayKey, runNumbers };
 export const DEMO_SOURCE_FILE = "demo-ride.csv";
 const DEMO_SEEDED_KEY = "demo-seeded-v4";
 const MATERIALIZED_KEY = "materialized-v1";
+const MATCHING_OSM_KEY = "matching-osm-v1";
+/** Wersja logiki dopasowania tras; podbicie wymusza ponowną materializację. */
+export const MATCHING_VERSION = 1;
 
 /** Stabilny identyfikator zjazdu: lokalny dzień + czas startu. Przeżywa
  *  scalenie plików i ponowną analizę (etykiety i tombstone'y kluczują się nim). */
@@ -128,8 +133,10 @@ function filesSignature(files: StoredFile[]): string {
   const parts = files
     .map((file) => `${file.name}\u0001${file.size}\u0001${file.receivedAt}`)
     .sort();
-  return `v${QUALITY_ANALYSIS_VERSION}:${files.length}:${hashSignature(parts.join("\u0002"))}`;
+  return `v${QUALITY_ANALYSIS_VERSION}:m${MATCHING_VERSION}:${files.length}:${hashSignature(parts.join("\u0002"))}`;
 }
+
+const NO_ROUTE_MATCH: RunRouteMatch = { spans: [], sequence: [], routeName: null };
 
 function storedRun(
   run: Run,
@@ -137,6 +144,7 @@ function storedRun(
   receivedAt: string,
   demo: boolean,
   label: string | undefined,
+  match: RunRouteMatch,
 ): StoredRun {
   return {
     id: stableRunId(dayKey, run.startT),
@@ -153,6 +161,9 @@ function storedRun(
     confirmedQuality: run.confirmedQuality,
     maxGradeDown: run.maxGradeDown,
     samples: run.samples,
+    routeSpans: match.spans,
+    routeSequence: match.sequence,
+    routeName: match.routeName,
     ...(label ? { label } : {}),
     ...(demo ? { demo: true } : {}),
     receivedAt,
@@ -183,6 +194,9 @@ export async function materializeAll(force = false): Promise<void> {
   );
 
   const records: StoredRun[] = [];
+  const pistes = getSkiDataForMatching()?.lines;
+  const matchFor = (run: Run): RunRouteMatch => pistes ? matchRunRoutes(pistes, run.samples) : NO_ROUTE_MATCH;
+
   const realFiles = files.filter((file) => file.name !== DEMO_SOURCE_FILE);
   const realDays = analyzeMergedSamples(
     realFiles.map((file) => ({ file: file.name, samples: parseFileSamples(file) })),
@@ -191,7 +205,7 @@ export async function materializeAll(force = false): Promise<void> {
     for (const run of day.runs) {
       const id = stableRunId(day.dayKey, run.startT);
       if (deleted.has(id)) continue;
-      records.push(storedRun(run, day.dayKey, receivedAt, false, labels.get(id)));
+      records.push(storedRun(run, day.dayKey, receivedAt, false, labels.get(id), matchFor(run)));
     }
   }
 
@@ -201,7 +215,7 @@ export async function materializeAll(force = false): Promise<void> {
       const dayKey = localDayKey(run.startT);
       const id = stableRunId(dayKey, run.startT);
       if (deleted.has(id)) continue;
-      records.push(storedRun(run, dayKey, demoFile.receivedAt, true, labels.get(id) ?? "Demo"));
+      records.push(storedRun(run, dayKey, demoFile.receivedAt, true, labels.get(id) ?? "Demo", matchFor(run)));
     }
   }
 
@@ -209,7 +223,20 @@ export async function materializeAll(force = false): Promise<void> {
     await db.runs.clear();
     if (records.length > 0) await db.runs.bulkPut(records);
     await db.meta.put({ key: MATERIALIZED_KEY, value: signature });
+    await db.meta.put({ key: MATCHING_OSM_KEY, value: pistes ? "1" : "0" });
   });
+}
+
+/**
+ * Jednorazowe dorobienie dopasowania tras, gdy przy materializacji nie było
+ * jeszcze danych OSM. Odświeżenie cache OSM (marker "1") nie przelicza zjazdów.
+ */
+export async function ensureRouteMatchingBackfill(): Promise<void> {
+  await db.open();
+  const marker = await db.meta.get(MATCHING_OSM_KEY);
+  if (marker?.value === "1") return;
+  if (!getSkiDataForMatching()) return;
+  await materializeAll(true);
 }
 
 async function purgeStaleDemoData(): Promise<void> {

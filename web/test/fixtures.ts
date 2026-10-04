@@ -1,5 +1,6 @@
 // Wspólne dane testowe: realne nagranie z urządzenia i generatory syntetyczne.
-// Realne pliki czytamy z `test data/` (repo root) i `public/fixtures/`.
+// Realne pliki czytamy z `test data/` (repo root); demo `public/fixtures/` jest
+// generowane (scripts/gen-demo-ride.mjs) na prawdziwej geometrii Sölden.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
