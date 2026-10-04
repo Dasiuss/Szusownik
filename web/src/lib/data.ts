@@ -14,7 +14,7 @@ import {
 export { localDayKey, runNumbers };
 
 export const DEMO_SOURCE_FILE = "demo-ride.csv";
-const DEMO_SEEDED_KEY = "demo-seeded-v3";
+const DEMO_SEEDED_KEY = "demo-seeded-v4";
 const MATERIALIZED_KEY = "materialized-v1";
 
 /** Stabilny identyfikator zjazdu: lokalny dzień + czas startu. Przeżywa
