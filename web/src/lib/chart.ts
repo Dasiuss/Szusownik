@@ -35,23 +35,17 @@ function decimalsForStep(step: number): number {
   return String(step).split(".")[1]?.length ?? 0;
 }
 
-/** Pełny zakres od zera — używany dla nieprzybliżonego wykresu. */
+/**
+ * Pełny zakres od zera do rzeczywistego maksimum danych — używany dla
+ * nieprzybliżonego wykresu. Ostatni tick wypada na pełnym kroku wewnątrz
+ * zakresu, ale oś nie jest rozciągana poza dane (dawny `ceil` do pełnego kroku
+ * zostawiał nawet ~1 km pustki przy kroku 1 km, np. 7,14 km -> oś do 8).
+ */
 export function getDistanceAxis(maxDistanceKm: number): DistanceAxis {
   if (!(maxDistanceKm > 0)) {
     return { domain: [...DEFAULT_EMPTY_DOMAIN], ticks: [...DEFAULT_EMPTY_DOMAIN] };
   }
-  const step = getDistanceStep(maxDistanceKm);
-  const maxTick = Math.max(step, Math.ceil(maxDistanceKm / step) * step);
-  const decimals = decimalsForStep(step);
-  const tickCount = Math.round(maxTick / step);
-  const ticks = Array.from({ length: tickCount + 1 }, (_, index) =>
-    roundTo(index * step, decimals),
-  );
-
-  return {
-    domain: [0, maxTick],
-    ticks,
-  };
+  return getDistanceAxisForDomain(0, maxDistanceKm);
 }
 
 /**

@@ -10,8 +10,8 @@ import {
 describe("getDistanceAxis", () => {
   it("krok 0.25 km dla krótkich dystansów", () => {
     const axis = getDistanceAxis(1.4);
-    expect(axis.domain).toEqual([0, 1.5]);
-    expect(axis.ticks).toEqual([0, 0.25, 0.5, 0.75, 1, 1.25, 1.5]);
+    expect(axis.domain).toEqual([0, 1.4]);
+    expect(axis.ticks).toEqual([0, 0.25, 0.5, 0.75, 1, 1.25]);
   });
 
   it("krok 0.5 km dla średnich dystansów", () => {
@@ -23,6 +23,13 @@ describe("getDistanceAxis", () => {
   it("krok 1 km dla długich dystansów i dystans 0", () => {
     expect(getDistanceAxis(12).domain).toEqual([0, 12]);
     expect(getDistanceAxis(0).domain).toEqual([0, 0.25]);
+  });
+
+  it("nie rozciąga osi poza maksimum danych", () => {
+    // Regresja: 7,14 km było zaokrąglane do 8 i zostawiało ~0,86 km pustki.
+    const axis = getDistanceAxis(7.1423);
+    expect(axis.domain).toEqual([0, 7.1423]);
+    expect(axis.ticks).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 });
 
