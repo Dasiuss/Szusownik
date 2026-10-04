@@ -145,41 +145,46 @@ export default function RunView() {
       </div>
 
       <header className="detail-header">
-        <div>
+        <div className="detail-title-block">
           <span className="eyebrow">{formatClock(run.startT)} · {formatDuration(run.startT, run.endT)}</span>
-          {run.label ? (
-            <>
-              <h1>{run.label}</h1>
-              {sequence.length > 0 && <SequenceChips sequence={sequence} />}
-            </>
-          ) : sequence.length > 0 ? (
-            <h1 className="route-title">
-              {sequence.map((item, index) => (
-                <Fragment key={`${item.key}-${index}`}>
-                  {index > 0 && <span className="rt-arrow">→</span>}
-                  <span className="rt-num" style={{ color: routeColor(item.difficulty) }}>{item.label}</span>
-                </Fragment>
-              ))}
-            </h1>
+          {editingLabel ? (
+            <form className="label-form" onSubmit={(event) => { event.preventDefault(); void saveLabel(); }}>
+              <input autoFocus maxLength={40} onChange={(event) => setLabel(event.target.value)} placeholder="Np. Najlepszy stok" value={label} />
+              <button aria-label="Zapisz nazwę" className="icon-button icon-button-dark" type="submit"><Icon name="check" size={18} /></button>
+              <button aria-label="Anuluj" className="icon-button" onClick={() => setEditingLabel(false)} type="button"><Icon name="x" size={18} /></button>
+            </form>
           ) : (
-            <h1>{runNumber ? `Zjazd ${runNumber}` : "Zjazd"}</h1>
+            <div className="detail-title-edit" onClick={() => setEditingLabel(true)}>
+              {run.label ? (
+                <>
+                  <h1 className="detail-title">
+                    {run.label}
+                    <span className="title-edit-icon"><Icon name="edit" size={16} /></span>
+                  </h1>
+                  {sequence.length > 0 && <SequenceChips sequence={sequence} />}
+                </>
+              ) : sequence.length > 0 ? (
+                <h1 className="route-title detail-title">
+                  {sequence.map((item, index) => (
+                    <Fragment key={`${item.key}-${index}`}>
+                      {index > 0 && <span className="rt-arrow">→</span>}
+                      <span className="rt-num" style={{ color: routeColor(item.difficulty) }}>{item.label}</span>
+                    </Fragment>
+                  ))}
+                  <span className="title-edit-icon"><Icon name="edit" size={16} /></span>
+                </h1>
+              ) : (
+                <h1 className="detail-title">
+                  {runNumber ? `Zjazd ${runNumber}` : "Zjazd"}
+                  <span className="title-edit-icon"><Icon name="edit" size={16} /></span>
+                </h1>
+              )}
+            </div>
           )}
           <p className="page-subtitle">{formatDayLabel(run.dayKey, true)}</p>
         </div>
         <button aria-label="Usuń zjazd" className="icon-button icon-button-danger" onClick={() => void removeRun()}><Icon name="trash" size={19} /></button>
       </header>
-
-      <div className="detail-actions">
-        {editingLabel ? (
-          <form className="label-form" onSubmit={(event) => { event.preventDefault(); void saveLabel(); }}>
-            <input autoFocus maxLength={40} onChange={(event) => setLabel(event.target.value)} placeholder="Np. Najlepszy stok" value={label} />
-            <button aria-label="Zapisz nazwę" className="icon-button icon-button-dark" type="submit"><Icon name="check" size={18} /></button>
-            <button aria-label="Anuluj" className="icon-button" onClick={() => setEditingLabel(false)} type="button"><Icon name="x" size={18} /></button>
-          </form>
-        ) : (
-          <button className="button button-soft" onClick={() => setEditingLabel(true)}><Icon name="edit" size={17} /> {run.label ? "Zmień nazwę" : "Nadaj nazwę"}</button>
-        )}
-      </div>
 
       <section className="detail-metrics">
         <div className="confirmed-speed-metric">

@@ -39,7 +39,7 @@ test("szczegóły zjazdu: zmiana nazwy i usunięcie", async ({ page }) => {
   await expect(page.locator(".run-card").first()).toBeVisible();
   await page.locator(".run-card").first().click();
 
-  await page.getByRole("button", { name: /Nadaj nazwę|Zmień nazwę/ }).click();
+  await page.getByRole("heading", { level: 1 }).click();
   await page.getByPlaceholder("Np. Najlepszy stok").fill("Testowa nazwa");
   await page.getByRole("button", { name: "Zapisz nazwę" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Testowa nazwa" })).toBeVisible();

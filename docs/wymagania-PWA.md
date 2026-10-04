@@ -44,6 +44,10 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 
 ## 5. Ekran szczegółów zjazdu
 
+- Nazwę zjazdu edytuje się **wprost w tytule**: klik w nagłówek (zawsze widoczny mały
+  ołówek tuż za tekstem) zamienia go w kompaktowe pole z jawnym zapisem (check/Enter)
+  i anulowaniem (x/Esc). Bez osobnego przycisku „Zmień nazwę". Pusta nazwa czyści
+  etykietę i wraca do „Zjazd N".
 - Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **zmierzona wysokość**.
 - Wykres wysokości pokazuje wygładzoną wysokość w metrach, dzięki czemu spadki wysokości
   wizualnie odpowiadają zjazdom stoku. Wysokość to **fuzja barometru i GPS** (patrz §6),
