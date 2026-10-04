@@ -129,7 +129,9 @@ test("szczegóły zjazdu: Ctrl+kółko przybliża, przeciąganie przesuwa, dwukl
 
   const zoomed = await readDistanceTicks(page, 0);
 
-  const box = await page.locator(".chart-wrap").first().boundingBox();
+  const chart = page.locator(".chart-wrap").first();
+  await chart.scrollIntoViewIfNeeded();
+  const box = await chart.boundingBox();
   if (!box) throw new Error("brak wykresu");
   await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.5);
   await page.mouse.down();

@@ -164,6 +164,12 @@ najnowszej wersji firmware i PWA. Dlatego:
     testom (`test data/20260926_181420.csv`, patrz `docs/testy.md`). Format
     pozostaje CSV v2 (`docs/jakosc-danych.md`); `web/src/lib/demoFixture.test.ts`
     pilnuje zjazdów i dopasowania tras.
+20. Mini-mapa śladu (`web/src/components/TraceMap.tsx`) jest **2D** i ma **stałą
+    orientację** (bearing `-90`, bez obrotu) oraz **bez terenu 3D**; trasy są
+    celowo delikatne, a ślad gruby i kolorowany prędkością (scalany w jedną
+    linię per przedział prędkości). Pokazuje się nad wykresami w szczegółach
+    zjazdu i w „Całym dniu", z przyciskiem powiększenia kafelka (240 px ↔ 75vh).
+    Nie dodawaj obrotu ani terenu. Szczegóły i warstwy: `docs/mapy-routing.md` §5.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

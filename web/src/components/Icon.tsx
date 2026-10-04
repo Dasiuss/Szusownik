@@ -1,12 +1,14 @@
-export type IconName = "activity" | "archive" | "bluetooth" | "chevron" | "curve" | "download" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
+export type IconName = "activity" | "archive" | "bluetooth" | "chevron" | "collapse" | "curve" | "download" | "expand" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
 
 const paths: Record<IconName, string> = {
   activity: "M3 12h4l2-7 4 14 2-7h6",
   archive: "M4 7h16v13H4z M3 4h18v3H3z M9 11h6",
   bluetooth: "M12 3v18l5-5-10-8 10-8-5-5 M7 8l10 8",
   chevron: "m9 18 6-6-6-6",
+  collapse: "M4 14h6v6M20 10h-6V4M21 3l-7 7M3 21l7-7",
   curve: "M3 18Q12 3 21 18",
   download: "M12 3v12m0 0 4-4m-4 4-4-4M4 21h16",
+  expand: "M15 3h6v6M9 21H3v-6M14 10l7-7M10 14l-7 7",
   gauge: "M4.9 19a9 9 0 1 1 14.2 0 M12 12l4-4",
   map: "m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Zm0-15v15m6-12v15",
   mountain: "m3 20 6-12 3 5 2-3 7 10H3Zm10-5 2-3 3 5",

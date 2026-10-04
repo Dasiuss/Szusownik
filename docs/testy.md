@@ -13,10 +13,10 @@ Automatyzacja pokrywa wszystko poniżej tego progu.
 
 | Warstwa | Gdzie | Runner | Co pokrywa |
 |---|---|---|---|
-| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, czyste helpery BLE |
+| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, routeMatching, traceMap, czyste helpery BLE |
 | Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y |
 | Kontrakt | `web/src/lib/protocol.test.ts` | Vitest | zgodność wygenerowanego protokołu z `protocol/ble-file-v1.json` |
-| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, mapa (mock Overpass) |
+| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, mapa i mini-mapa śladu (mock Overpass) |
 | Host firmware | `firmware/test/host/test_*.cpp` | Catch2 + g++ | czysta logika `firmware/Szusownik/src/core/` + CRC32 z goldenem z urządzenia |
 
 ## PWA — komendy (katalog `web/`)

@@ -173,6 +173,13 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .raw-peak-card small { font-size: 10px; }
 .raw-peak-card .quality-indicators { margin-top: 0; }
 .chart-card { padding: 16px 13px 10px; border: 1px solid #dbe9e6; border-radius: 21px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
+.trace-map-card { position: relative; overflow: hidden; border: 1px solid #dbe9e6; border-radius: 21px; background: #dbe9e5; box-shadow: 0 10px 25px #2b64630c; }
+.trace-map { height: 240px; }
+.trace-map-card-expanded .trace-map { height: 75vh; }
+.trace-map-toggle { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1px solid #dbe9e6; border-radius: 10px; background: #ffffffeb; color: #17363b; cursor: pointer; box-shadow: 0 4px 12px #2b646322; backdrop-filter: blur(2px); }
+.trace-map-toggle:hover { background: #fff; }
+.trace-map-loading { height: 240px; border: 1px solid #dbe9e6; border-radius: 21px; background: linear-gradient(100deg, #eef4f2 25%, #dfeae6 50%, #eef4f2 75%); background-size: 200% 100%; animation: trace-map-pulse 1.4s ease-in-out infinite; }
+@keyframes trace-map-pulse { from { background-position: 0% 0; } to { background-position: -200% 0; } }
 .chart-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 0 4px; }
 .chart-heading h2 { font-size: 16px; }
 .chart-legend { display: inline-flex; align-items: center; gap: 5px; color: #82979a; font-size: 10px; white-space: nowrap; }

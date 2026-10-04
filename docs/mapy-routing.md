@@ -2,9 +2,9 @@
 
 > Źródło wiedzy: `MapyTest/AGENTS.md` oraz implementacja `MapyTest/src/App.jsx`.
 > Status: wizualizacja i routing są referencyjnymi algorytmami. W Szusowniku
-> działa GPS (kropka + surowy ślad 5 min) oraz **uproszczone dopasowanie zjazdu
-> do tras** (§9). Pełny map-matching per próbka (HMM/ciągłość) i zaliczanie
-> całej trasy nie są zaimplementowane.
+> działa GPS (kropka + surowy ślad 5 min), **mini-mapa 2D** śladu zjazdu/dnia
+> (§5) oraz **uproszczone dopasowanie zjazdu do tras** (§9). Pełny map-matching
+> per próbka (HMM/ciągłość) i zaliczanie całej trasy nie są zaimplementowane.
 
 ## 1. Stack referencyjny
 
@@ -175,6 +175,34 @@ Ikony wyciągów:
 
 Niewidoczne hit-area są ważne na telefonie. Nie zmniejszać ich tylko po to, aby
 warstwy wyglądały bardziej minimalistycznie.
+
+### Mini-mapa 2D (ślad zjazdu / dnia)
+
+`web/src/components/TraceMap.tsx` (ładowany przez `React.lazy`, współdzieli chunk
+MapLibre z `MapView`) pokazuje nad wykresami w `RunView` i `DaySummaryView`
+trasy OSM, wyciągi i ślad GPS kolorowany prędkością. Kamera jest płaska i ma
+**stałą orientację** jak duża mapa: `pitch 0`, `maxPitch 0`, obrót wyłączony
+(`dragRotate` + `touchZoomRotate`/`keyboard` bez rotacji), `bearing -90`, ten
+sam podkład OpenTopoMap co duża mapa, ale bez terenu 3D (`dem`/`sky` nie są
+dodawane). W prawym górnym rogu kafelka jest przycisk powiększenia: przełącza
+wysokość mapy z 240 px na 75vh (ten sam przycisk zwija z powrotem).
+
+Warstwy (kolejność rysowania): `pistes-casing` (biała 4, opacity 0.55),
+`pistes-line` (kolor trudności 2, opacity 0.55), `lifts-line` (czerwona
+przerywana), `trace-casing` (biała 8, opacity 0.65), `trace-line` (kolor z
+`properties.color`, 4.5), `pistes-labels` (numer/nazwa). Trasy są celowo
+delikatne (cieńsze i bledsze niż w dużej mapie), żeby ślad był pierwszym planem.
+Ślad rysowany jest nad trasami, etykiety nad śladem. Dopasowane trasy nie są
+wyróżniane („wszystko równo") — kontekst daje ślad na tle numerów.
+
+Ślad to cały zjazd (wyciąg + zjazd). Kolejne odcinki o tym samym przedziale
+prędkości (5 km/h) są scalane w jedną polilinię, więc ślad nie rozpada się na
+„fasolki" przy oddaleniu. Kolor wg `speedSm` (`web/src/lib/traceMap.ts`):
+0 km/h zielony → 30 niebieski → 60 pomarańczowy → 85 czerwony → ≥105 ciemna
+czerwień. Gęste ślady są decymowane (limit ~4000 pkt/ślad), a punkt bez
+poprawnych współrzędnych przerywa ciąg. Widok dopasowuje się do bounding box
+śladu. Brak danych OSM (cache-first, w razie braku `loadSkiData` best-effort)
+nie ukrywa mapy — zostaje sam ślad.
 
 ## 6. Routing lokalny
 

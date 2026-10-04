@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Area,
@@ -20,6 +20,8 @@ import { formatDayLabel, formatDistance, formatDuration, getRunsForDay } from ".
 import { useDevice } from "../lib/device.tsx";
 import type { StoredRun } from "../lib/db.ts";
 import { useChartViewport } from "../lib/useChartViewport.ts";
+
+const TraceMap = lazy(() => import("../components/TraceMap.tsx"));
 
 export default function DaySummaryView() {
   const { dayKey } = useParams();
@@ -104,6 +106,10 @@ export default function DaySummaryView() {
         <div><span>Dystans</span><strong>{formatDistance(distanceM)}</strong></div>
         <div><span>Max nachylenie</span><strong>{maxGradeDown.toFixed(0)}<small>°</small></strong></div>
       </section>
+
+      <Suspense fallback={<div className="trace-map-loading" aria-hidden="true" />}>
+        <TraceMap ariaLabel="Mapa dnia" traces={chronologicalRuns.map((run) => run.samples)} />
+      </Suspense>
 
       <section className="chart-card">
         <div className="chart-heading">

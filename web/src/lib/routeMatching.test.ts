@@ -1,6 +1,6 @@
 // Testy dopasowania zjazdu do tras (map-matching uproszczony).
-// Syntetyczna geometria tras + ślad; brak realnych danych narciarskich
-// (fixture to przejazd autem), więc weryfikacja sprzętowa zostaje manualna.
+// Syntetyczna geometria tras + ślad; weryfikacja na realnym urządzeniu
+// narciarskim pozostaje manualna (demo jest generowane).
 
 import { describe, expect, it } from "vitest";
 import { lineFeature, straightPiste } from "../../test/skiArea.ts";

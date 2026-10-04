@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Area,
@@ -28,6 +28,8 @@ import {
 } from "../lib/routeMatching.ts";
 import { QUALITY_ANALYSIS_VERSION } from "../lib/runs.ts";
 import { useChartViewport } from "../lib/useChartViewport.ts";
+
+const TraceMap = lazy(() => import("../components/TraceMap.tsx"));
 
 export default function RunView() {
   const { runId } = useParams();
@@ -198,6 +200,10 @@ export default function RunView() {
           <QualityIndicators quality={run.rawMaxQuality} />
         </section>
       )}
+
+      <Suspense fallback={<div className="trace-map-loading" aria-hidden="true" />}>
+        <TraceMap ariaLabel="Mapa zjazdu" traces={[run.samples]} />
+      </Suspense>
 
       <section className="chart-card">
         <div className="chart-heading">

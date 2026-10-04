@@ -36,7 +36,8 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - **Lista zjazdów** ze statystykami: max prędkość, dystans, max nachylenie; najnowszy zjazd jest pierwszy.
   Numeracja jest **chronologiczna** (`runNumbers`): „Zjazd 1" to pierwszy zjazd dnia, niezależnie
   od kolejności na liście. Ten sam numer pokazuje podsumowanie dnia i ekran szczegółów.
-- Kafelek **„Cały dzień”** otwiera połączone statystyki i wykresy wszystkich zjazdów tego dnia.
+- Kafelek **„Cały dzień”** otwiera połączone statystyki, wykresy i mini-mapę
+  wszystkich śladów dnia.
 - Klik w zjazd → ekran szczegółów.
 - Historia grupuje zjazdy według lokalnej strefy czasowej telefonu. Zjazd może mieć krótką,
   edytowalną nazwę; użytkownik może usunąć pojedynczy zjazd.
@@ -49,6 +50,11 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   używana też do nachylenia i cięcia zjazdów.
 - Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
   jednocześnie.
+- **Mini-mapa 2D** nad wykresami: trasy OSM z numerami, wyciągi oraz ślad GPS
+  zjazdu kolorowany prędkością (zielony → niebieski → pomarańczowy → czerwony →
+  ciemna czerwień). Kamera płaska o stałej orientacji (bez obrotu) i przycisk
+  powiększenia kafelka (240 px ↔ 75vh). W „Całym dniu” pokazuje wszystkie ślady
+  zjazdów dnia. Szczegóły: `docs/mapy-routing.md` §5.
 - Na osi X stosować czytelne, zaokrąglone przedziały dystansu: co 250 m dla tras poniżej
   2 km, co 500 m poniżej 6 km i co 1 km dla dłuższych tras; oś kończyć na rzeczywistym
   maksimum danych, żeby nie zostawiać pustej końcówki (ticki wypadają w pełnych
@@ -203,10 +209,12 @@ na nagraniach z auta defaulty wystarczą.
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
-- **Dexie.js 4** — IndexedDB, schemat v5 (surowe pliki + materializowane zjazdy +
-  etykiety/tombstone'y + trwale pominięte pliki + metadane).
+- **Dexie.js 4** — IndexedDB, schemat v6 (surowe pliki + materializowane zjazdy +
+  etykiety/tombstone'y + trwale pominięte pliki + kolejka ponowień + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
+- **MapLibre GL 6** — mapa: pełny widok (`MapView`) oraz mini-mapa śladu
+  (`TraceMap`) nad wykresami; oba w osobnych, leniwie ładowanych chunkach.
 - **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa
   z GitHub Pages.
 - **Tailwind CSS v4** — styling.

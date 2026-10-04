@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { overpassElements } from "../../test/skiArea.ts";
-import { normalizeSkiData } from "./mapData.ts";
+import { loadSkiData, normalizeSkiData } from "./mapData.ts";
 
 const data = normalizeSkiData(overpassElements(), false, "2026-01-01T00:00:00.000Z");
 
@@ -37,5 +37,23 @@ describe("normalizeSkiData", () => {
     );
     const ids = duplicated.pistes.features.map((feature) => feature.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("loadSkiData", () => {
+  it("współbieżne wywołania wykonują jedno zapytanie Overpass", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ elements: overpassElements() }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const [first, second] = await Promise.all([loadSkiData(), loadSkiData()]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(first.lines.length).toBe(second.lines.length);
+      expect(first.lines.length).toBeGreaterThan(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -284,26 +284,35 @@ async function fetchElements(): Promise<OverpassElement[]> {
   return payload.elements;
 }
 
+// Współbieżne wywołania (boot PWA i mini-mapa) dzielą jedno zapytanie Overpass.
+let inflightLoad: Promise<SkiData> | null = null;
+
 export async function loadSkiData(): Promise<SkiData> {
   const cached = readCache();
   if (cached && Date.now() - Date.parse(cached.savedAt) < MAP_DATA_TTL_MS) {
     matchingSkiData = normalizeSkiData(cached.elements, false, cached.savedAt);
     return matchingSkiData;
   }
+  if (inflightLoad) return inflightLoad;
 
-  try {
-    const elements = await fetchElements();
-    const fresh: CachedSkiData = { elements, savedAt: new Date().toISOString() };
-    writeCache(fresh);
-    matchingSkiData = normalizeSkiData(elements, false, fresh.savedAt);
-    return matchingSkiData;
-  } catch (error) {
-    if (cached) {
-      matchingSkiData = normalizeSkiData(cached.elements, true, cached.savedAt);
+  inflightLoad = (async () => {
+    try {
+      const elements = await fetchElements();
+      const fresh: CachedSkiData = { elements, savedAt: new Date().toISOString() };
+      writeCache(fresh);
+      matchingSkiData = normalizeSkiData(elements, false, fresh.savedAt);
       return matchingSkiData;
+    } catch (error) {
+      if (cached) {
+        matchingSkiData = normalizeSkiData(cached.elements, true, cached.savedAt);
+        return matchingSkiData;
+      }
+      throw error;
+    } finally {
+      inflightLoad = null;
     }
-    throw error;
-  }
+  })();
+  return inflightLoad;
 }
 
 /**

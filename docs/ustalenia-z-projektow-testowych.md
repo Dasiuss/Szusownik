@@ -177,6 +177,9 @@ Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
 - dopasowanie śladu do geometrii tras (zaimplementowane jako uproszczone
   przypisanie **zjazd → trasy** przy materializacji; patrz
   `docs/mapy-routing.md` §9). To nie jest pełny map-matching per próbka;
+- mini-mapa 2D w szczegółach zjazdu i w „Całym dniu" rysuje trasy OSM, wyciągi
+  i ślad zjazdu/dnia kolorowany prędkością (bez wyróżniania dopasowanych tras);
+  patrz `docs/mapy-routing.md` §5;
 - określenie pokrycia trasy i zaliczenia przejazdu — **nadal nie**.
 
 Nie należy udawać, że obecny routing jest już map-matchingiem. Obecny graf
