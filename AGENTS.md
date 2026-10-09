@@ -154,7 +154,14 @@ najnowszej wersji firmware i PWA. Dlatego:
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
-Port: `COM7`. FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
+Dwa urządzenia, dwie różne drogi:
+
+- **Szusownik (ESP32-S3)** — po kablu, port **`COM7`** (port szeregowy/Szusownik).
+- **HudRekaw (ESP8266 + ST7789)** — **tylko przez OTA** (WiFi, bez kabla).
+
+### Szusownik (COM7, po kablu)
+
+FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
 Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 
 1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie):
@@ -173,6 +180,45 @@ nie przetrwają do kolejnego wywołania `bash` — ale okno konsoli z `.cmd`
 zostaje (osobny proces systemowy), więc logi są widoczne dla użytkownika.
 
 Nie odwracać kolejności (monitor → upload kończy się błędem zajętego portu).
+
+### HudRekaw (tylko OTA)
+
+HudRekaw nie ma osobnego portu `COM`. Po podłączeniu do WiFi jest widoczny w
+`arduino-cli board list` jako **port sieciowy** (np. `hud-rekaw at 192.168.100.107`),
+a podgląd stanu odpowiada pod `http://<ip>/` (nagłówek `HudRekaw v1`) i pod
+`http://hud-rekaw.local/`.
+
+Warunki OTA: działająca sieć WiFi z `firmware/HudRekaw/secrets.h` (gitignored),
+hasło `OTA_PASSWORD` z tego pliku (domyślnie `hud-ota`, użytkownik `admin`) oraz
+router na kanale 1 — inaczej odbiornik traci ESP-NOW z Szusownikiem.
+
+FQBN: `esp8266:esp8266:nodemcuv2:eesz=4M1M`.
+
+Kolejność:
+
+1. Ustal adres IP: `arduino-cli board list` (albo `http://hud-rekaw.local/`).
+2. Sprawdź, że urządzenie odpowiada: `curl.exe http://<ip>/`.
+3. `arduino-cli upload` (espota):
+   ```powershell
+   arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
+   ```
+   To potrafi się wysypać po `Authenticating...OK` błędem
+   `No response from device`. Wtedy użyj kroku 4.
+4. **Niezawodnie — wgranie przez HTTP `/update`** (kompilacja do binarki + POST):
+   ```powershell
+   arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --output-dir build/hudrekaw firmware/HudRekaw
+   curl.exe -u admin:<OTA_PASSWORD> -F "firmware=@build/hudrekaw/HudRekaw.ino.bin" http://<ip>/update
+   ```
+   Sukces = `Update Success! Rebooting...`. Urządzenie restartuje się i wraca do
+   sieci po ~15–30 s — w tym czasie HTTP może nie odpowiadać.
+5. Weryfikacja: `curl.exe http://<ip>/` (nagłówek `HudRekaw v1`, świeży
+   `last packet` gdy Szusownik ma fix).
+
+Bez `secrets.h` (brak sieci) HudRekaw startuje jako SoftAP **`HudRekaw` /
+`hudrekaw`** na `192.168.4.1`, z wymuszonym kanałem 1. Po podłączeniu komputera
+do tego AP wgraj tak samo przez `http://192.168.4.1/update`.
+
+Do OTA nie jest potrzebny zamknięty monitor `COM7` — to inne urządzenie.
 
 ## Termika i monitoring (Health)
 

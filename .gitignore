@@ -9,6 +9,7 @@ web/coverage/
 *.hex
 *.elf
 *.bin
+*.map
 
 # Testy hostowe firmware (binarki budowane lokalnie)
 firmware/test/host/host_tests_szusownik.exe
