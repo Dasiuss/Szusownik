@@ -10,8 +10,12 @@ web/coverage/
 *.elf
 *.bin
 
-# Testy hostowe firmware (binarka budowana lokalnie)
-firmware/test/host/host_tests.exe
+# Testy hostowe firmware (binarki budowane lokalnie)
+firmware/test/host/host_tests_szusownik.exe
+firmware/test/host/host_tests_hudrekaw.exe
+
+# Sekrety WiFi/OTA HudRekaw (szablon: secrets.example.h)
+firmware/HudRekaw/secrets.h
 
 # System / edytory
 .DS_Store
