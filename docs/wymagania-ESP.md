@@ -203,3 +203,13 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   `MinFreeHeap`/`FreePSram`, reset reason (`esp_reset_reason()`), statystyki
   retransmisji BLE, licznik nieudanych odczytów barometru.
 - Reguły dla kolejnych sesji: `AGENTS.md` pkt 14.
+
+## 12. Link HUD (ESP-NOW)
+
+Szusownik nadaje też podgląd do osobnego odbiornika **HudRekaw** (ESP8266 + ST7789)
+przez **ESP-NOW** na stałym kanale `HUD_LINK_CHANNEL` (1), broadcast — bez
+asocjacji WiFi. Pakiet `S` (statystyki, 1 s) idzie w ruchu, `L` (pozycja + tryb,
+5 s) na postoju; tryb przełącza próg `HUD_STATS_ABOVE_KMH` (5 km/h). WiFi/ESP-NOW
+dzieli radio z BLE, więc w trakcie transferu pliku (`BleFiles::busy()`) wysyłka
+jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik:
+`docs/hud-rekaw.md`, reguła `AGENTS.md` pkt 18.

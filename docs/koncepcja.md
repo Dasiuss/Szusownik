@@ -44,6 +44,9 @@ Dwa główne elementy:
 - **Feedback dźwiękowy** przez **pasywny buzzer piezo** (tony generowane PWM).
 - **Wyświetlacz OLED 0,96" (SSD1306, I2C)** pokazuje podstawowe dane: **max prędkość
   ostatniego zjazdu** i **max prędkość dnia** (od włączenia urządzenia).
+- **Osobny ekran HudRekaw** (ESP8266 + ST7789 240×240) dostaje przez **ESP-NOW**
+  (kanał 1) pozycję i statystyki: mapę z bieżącą pozycją na postoju albo ekran
+  statystyk w ruchu (`docs/hud-rekaw.md`).
 - **Zasilanie 5 V przez USB-C z power banka** (min. 5000 mAh, tryb low-current);
   szyna 3,3 V zasila peryferia (GNSS, SD, buzzer).
 - **Montaż**: cała elektronika w jednej obudowie na kasku; zasilanie kablem USB-C
@@ -123,6 +126,7 @@ Dwa główne elementy:
                      │
                      ├─► microSD (surowe CSV)
                      ├─► OLED 0,96" (I2C)
+                     ├─► ESP-NOW ──► HudRekaw (ESP8266 + ST7789)
                      └─► BLE ──► PWA (GitHub Pages, IndexedDB)
                                     ├─► generowanie FIT
                                     └─► Supabase Edge Function ──► Strava
@@ -152,6 +156,7 @@ na konkretne zadania.
 ### Kolejność prac (aktualizacja 2026-09-11: komponenty dojechały, mock niepotrzebny)
 1. **PWA + warstwa prezentacji na rzeczywistym nagraniu z urządzenia** (punkt 2).
 2. **Firmware urządzenia** — DONE MVP1: pomiar (adaptacyjne próbkowanie), logowanie CSV,
-   buzzer, OLED, autokonfiguracja UBX; pozostał streaming BLE (etap 2).
+   buzzer, OLED, autokonfiguracja UBX oraz link ESP-NOW do HudRekaw; pozostał
+   streaming BLE (etap 2).
 3. **Integracja** urządzenie → PWA (BLE) → Supabase.
 4. **Flow Strava** (punkt 1) — na samym końcu.

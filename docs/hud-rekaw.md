@@ -33,9 +33,11 @@ ESP-NOW nie ma asocjacji — oba radia muszą być na tym samym kanale. Schemat:
 - Szusownik zawsze nadaje na **kanale `HUD_LINK_CHANNEL` (1)**, broadcast.
 - HudRekaw próbuje sieci z `secrets.h`. Gdy żadnej nie ma w zasięgu, wiąże
   radio na `HUD_LINK_CHANNEL` (`wifi_set_channel`) i co 30 s ponawia skan.
-- Gdy HudRekaw **połączy się z routerem**, przechodzi na kanał routera i traci
-  łączność z Szusownikiem (który zostaje na kanale 1). Dlatego w testach nie
-  trzymamy w zasięgu skonfigurowanego routera — HudRekaw ma zostać na kanale 1.
+- Gdy HudRekaw **połączy się z routerem**, przechodzi na kanał routera. Jeśli
+  router nie nadaje na kanale 1, traci łączność z Szusownikiem (który zostaje na
+  kanale 1). Router na kanale 1 (jak sieć testowa `Doas`) nie przeszkadza — oba
+  radia zostają na tym samym kanale. W terenie dobieramy więc sieć na kanale 1
+  albo nie trzymamy żadnej w zasięgu.
 - SoftAP `HudRekaw` / `hudrekaw` służy tylko do programowania/OTA.
 
 Sekrety (lista sieci, hasło OTA) są w `firmware/HudRekaw/secrets.h`
@@ -130,6 +132,16 @@ Cache danych i raport kierunków lądują w `scripts/data/`. Mapa jest rysowana
 środkowo na rowerzyście z projekcją „rybiego oka"; przy profilu Wrocław nie ma
 tras narciarskich, więc widok pozostaje zorientowany na północ.
 
+W repo jest zbudowany profil **Wrocław** (2818 punktów, 1156 dróg). `build-map.mjs`
+domyślnie buduje jednak profil `solden`, więc do wgrania mapy Wrocław trzeba
+jawnie podać `--profile wroclaw`.
+
+Bufor kandydatów labeli (`gLabelCandidates`) jest **statyczny** — nigdy lokalny.
+ESP8266 ma tylko 4 KB stosu zadania `loop()` (`CONT_STACKSIZE`), a tablica
+`MAP_MAX_CANDIDATES` (220 × ~20 B ≈ 4,4 KB) na stosie przepełnia go i resetuje
+urządzenie przy pierwszej ramce `L` (objaw: mapa mignie i wraca ekran statystyk,
+a podgląd pokazuje `last packet: never`).
+
 ## 6. Budowanie i wgrywanie
 
 ```powershell
@@ -141,6 +153,11 @@ arduino-cli upload -p COMx --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware
 
 # albo OTA (po WiFi, hasło z secrets.h, użytkownik admin)
 arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
+
+# UWAGA: espota bywa zawodne — po "Authenticating...OK" kończy się
+# "No response from device". Niezawodnie działa wgranie przez HTTP /update:
+arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --output-dir build/hudrekaw firmware/HudRekaw
+curl -u admin:<OTA_PASSWORD> -F "firmware=@build/hudrekaw/HudRekaw.ino.bin" http://<ip>/update
 ```
 
 Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,

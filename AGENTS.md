@@ -147,7 +147,10 @@ najnowszej wersji firmware i PWA. Dlatego:
     identyczny `hud_protocol.h` do obu firmware; pilnuje tego
     `web/src/lib/hudProtocol.test.ts`). Odbiornik (ESP8266 + ST7789) mieszka w
     `firmware/HudRekaw/` i jest rozwiązaniem docelowym — nie rozwijamy już
-    projektu testowego DisplayTest. Szczegóły: `docs/hud-rekaw.md`.
+    projektu testowego DisplayTest. Bufor kandydatów labeli mapy w odbiorniku
+    (`gLabelCandidates`) jest **statyczny, nigdy lokalny**: ESP8266 ma 4 KB
+    stosu `loop()`, a ~4,4 KB tablica na stosie resetuje urządzenie przy
+    pierwszej ramce `L`. Szczegóły: `docs/hud-rekaw.md`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
