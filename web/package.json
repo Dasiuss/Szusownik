@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "gen:protocol": "node ../scripts/gen-protocol.mjs",
+    "gen:hud-protocol": "node ../scripts/gen-hud-protocol.mjs",
     "gen:demo": "node ../scripts/gen-demo-ride.mjs"
   },
   "dependencies": {

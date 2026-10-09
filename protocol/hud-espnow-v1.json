@@ -1,0 +1,29 @@
+{
+  "$comment": "SSOT protokołu ESP-NOW między Szusownikiem (nadajnik) a HudRekaw (odbiornik, wire-proto szusownik/hud-espnow-v1). Ten plik jest jedynym źródłem prawdy dla obu firmware. Zmieniasz TU, potem uruchamiasz: node scripts/gen-hud-protocol.mjs (generuje firmware/Szusownik/src/config/hud_protocol.h i firmware/HudRekaw/src/config/hud_protocol.h). Test web/src/lib/hudProtocol.test.ts pilnuje, że wygenerowane pliki są aktualne.",
+  "numbers": {
+    "HUD_PKT_TELEMETRY_SIZE": 13,
+    "HUD_PKT_LOCATION_SIZE": 16,
+    "HUD_LINK_CHANNEL": 1,
+    "HUD_SEND_TELEMETRY_MS": 1000,
+    "HUD_SEND_LOCATION_MS": 5000,
+    "HUD_LOCATION_ZOOM": 1,
+    "HUD_FISHEYE": 220,
+    "HUD_FISHEYE_MIN": 100,
+    "HUD_FISHEYE_MAX": 500,
+    "HUD_TOT_SCALE": 10,
+    "HUD_MODE_STATS": 0,
+    "HUD_MODE_MAP": 1,
+    "HUD_ANGLE_MIN": -359,
+    "HUD_ANGLE_MAX": 359
+  },
+  "floats": {
+    "HUD_STATS_ABOVE_KMH": 5
+  },
+  "strings": {
+    "HUD_WIRE_PROTO": "szusownik/hud-espnow-v1"
+  },
+  "chars": {
+    "HUD_PKT_TELEMETRY": "S",
+    "HUD_PKT_LOCATION": "L"
+  }
+}
