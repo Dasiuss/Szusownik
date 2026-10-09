@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { accelerationKmhPerS } from "./chartSeries.ts";
 import { parseDeviceCsv } from "./csv.ts";
 import { normalizeSkiData } from "./mapData.ts";
 import { matchRunRoutes } from "./routeMatching.ts";
@@ -74,5 +75,13 @@ describe("demo fixture", () => {
     expect(runs.some((run) => run.confirmedMaxSpeed !== null)).toBe(true);
     const best = Math.max(...runs.map((run) => run.confirmedMaxSpeed ?? 0));
     expect(best).toBeGreaterThan(70);
+  });
+
+  it("ma ciągły profil prędkości — bez sztucznych skoków rozdmuchujących przyspieszenie", () => {
+    // Regresja: generator miał nieciągłości na granicach faz zjazdu
+    // (progress 0,1 i 0,9), które dawały pik przyspieszenia dziesiątki km/h/s.
+    const accel = accelerationKmhPerS(enrich(samples));
+    const maxAbs = Math.max(...accel.map((value) => (value === null ? 0 : Math.abs(value))));
+    expect(maxAbs).toBeLessThan(8);
   });
 });

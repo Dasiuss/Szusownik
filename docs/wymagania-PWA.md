@@ -48,17 +48,37 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   ołówek tuż za tekstem) zamienia go w kompaktowe pole z jawnym zapisem (check/Enter)
   i anulowaniem (x/Esc). Bez osobnego przycisku „Zmień nazwę". Pusta nazwa czyści
   etykietę i wraca do „Zjazd N".
-- Wykresy w funkcji **dystansu** (nie czasu): **prędkość** i **zmierzona wysokość**.
+- Wykresy w funkcji **dystansu** (nie czasu): **prędkość**, **zmierzona wysokość**
+  i **przyspieszenie** na wspólnej osi dystansu.
 - Wykres wysokości pokazuje wygładzoną wysokość w metrach, dzięki czemu spadki wysokości
   wizualnie odpowiadają zjazdom stoku. Wysokość to **fuzja barometru i GPS** (patrz §6),
   używana też do nachylenia i cięcia zjazdów.
-- Wykresy **osobne, jeden pod drugim** (wspólna oś dystansu), aby dało się je ogarniać
-  jednocześnie.
+- **Przyspieszenie** to zmiana prędkości wzdłużnej na sekundę (`ΔspeedSm/Δt`) w
+  **km/h na sekundę**, liczone z wygładzonej prędkości (MA3) i dodatkowo wygładzone
+  ruchomą średnią; przy niedodatnim odstępie czasu lub zbyt dużej luce linia się
+  przerywa (brak zmyślonego punktu). Oś jest **symetryczna wokół zera z minimalnym
+  zakresem**, więc szum GPS nie rozdmuchuje skali. W widoku dnia liczone jest
+  **osobno per zjazd**, żeby na styku zjazdów nie powstał sztuczny skok.
+- Wykresy mają **dwa przełączalne tryby** (przełącznik w nagłówku sekcji; wybór
+  zapamiętany globalnie w `localStorage`, wspólny dla zjazdu i dnia):
+  - **połączony** (domyślny) — jedna scena, trzy osie: prędkość (lewa, 0-based,
+    czerwone pasmo 100–150 km/h), wysokość i przyspieszenie (prawe, każda własna skala);
+  - **osobny** — trzy wykresy jeden pod drugim (po jednej serii), ze wspólną osią X
+    (jeden zoom/pan) i **zsynchronizowanym kursorem**: wskazanie dystansu rysuje
+    pionową linię na wszystkich trzech i pokazuje tooltip każdego wykresu w tym samym
+    dystansie.
+- **Klikalna legenda** włącza/wyłącza serie: w trybie połączonym znika seria i jej
+  oś Y, w osobym — cały wiersz wykresu.
 - **Mini-mapa 2D** nad wykresami: trasy OSM z numerami, wyciągi oraz ślad GPS
   zjazdu kolorowany prędkością (zielony → niebieski → pomarańczowy → czerwony →
   ciemna czerwień). Kamera płaska o stałej orientacji (bez obrotu) i przycisk
   powiększenia kafelka (240 px ↔ 75vh). W „Całym dniu” pokazuje wszystkie ślady
   zjazdów dnia. Szczegóły: `docs/mapy-routing.md` §5.
+- **Wskazanie próbki na wykresie pokazuje jej punkt na mini-mapie** (HTML Marker):
+  na desktopie najechanie myszą, na dotyku pojedynczy tap (poziomy drag nadal
+  przesuwa wykres, podwójny tap resetuje zoom). Kropka znika po opuszczeniu
+  wykresu, mapa się nie centruje; kursor (pionowa linia) i tooltip są
+  zsynchronizowane z kropką.
 - Na osi X stosować czytelne, zaokrąglone przedziały dystansu: co 250 m dla tras poniżej
   2 km, co 500 m poniżej 6 km i co 1 km dla dłuższych tras; oś kończyć na rzeczywistym
   maksimum danych, żeby nie zostawiać pustej końcówki (ticki wypadają w pełnych

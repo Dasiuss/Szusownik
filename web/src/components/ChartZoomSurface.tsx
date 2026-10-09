@@ -6,6 +6,8 @@ interface ChartZoomSurfaceProps {
   dataMaxKm: number;
   onDomainChange: (next: DistanceDomain) => void;
   onReset: () => void;
+  /** Pojedynczy tap (dotyk) — frakcja 0..1 szerokości, do wskazania próbki. */
+  onTap?: (xFraction: number) => void;
   className?: string;
   children: ReactNode;
 }
@@ -43,6 +45,7 @@ export function ChartZoomSurface({
   dataMaxKm,
   onDomainChange,
   onReset,
+  onTap,
   className,
   children,
 }: ChartZoomSurfaceProps) {
@@ -51,6 +54,7 @@ export function ChartZoomSurface({
   const dataMaxRef = useRef(dataMaxKm);
   const onChangeRef = useRef(onDomainChange);
   const onResetRef = useRef(onReset);
+  const onTapRef = useRef(onTap);
   const pointersRef = useRef(new Map<number, PointerState>());
   const pinchRef = useRef<PinchState | null>(null);
   const suppressPanRef = useRef(false);
@@ -60,6 +64,7 @@ export function ChartZoomSurface({
   dataMaxRef.current = dataMaxKm;
   onChangeRef.current = onDomainChange;
   onResetRef.current = onReset;
+  onTapRef.current = onTap;
 
   useEffect(() => {
     const element = ref.current;
@@ -170,6 +175,17 @@ export function ChartZoomSurface({
           suppressPanRef.current = true;
           onResetRef.current();
         } else {
+          if (onTapRef.current) {
+            const width = widthOf();
+            if (width > 0) {
+              const fraction = clamp(
+                (event.clientX - element.getBoundingClientRect().left) / width,
+                0,
+                1,
+              );
+              onTapRef.current(fraction);
+            }
+          }
           lastTapRef.current = { time: now, x: event.clientX, y: event.clientY };
         }
       }

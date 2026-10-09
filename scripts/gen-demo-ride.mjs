@@ -94,13 +94,28 @@ function samplingHz(speedKmh) {
   return 0.5;
 }
 
+function cruiseSpeed(progress, vmax, phase) {
+  return vmax * (0.9 + 0.1 * Math.sin(progress * Math.PI * 3 + phase));
+}
+
 function descentSpeed(progress, vmax, phase) {
-  const accelEnd = 0.1;
-  const slowStart = 0.9;
+  const accelEnd = 0.12;
+  const slowStart = 0.88;
+  const cruise = cruiseSpeed(progress, vmax, phase);
   let speed;
-  if (progress < accelEnd) speed = 20 + (vmax - 20) * smoothstep(progress / accelEnd);
-  else if (progress > slowStart) speed = vmax * (1 - 0.78 * smoothstep((progress - slowStart) / (1 - slowStart)));
-  else speed = vmax * (0.9 + 0.1 * Math.sin(progress * Math.PI * 3 + phase));
+  if (progress < accelEnd) {
+    // Rozpędzanie: płynnie schodzimy od startu do krzywej przelotowej, więc na
+    // granicy faz prędkość jest ciągła (dawniej skok do vmax dawał pik
+    // przyspieszenia).
+    const t = smoothstep(progress / accelEnd);
+    speed = 20 + (cruise - 20) * t;
+  } else if (progress > slowStart) {
+    // Wyhamowanie: również płynnie od krzywej przelotowej w dół.
+    const t = smoothstep((progress - slowStart) / (1 - slowStart));
+    speed = cruise * (1 - 0.75 * t);
+  } else {
+    speed = cruise;
+  }
   return Math.max(12, speed);
 }
 

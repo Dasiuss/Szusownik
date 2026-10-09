@@ -1,9 +1,11 @@
-export type IconName = "activity" | "archive" | "bluetooth" | "chevron" | "collapse" | "curve" | "download" | "expand" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
+export type IconName = "activity" | "archive" | "bluetooth" | "chart-combined" | "chart-rows" | "chevron" | "collapse" | "curve" | "download" | "expand" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
 
 const paths: Record<IconName, string> = {
   activity: "M3 12h4l2-7 4 14 2-7h6",
   archive: "M4 7h16v13H4z M3 4h18v3H3z M9 11h6",
   bluetooth: "M12 3v18l5-5-10-8 10-8-5-5 M7 8l10 8",
+  "chart-combined": "M4 4v16h16M5 16l4-6 4 4 6-9",
+  "chart-rows": "M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4z",
   chevron: "m9 18 6-6-6-6",
   collapse: "M4 14h6v6M20 10h-6V4M21 3l-7 7M3 21l7-7",
   curve: "M3 18Q12 3 21 18",

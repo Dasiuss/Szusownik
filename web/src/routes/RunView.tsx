@@ -1,20 +1,10 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceArea,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { ChartZoomSurface } from "../components/ChartZoomSurface.tsx";
+import { ProfileCharts } from "../components/ProfileCharts.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { QualityIndicators } from "../components/QualityIndicators.tsx";
-import { getDistanceAxis, getDistanceAxisForDomain } from "../lib/chart.ts";
+import { getDistanceAxis } from "../lib/chart.ts";
+import { buildRunProfile } from "../lib/chartSeries.ts";
 import { deleteRun, formatClock, formatDayLabel, formatDistance, formatDuration, getAllRuns, getRunsForDay, renameRun, runNumbers } from "../lib/data.ts";
 import { db, type StoredRun } from "../lib/db.ts";
 import { DIFFICULTY_COLORS } from "../lib/mapData.ts";
@@ -41,6 +31,7 @@ export default function RunView() {
   const [loading, setLoading] = useState(true);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState("");
+  const [highlight, setHighlight] = useState<{ lat: number; lon: number } | null>(null);
   const decodedRunId = runId ? decodeURIComponent(runId) : undefined;
 
   useEffect(() => {
@@ -103,23 +94,19 @@ export default function RunView() {
     navigate(`/dzien/${run.dayKey}`, { replace: true });
   }
 
-  const chartData = useMemo(() => {
-    if (!run || run.samples.length === 0) return [];
-    const firstDistance = run.samples[0]?.cumDistM ?? 0;
-    return run.samples.map((sample) => ({
-      d: (sample.cumDistM - firstDistance) / 1000,
-      v: Math.round(sample.speedSm * 10) / 10,
-      h: Math.round(sample.altSm * 10) / 10,
-    }));
-  }, [run]);
+  const chartData = useMemo(() => (run ? buildRunProfile(run) : []), [run]);
 
   const dataMaxKm = chartData.length > 0 ? chartData[chartData.length - 1].d : 0;
   const axisMaxKm = getDistanceAxis(dataMaxKm).domain[1];
   const { domain, apply, reset } = useChartViewport(axisMaxKm);
-  const distanceAxis = useMemo(
-    () => getDistanceAxisForDomain(domain[0], domain[1]),
-    [domain],
-  );
+
+  const handleHighlight = useCallback((point: { lat: number; lon: number } | null) => {
+    setHighlight((current) => {
+      if (!point) return current === null ? current : null;
+      if (current && current.lat === point.lat && current.lon === point.lon) return current;
+      return point;
+    });
+  }, []);
 
   if (loading) return <div className="loading-card"><span className="spinner" /> Wczytuję zjazd…</div>;
 
@@ -134,8 +121,7 @@ export default function RunView() {
     );
   }
 
-  const yMax = run.rawMaxSpeed > 100 ? 150 : 100;
-  const altitudeDomain = getAltitudeDomain(chartData);
+  const speedMaxKmh = run.rawMaxSpeed > 100 ? 150 : 100;
 
   return (
     <div className="page-stack detail-page">
@@ -207,47 +193,20 @@ export default function RunView() {
       )}
 
       <Suspense fallback={<div className="trace-map-loading" aria-hidden="true" />}>
-        <TraceMap ariaLabel="Mapa zjazdu" traces={[run.samples]} />
+        <TraceMap ariaLabel="Mapa zjazdu" highlight={highlight} traces={[run.samples]} />
       </Suspense>
 
-      <section className="chart-card">
-        <div className="chart-heading">
-          <div><span className="eyebrow">Profil prędkości</span><h2>Gdzie pojechałeś najszybciej?</h2></div>
-          <span className="chart-legend legend-speed"><i /> prędkość</span>
-        </div>
-        <ChartZoomSurface className="chart-wrap" dataMaxKm={axisMaxKm} domain={domain} onDomainChange={apply} onReset={reset}>
-          <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
-              <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis allowDataOverflow axisLine={false} dataKey="d" domain={domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
-              <YAxis axisLine={false} domain={[0, yMax]} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
-              <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
-              {yMax > 100 && <ReferenceArea fill="#f5a276" fillOpacity={0.2} y1={100} y2={150} />}
-              <Line dataKey="v" dot={false} isAnimationActive={false} stroke="#ee6b4a" strokeWidth={2.5} type="monotone" />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </ChartZoomSurface>
-        <div className="chart-axis-label">Dystans [km]</div>
-      </section>
-
-      <section className="chart-card">
-        <div className="chart-heading">
-          <div><span className="eyebrow">Profil wysokości</span><h2>Wysokość na trasie</h2></div>
-          <span className="chart-legend legend-altitude"><i /> wysokość</span>
-        </div>
-        <ChartZoomSurface className="chart-wrap" dataMaxKm={axisMaxKm} domain={domain} onDomainChange={apply} onReset={reset}>
-          <ResponsiveContainer height="100%" width="100%">
-            <ComposedChart data={chartData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
-              <CartesianGrid stroke="#dbe5e8" strokeDasharray="3 3" />
-              <XAxis allowDataOverflow axisLine={false} dataKey="d" domain={domain} interval="preserveStartEnd" minTickGap={18} tick={{ fill: "#71858a", fontSize: 11 }} tickFormatter={formatDistanceTick} tickLine={false} ticks={distanceAxis.ticks} type="number" />
-              <YAxis axisLine={false} domain={altitudeDomain} tick={{ fill: "#71858a", fontSize: 11 }} tickLine={false} tickMargin={4} width={48} />
-              <Tooltip animationDuration={80} contentStyle={{ background: "#17363b", border: 0, borderRadius: 10, color: "#fff" }} labelFormatter={(value) => `${Number(value).toFixed(2)} km`} offset={24} />
-              <Area dataKey="h" fill="#78b99b" fillOpacity={0.28} isAnimationActive={false} stroke="#358866" strokeWidth={2} type="monotone" />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </ChartZoomSurface>
-        <div className="chart-axis-label">Dystans [km] · wysokość [m]</div>
-      </section>
+      <ProfileCharts
+        axisMaxKm={axisMaxKm}
+        data={chartData}
+        domain={domain}
+        eyebrow="Profil zjazdu"
+        onDomainChange={apply}
+        onHighlight={handleHighlight}
+        onReset={reset}
+        speedMaxKmh={speedMaxKmh}
+        title="Prędkość, wysokość i przyspieszenie"
+      />
 
       {sequence.length > 0 && (
         <section className="prev-section" aria-label="Poprzednie przejazdy">
@@ -392,16 +351,4 @@ function rideWord(count: number): string {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function formatDistanceTick(value: number): string {
-  return Number(value.toFixed(2)).toString();
-}
-
-function getAltitudeDomain(data: Array<{ h: number }>): [number, number] {
-  const values = data.map((point) => point.h);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const padding = Math.max((max - min) * 0.12, 1);
-  return [Math.floor((min - padding) * 10) / 10, Math.ceil((max + padding) * 10) / 10];
 }

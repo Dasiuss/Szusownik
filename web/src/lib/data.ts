@@ -16,7 +16,7 @@ import {
 export { localDayKey, runNumbers };
 
 export const DEMO_SOURCE_FILE = "demo-ride.csv";
-const DEMO_SEEDED_KEY = "demo-seeded-v5";
+const DEMO_SEEDED_KEY = "demo-seeded-v6";
 const MATERIALIZED_KEY = "materialized-v1";
 const MATCHING_OSM_KEY = "matching-osm-v1";
 /** Wersja logiki dopasowania tras; podbicie wymusza ponowną materializację. */

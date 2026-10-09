@@ -5,7 +5,7 @@
 // bundla (współdzieli chunk z pełnym widokiem mapy). Kamera jest płaska (2D,
 // bez terenu) z włączonym obrotem, jak w dużej mapie.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -148,16 +148,35 @@ function applyTrace(map: maplibregl.Map, traces: TracePoint[][]): void {
 
 interface TraceMapProps {
   traces: TracePoint[][];
+  /** Punkt wskazany na wykresie — kropka na mapie; null/brak = bez kropki. */
+  highlight?: { lat: number; lon: number } | null;
   ariaLabel?: string;
 }
 
-export default function TraceMap({ traces, ariaLabel = "Mapa śladu" }: TraceMapProps) {
+export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" }: TraceMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedRef = useRef(false);
   const tracesRef = useRef(traces);
   tracesRef.current = traces;
+  const highlightRef = useRef(highlight ?? null);
+  highlightRef.current = highlight ?? null;
+  const markerRef = useRef<maplibregl.Marker | null>(null);
   const [expanded, setExpanded] = useState(false);
+
+  const setMarker = useCallback((map: maplibregl.Map, point: { lat: number; lon: number } | null): void => {
+    if (!point) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+    if (!markerRef.current) {
+      const element = document.createElement("div");
+      element.className = "trace-highlight-marker";
+      markerRef.current = new maplibregl.Marker({ element, anchor: "center" });
+    }
+    markerRef.current.setLngLat([point.lon, point.lat]).addTo(map);
+  }, []);
 
   const [skiData, setSkiData] = useState<SkiData | null>(
     () => getSkiDataForMatching() ?? loadCachedSkiData(),
@@ -204,13 +223,15 @@ export default function TraceMap({ traces, ariaLabel = "Mapa śladu" }: TraceMap
       loadedRef.current = true;
       applySkiData(map, skiRef.current);
       applyTrace(map, tracesRef.current);
+      setMarker(map, highlightRef.current);
     });
     return () => {
       loadedRef.current = false;
+      markerRef.current = null;
       mapRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [setMarker]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -223,6 +244,12 @@ export default function TraceMap({ traces, ariaLabel = "Mapa śladu" }: TraceMap
     if (!map || !loadedRef.current) return;
     applyTrace(map, traces);
   }, [traces]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    setMarker(map, highlight ?? null);
+  }, [highlight, setMarker]);
 
   // Zmiana rozmiaru kafelka: przelicz canvas i dopasuj widok do śladu.
   useEffect(() => {

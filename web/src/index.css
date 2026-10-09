@@ -186,12 +186,23 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 @keyframes trace-map-pulse { from { background-position: 0% 0; } to { background-position: -200% 0; } }
 .chart-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 0 4px; }
 .chart-heading h2 { font-size: 16px; }
-.chart-legend { display: inline-flex; align-items: center; gap: 5px; color: #82979a; font-size: 10px; white-space: nowrap; }
-.chart-legend i { width: 7px; height: 7px; border-radius: 50%; background: #ed7657; }
-.legend-altitude i { background: #358866; }
 .chart-wrap { position: relative; height: 220px; margin-top: 12px; touch-action: pan-y; overscroll-behavior: contain; cursor: grab; user-select: none; -webkit-user-select: none; }
 .chart-wrap:active { cursor: grabbing; }
 .chart-axis-label { padding: 2px 48px 0; color: #9aabab; font-size: 9px; text-align: right; }
+.chart-mode-toggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid #dbe9e6; border-radius: 10px; background: #f2f7f5; }
+.chart-mode-button { display: flex; align-items: center; justify-content: center; width: 30px; height: 28px; padding: 0; border: 0; border-radius: 8px; color: #7d9295; background: transparent; cursor: pointer; }
+.chart-mode-button.is-active { color: #17363b; background: #fff; box-shadow: 0 2px 6px #2b646322; }
+.chart-legend-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 0 4px; }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border: 1px solid #e2ece9; border-radius: 999px; color: #5f7a7d; background: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
+.chart-legend-item i { width: 8px; height: 8px; border-radius: 50%; background: #ed7657; }
+.chart-legend-item.is-off { opacity: .45; text-decoration: line-through; }
+.legend-speed i { background: #ee6b4a; }
+.legend-altitude i { background: #358866; }
+.legend-accel i { background: #8b5cf6; }
+.chart-wrap-stack { height: auto; }
+.chart-stack { display: flex; flex-direction: column; gap: 4px; }
+.chart-subwrap { height: 150px; }
+.trace-highlight-marker { width: 16px; height: 16px; border-radius: 50%; background: #ee6b4a; border: 3px solid #fff; box-shadow: 0 0 0 2px #17363b55, 0 3px 8px #00000055; }
 .run-segments-card { padding: 15px 13px 13px; border: 1px solid #dbe9e6; border-radius: 21px; background: #fff; box-shadow: 0 10px 25px #2b64630c; }
 .run-segments-heading h2 { margin-top: 3px; font-size: 15px; }
 .run-segments-scroll { overflow-x: auto; margin-top: 12px; padding-bottom: 3px; }
