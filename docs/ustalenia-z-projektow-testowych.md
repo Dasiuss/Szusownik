@@ -232,6 +232,10 @@ opisany w `docs/ble-transfer.md` §10 i zaimplementowany po obu stronach.
 Nie mieszać charakterystyki `DisplayTest` z transportem plików bez formalnego
 kontraktu (małe pakiety HUD — roadmapa).
 
+Osobne urządzenie z ekranem (HudRekaw) nie używa BLE do podglądu: Szusownik
+nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, broadcast).
+Protokół `S`/`L` i reguła trybu wg prędkości są w `docs/hud-rekaw.md`.
+
 ## 6. Wersjonowanie i cache
 
 Z `BleTest` należy zachować rozdzielenie:

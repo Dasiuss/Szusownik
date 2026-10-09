@@ -17,7 +17,7 @@ Automatyzacja pokrywa wszystko poniżej tego progu.
 | Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y |
 | Kontrakt | `web/src/lib/protocol.test.ts` | Vitest | zgodność wygenerowanego protokołu z `protocol/ble-file-v1.json` |
 | E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, mapa i mini-mapa śladu (mock Overpass) |
-| Host firmware | `firmware/test/host/test_*.cpp` | Catch2 + g++ | czysta logika `firmware/Szusownik/src/core/` + CRC32 z goldenem z urządzenia |
+| Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/` + CRC32 z goldenem z urządzenia |
 
 ## PWA — komendy (katalog `web/`)
 
@@ -42,12 +42,15 @@ winget install BrechtSanders.WinLibs.POSIX.UCRT
 powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1
 ```
 
-Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/`
-(bez `Arduino.h`): pasma GNSS, bufor listy, rotacja pliku, format linii CSV,
-wzorce buzzera, progi termiczne. `src/` deleguje do `core/`, a testy hostowe
-linkują tylko `core/` + `src/ble/crc32.h`. Test CRC32 porównuje realne nagranie
-`test data/20260926_181420.csv` z goldenem z urządzenia (`crc=CF1B7DB8`,
-`raw=216651`).
+Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
+`firmware/HudRekaw/src/core/` (bez `Arduino.h`): pasma GNSS, bufor listy, rotacja
+pliku, format linii CSV, wzorce buzzera, progi termiczne, kodowanie pakietów
+ESP-NOW HUD; a po stronie odbiorcy dekodowanie pakietów, matematyka mapy
+(projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
+testy hostowe linkują tylko `core/` + `src/ble/crc32.h`. `run.ps1` buduje dwa
+binaria (`host_tests_szusownik`, `host_tests_hudrekaw`). Test CRC32 porównuje
+realne nagranie `test data/20260926_181420.csv` z goldenem z urządzenia
+(`crc=CF1B7DB8`, `raw=216651`).
 
 Kompilacja firmware nadal przez `arduino-cli` (sketch `firmware/Szusownik`);
 `firmware/test/host/` nie jest częścią sketcha, więc nie trafia do builda.
@@ -62,8 +65,17 @@ ustawień, nagłówek CSV). Generator tworzy `web/src/lib/protocol.ts` i
 node scripts/gen-protocol.mjs      # albo: npm run gen:protocol (w web/)
 ```
 
-Nie edytuj wygenerowanych plików ręcznie. `web/src/lib/protocol.test.ts`
-regeneruje je w pamięci i porównuje z zawartością na dysku — rozjazd wywala test.
+Protokół ESP-NOW HUD ma osobny SSOT `protocol/hud-espnow-v1.json` i generator
+`scripts/gen-hud-protocol.mjs`, który tworzy identyczny nagłówek do obu firmware
+(`Szusownik/src/config/hud_protocol.h` i `HudRekaw/src/config/hud_protocol.h`):
+
+```powershell
+node scripts/gen-hud-protocol.mjs  # albo: npm run gen:hud-protocol (w web/)
+```
+
+Nie edytuj wygenerowanych plików ręcznie. `web/src/lib/protocol.test.ts` i
+`web/src/lib/hudProtocol.test.ts` regenerują je w pamięci i porównują z
+zawartością na dysku — rozjazd wywala test.
 
 ## Dane testowe
 

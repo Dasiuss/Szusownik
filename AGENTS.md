@@ -30,6 +30,8 @@ najnowszej wersji firmware i PWA. Dlatego:
   okna ramek, ACK/NACK i zapisu po stronie PWA.
 - `docs/hud-display.md` - OLED, layout, animacja trasy, pakiety bitmap i zasady
   synchronizacji firmware z podglądem PWA.
+- `docs/hud-rekaw.md` - odbiornik HudRekaw (ESP8266 + ST7789), link ESP-NOW
+  z Szusownikiem, protokół `S`/`L` i generator mapy.
 - `docs/mapy-routing.md` - źródła danych mapowych, warstwy MapLibre, graf tras,
   routing, koszt leksykograficzny i cache.
 - `docs/koncepcja.md` - wizja produktu i zakres funkcjonalny.
@@ -133,6 +135,19 @@ najnowszej wersji firmware i PWA. Dlatego:
       commicie. Zanim uzna zmianę za nietestowalną, próbuje wydzielić czystą
       logikę do `core/` albo czystych helperów, żeby dała się pokryć.
     - Testy sprzętowe zostają manualne (`docs/testy.md`).
+
+18. Link HUD Szusownik -> HudRekaw działa po **ESP-NOW** (kanał `HUD_LINK_CHANNEL`
+    = 1, broadcast). Tryb odbiornika zależy od prędkości: `> 5 km/h` (próg
+    `HUD_STATS_ABOVE_KMH`) -> statystyki, inaczej mapa. Wysyłka jest zależna od
+    trybu: statystyki -> tylko `S` co 1 s, mapa -> tylko `L` co 5 s; **zmiana
+    trybu wysyła natychmiast jeden `L`** (tylko `L` niesie `mode`). TOT w `S`
+    jest w **0,1 km** (`km × HUD_TOT_SCALE`). Transfer BLE ma priorytet: gdy
+    `BleFiles::busy()`, wysyłka ESP-NOW jest wstrzymana. SSOT protokołu:
+    `protocol/hud-espnow-v1.json` + `scripts/gen-hud-protocol.mjs` (generuje
+    identyczny `hud_protocol.h` do obu firmware; pilnuje tego
+    `web/src/lib/hudProtocol.test.ts`). Odbiornik (ESP8266 + ST7789) mieszka w
+    `firmware/HudRekaw/` i jest rozwiązaniem docelowym — nie rozwijamy już
+    projektu testowego DisplayTest. Szczegóły: `docs/hud-rekaw.md`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

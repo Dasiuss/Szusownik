@@ -174,6 +174,9 @@ podgląd niezależny, albo dodać synchronizację fazy.
 > i pakiety poniżej to materiał referencyjny z testu. Zdalny podgląd/sterowanie
 > HUD przez BLE — roadmapa (protokół małych pakietów do zaprojektowania
 > wg `docs/ustalenia-z-projektow-testowych.md` §5).
+>
+> Osobny ekran (HudRekaw) nie używa BLE — dostaje pozycję i statystyki przez
+> ESP-NOW; patrz `docs/hud-rekaw.md`.
 
 Service:
 

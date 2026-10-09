@@ -1,6 +1,15 @@
-# firmware/ — kod urządzenia
+# firmware/ — kod urządzeń
 
-Firmware dla ESP32-S3 (arduino-cli / Arduino, C++).
+Dwa firmware (arduino-cli / Arduino, C++):
+
+- `Szusownik/` — ESP32-S3: GNSS, zapis CSV na microSD, buzzer, OLED, BLE, oraz
+  nadajnik ESP-NOW do HudRekaw.
+- `HudRekaw/` — ESP8266 + ST7789 240×240: odbiornik ESP-NOW, mapa z pozycją i
+  ekran statystyk. Szczegóły: `docs/hud-rekaw.md`.
+
+Wspólny protokół ESP-NOW jest generowany z `protocol/hud-espnow-v1.json` do
+`Szusownik/src/config/hud_protocol.h` i `HudRekaw/src/config/hud_protocol.h`
+(`node scripts/gen-hud-protocol.mjs`).
 
 Moduły (`firmware/Szusownik/src/`):
 
@@ -104,4 +113,28 @@ Struktura: `Szusownik.ino` + `src/config/` (piny, stałe, UUID BLE v1),
 `src/audio/` (buzzer, sygnał co 1 s), `src/hud/` (OLED: SPD/MAX/TOTAL),
 `src/baro/` (BME280: wysokość barometryczna),
 `src/health/` (termika SoC: alarm + deep sleep),
+`src/link/` (nadajnik ESP-NOW do HudRekaw),
 `src/ble/` (INFO/CTRL/DATA/STATUS; streaming ramek 244 B + miniz — etap 2).
+
+## HudRekaw (ESP8266 + ST7789) — odbiornik HUD
+
+Osobne urządzenie: odbiera ESP-NOW od Szusownika i rysuje mapę z pozycją
+(postój/wolno) albo statystyki (w ruchu). Nie zapisuje danych.
+
+Moduły (`firmware/HudRekaw/src/`):
+
+- `config/` — piny, kolory, stałe, `hud_protocol.h` (generowany z `protocol/`).
+- `core/` — czysta logika (dekodowanie pakietów, matematyka mapy, format TOT),
+  pokryta testami hostowymi.
+- `display/` — ST7789: layout statystyk (przyrostowo) i rysowanie mapy.
+- `link/` — hybryda WiFi + odbiór ESP-NOW (`firmware/HudRekaw/secrets.h`).
+- `web/` — HTTP (podgląd stanu), ArduinoOTA, `/update`.
+- `map/map_data.h` — wygenerowana mapa (`scripts/build-map.mjs`).
+
+```powershell
+arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
+arduino-cli upload -p COMx --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
+```
+
+Pełny opis (pinout, protokół ESP-NOW, kanał 1, OTA, generator mapy):
+`docs/hud-rekaw.md`.
