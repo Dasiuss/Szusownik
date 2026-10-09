@@ -12,6 +12,11 @@
 
 namespace {
 
+// Bufor kandydatów labeli MUSI być statyczny. ESP8266 ma 4 KB stosu zadania
+// loop(); tablica ~220 x 20 B (~4,4 KB) na stosie przepełnia go i resetuje
+// urządzenie przy pierwszej ramce `L`. Tak samo trzymał ją odbiornik DisplayTest.
+MapLabelBox gLabelCandidates[MAP_MAX_CANDIDATES];
+
 void copyLabelText(char* buffer, uint8_t bufferSize, uint16_t offset, uint8_t length) {
   uint8_t count = length;
   if (count > bufferSize - 1) count = bufferSize - 1;
@@ -89,7 +94,7 @@ void Display::drawMapPolyline(uint16_t firstPoint, uint16_t pointCount, uint16_t
 
 void Display::drawMapLabels(float riderEast, float riderNorth, float cosBearing, float sinBearing,
                             float fisheyeK, uint16_t fisheyeRadius) {
-  MapLabelBox candidates[MAP_MAX_CANDIDATES];
+  MapLabelBox* const candidates = gLabelCandidates;
   uint16_t count = 0;
 
   const auto addCandidate = [&](uint16_t nameOffset, uint8_t nameLength, uint8_t textSize,
