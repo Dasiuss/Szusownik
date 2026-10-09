@@ -17,7 +17,9 @@ Moduły (`firmware/Szusownik/src/`):
 - `gnss/` — pomiar (NEO-M8N, NMEA, autokonfiguracja UBX, adaptacyjne próbkowanie).
 - `storage/` — zapis surowego CSV na microSD, rotacja, FIFO, odczyt do BLE.
 - `audio/` — buzzer piezo (LEDC, próg pikania 60..120 km/h, głośność adaptacyjna 60→120 km/h, NVS, SETVOL/SETFREQ/SETTIMING/SETMINBEEP z PWA).
-- `hud/` — OLED (SPD/MAX/TOTAL, bez REM/mapy/animacji w MVP1).
+- `hud/` — OLED 128x64: jeden ekran statystyk (max zjazdu jako hero, max dnia,
+  dystans, wysokość z fuzji baro+GPS, czas lokalny; linia trasy zarezerwowana).
+  Detekcja zjazdu w `core/run_tracker` (port ZigZag z PWA), format w `core/hud_format`.
 - `baro/` — barometr BME280/BMP280 (I2C, wspólna magistrala z OLED), wysokość barometryczna.
 - `ble/` — transfer BLE v1 (INFO/CTRL/DATA/STATUS) + CRC32.
 - `health/` — monitoring termiki SoC (alarm >95 °C, deep sleep >100 °C; brak sprzętowego shutdownu na S3).
@@ -110,7 +112,7 @@ arduino-cli monitor -p COMx -c baudrate=115200
 Struktura: `Szusownik.ino` + `src/config/` (piny, stałe, UUID BLE v1),
 `src/gnss/` (NEO-M8N, NMEA, adaptacyjne próbkowanie ±3 km/h),
 `src/storage/` (surowe CSV, rotacja: rolka na postoju + na sync),
-`src/audio/` (buzzer, sygnał co 1 s), `src/hud/` (OLED: SPD/MAX/TOTAL),
+`src/audio/` (buzzer, sygnał co 1 s), `src/hud/` (OLED: statystyki + hero max zjazdu),
 `src/baro/` (BME280: wysokość barometryczna),
 `src/health/` (termika SoC: alarm + deep sleep),
 `src/link/` (nadajnik ESP-NOW do HudRekaw),

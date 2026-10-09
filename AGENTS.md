@@ -28,8 +28,8 @@ najnowszej wersji firmware i PWA. Dlatego:
   granice odpowiedzialności, ryzyka i plan integracji.
 - `docs/ble-transfer.md` - szczegóły sprawdzonego transferu BLE, kompresji,
   okna ramek, ACK/NACK i zapisu po stronie PWA.
-- `docs/hud-display.md` - OLED, layout, animacja trasy, pakiety bitmap i zasady
-  synchronizacji firmware z podglądem PWA.
+- `docs/hud-display.md` - OLED Szusownika: layout jednego ekranu statystyk, hero
+  „max zjazdu" (port ZigZag z PWA), formatowanie; bez mapy/bitmap/animacji.
 - `docs/hud-rekaw.md` - odbiornik HudRekaw (ESP8266 + ST7789), link ESP-NOW
   z Szusownikiem, protokół `S`/`L` i generator mapy.
 - `docs/mapy-routing.md` - źródła danych mapowych, warstwy MapLibre, graf tras,
@@ -151,6 +151,16 @@ najnowszej wersji firmware i PWA. Dlatego:
     (`gLabelCandidates`) jest **statyczny, nigdy lokalny**: ESP8266 ma 4 KB
     stosu `loop()`, a ~4,4 KB tablica na stosie resetuje urządzenie przy
     pierwszej ramce `L`. Szczegóły: `docs/hud-rekaw.md`.
+
+19. OLED Szusownika to **jeden ekran statystyk**: hero „MAX ZJAZDU", MAX DNIA,
+    DYSTANS, WYSOKOSC (fuzja baro+GPS) i czas lokalny (UTC + `SZ_HUD_TZ_OFFSET_MIN`,
+    bez etykiety). **Nie ma tam mapy, bitmap trasy ani animacji** — mapę ma
+    HudRekaw. Hero liczy `core::RunTracker` (strumieniowy port ZigZag z PWA:
+    fuzja baro+GPS τ=10 s → MA5 → histereza 5 m): **live w zjeździe, zamrożony na
+    wyciągu**. Font Adafruit GFX jest ASCII — brak polskich znaków (`WYSOKOSC`)
+    i glifu strzałki (linia trasy używa `<`/`>`). Dolna linia to zarezerwowane
+    miejsce na przyszłą trasę z PWA (roadmapa; bez protokołu wysyłki). Szczegóły:
+    `docs/hud-display.md`.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

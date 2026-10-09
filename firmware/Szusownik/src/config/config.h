@@ -42,8 +42,18 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_HEALTH_ALARM_MS 3000
 #define SZ_HEALTH_HYST_C 2.0f
 
-// HUD: SPD pokazuje max ostatniego zjazdu gdy prędkość <5 km/h.
+// HUD: próg ruchu dla liczenia dystansu (km). SPD na ekranie pokazuje zawsze
+// bieżącą prędkość; hero "max zjazdu" liczy core::RunTracker (port ZigZag z PWA).
 #define SZ_SPD_STATIC_BELOW_KMH 5.0f
+
+// HUD: strefa czasowa (minuty) dla wyświetlanego czasu lokalnego (UTC+offset).
+#define SZ_HUD_TZ_OFFSET_MIN 60
+
+// Detekcja zjazdu (port ZigZag z web/src/lib/runs.ts): histereza zwrotu
+// wysokości, stała czasowa fuzji baro+GPS i twarda granica przerwy.
+#define SZ_RUN_REVERSAL_M 5.0f
+#define SZ_RUN_ALT_TAU_S 10.0f
+#define SZ_RUN_MAX_GAP_MS 3600000UL
 
 // Poziom logowania na Serial: 0=ERR 1=WARN 2=INFO (domyslny) 3=DEBUG.
 // INFO = zdarzenia (fix, SD, BLE, health, boot) + cykl transferu BLE;

@@ -48,6 +48,7 @@ class Gnss {
   float headingDeg();
   uint32_t sats();
   bool timeValid();
+  bool utcTime(int& hour, int& minute, int& second);  // false gdy czas niepoprawny
   String utcStamp();  // YYYYMMDD_HHMMSS (nazwa pliku)
   String csvStamp();  // YYYY-MM-DDTHH:MM:SS.mmmZ (pole CSV, ms z ESP32)
   int rateHz() const { return rateHz_; }

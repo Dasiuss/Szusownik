@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Szusownik OLED 128x64 - makiety</title>
+<style>
+  body { background:#111; color:#ddd; font-family: Segoe UI, sans-serif; margin:24px; }
+  h1 { font-size:18px; font-weight:600; }
+  h2 { font-size:14px; font-weight:600; color:#9cf; margin:18px 0 6px; }
+  p  { font-size:13px; color:#aaa; max-width:1050px; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; }
+  .caption { font-size:12px; color:#888; margin-top:4px; max-width:640px; }
+  svg { border:1px solid #333; background:#000; image-rendering:pixelated; }
+  text { font-family: Consolas, "DejaVu Sans Mono", monospace; }
+  .lbl { fill:#8fa0b8; }
+  .val { fill:#f2f2f2; }
+  .nav { fill:#4fd1c5; }
+  .warn { fill:#ff6b6b; }
+</style>
+</head>
+<body>
+<h1>Szusownik — makieta OLED SSD1306 128×64 (skala 5×)</h1>
+<p>Dwie kolumny (prawa przesunięta o 2 znaki). Lewa: MAX ZJAZDU (hero) i DYSTANS z
+większą wartością. Prawa: czas, SPEED/SPD, MAX DNIA, WYSOKOSC (z fuzji baro+GPS).
+Jednostki bez spacji (12.3km, 2013m). Trasa = jedna linia na dole, nazwy jedna po
+drugiej. ASCII (bez polskich znaków).</p>
+
+<div class="row">
+
+  <!-- ===== Wersja 1: bez trasy ===== -->
+  <div class="panel">
+    <h2>1. Bez trasy</h2>
+    <svg width="640" height="320" viewBox="0 0 128 64">
+      <!-- kolumna lewa -->
+      <text class="lbl" x="1" y="6" font-size="8" textLength="60" lengthAdjust="spacingAndGlyphs">MAX ZJAZDU</text>
+      <text class="val" x="1" y="28" font-size="22" textLength="54" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="1" y="46" font-size="8" textLength="42" lengthAdjust="spacingAndGlyphs">DYSTANS</text>
+      <text class="val" x="1" y="60" font-size="16" textLength="48" lengthAdjust="spacingAndGlyphs">12.3</text>
+      <text class="val" x="49" y="60" font-size="8" textLength="12" lengthAdjust="spacingAndGlyphs">km</text>
+      <!-- kolumna prawa -->
+      <text class="val" x="97" y="6" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">14:23</text>
+      <text class="lbl" x="76" y="22" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">SPEED</text>
+      <text class="val" x="76" y="30" font-size="8" textLength="12" lengthAdjust="spacingAndGlyphs">12</text>
+      <text class="lbl" x="76" y="38" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">MAX DNIA</text>
+      <text class="val" x="76" y="46" font-size="8" textLength="18" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="76" y="54" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">WYSOKOSC</text>
+      <text class="val" x="76" y="62" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">2013m</text>
+    </svg>
+    <div class="caption">Brak trasy → hero 24 px, dystans 16 px, prawa kolumna z przerwą
+    pod czasem.</div>
+  </div>
+
+  <!-- ===== Wersja 2: z trasą ===== -->
+  <div class="panel">
+    <h2>2. Z trasą — jedna linia na dole</h2>
+    <svg width="640" height="320" viewBox="0 0 128 64">
+      <!-- kolumna lewa -->
+      <text class="lbl" x="1" y="6" font-size="8" textLength="60" lengthAdjust="spacingAndGlyphs">MAX ZJAZDU</text>
+      <text class="val" x="1" y="21" font-size="16" textLength="36" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="1" y="30" font-size="8" textLength="42" lengthAdjust="spacingAndGlyphs">DYSTANS</text>
+      <text class="val" x="1" y="44" font-size="16" textLength="48" lengthAdjust="spacingAndGlyphs">12.3</text>
+      <text class="val" x="49" y="44" font-size="8" textLength="12" lengthAdjust="spacingAndGlyphs">km</text>
+      <!-- kolumna prawa -->
+      <text class="val" x="97" y="6" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">14:23</text>
+      <text class="lbl" x="76" y="14" font-size="8" textLength="36" lengthAdjust="spacingAndGlyphs">SPD 12</text>
+      <text class="lbl" x="76" y="22" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">MAX DNIA</text>
+      <text class="val" x="76" y="30" font-size="8" textLength="18" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="76" y="38" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">WYSOKOSC</text>
+      <text class="val" x="76" y="46" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">2013m</text>
+      <!-- linia trasy -->
+      <line x1="0" y1="55" x2="128" y2="55" stroke="#2f5f5a" stroke-width="1"/>
+      <text class="nav" x="1" y="62" font-size="8" textLength="84" lengthAdjust="spacingAndGlyphs">&gt;11 &gt;8 &gt;Wycia1</text>
+    </svg>
+    <div class="caption">Trasa → dolna linia (odstęp nad nią). Hero 16 px, SPD w jednej
+    linii, żeby zrobić miejsce. Strzałki w realnym fontem GFX są ASCII (<code>&gt;</code>/<code>&lt;</code>),
+    bo wbudowany font nie ma glifu „→".</div>
+  </div>
+
+  <!-- ===== Wersja 3: brak fixa ===== -->
+  <div class="panel">
+    <h2>3. Brak fixa — NO FIX zamiast SPEED</h2>
+    <svg width="640" height="320" viewBox="0 0 128 64">
+      <!-- kolumna lewa -->
+      <text class="lbl" x="1" y="6" font-size="8" textLength="60" lengthAdjust="spacingAndGlyphs">MAX ZJAZDU</text>
+      <text class="val" x="1" y="28" font-size="22" textLength="54" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="1" y="46" font-size="8" textLength="42" lengthAdjust="spacingAndGlyphs">DYSTANS</text>
+      <text class="val" x="1" y="60" font-size="16" textLength="48" lengthAdjust="spacingAndGlyphs">12.3</text>
+      <text class="val" x="49" y="60" font-size="8" textLength="12" lengthAdjust="spacingAndGlyphs">km</text>
+      <!-- kolumna prawa -->
+      <text class="val" x="97" y="6" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">14:23</text>
+      <text class="warn" x="76" y="22" font-size="8" textLength="36" lengthAdjust="spacingAndGlyphs">NO FIX</text>
+      <text class="lbl" x="76" y="38" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">MAX DNIA</text>
+      <text class="val" x="76" y="46" font-size="8" textLength="18" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="76" y="54" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">WYSOKOSC</text>
+      <text class="val" x="76" y="62" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">2013m</text>
+    </svg>
+    <div class="caption">Brak fixa → slot SPEED to „NO FIX"; czas zostaje, wartości pokazują
+    ostatni znany stan.</div>
+  </div>
+
+</div>
+</body>
+</html>

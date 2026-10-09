@@ -91,12 +91,13 @@ CSV      HUD             |
 
 - Renderować HUD lokalnie na ESP32, a nie przesyłać gotowego framebufferu przy
   każdej zmianie.
-- Traktować mapę i trasę jako dwie niezależne warstwy bitmapowe.
-- Firmware rysuje mapę, potem trasę, a dopiero na końcu nakłada animowane przerwy.
-- PWA musi powtarzać dokładnie tę samą kolejność pikseli, liczbę przerw i wzór
-  animacji, jeżeli podgląd ma reprezentować OLED.
-- Stosować szerokie obszary hit-testu i proste, wysokokontrastowe informacje na
-  małym ekranie.
+- Szusownik ma **jeden ekran statystyk** (bez mapy/bitmap/animacji): max zjazdu
+  (hero), max dnia, dystans dnia, wysokość (fuzja baro+GPS) i czas lokalny.
+  Layout: `docs/hud-display.md`.
+- Detekcja zjazdu na urządzeniu to port reguły wysokościowej z PWA (ZigZag);
+  SSOT cięcia zjazdów pozostaje w PWA.
+- Stosować proste, wysokokontrastowe informacje na małym ekranie; font GFX jest
+  ASCII (bez polskich znaków, bez glifu strzałki).
 
 ### Mapy i routing
 
@@ -236,6 +237,11 @@ Osobne urządzenie z ekranem (HudRekaw) nie używa BLE do podglądu: Szusownik
 nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, broadcast).
 Protokół `S`/`L` i reguła trybu wg prędkości są w `docs/hud-rekaw.md`.
 
+Szusownik **nie dostaje już małych pakietów HUD** (mapa/bitmapy/animacja usunięte
+z planu). Jedyny planowany kanał w tę stronę to wysłanie trasy z PWA do
+urządzenia (roadmapa); miejsce na listę tras w layoucie jest zarezerwowane
+(`docs/hud-display.md` §3.2).
+
 ## 6. Wersjonowanie i cache
 
 Z `BleTest` należy zachować rozdzielenie:
@@ -272,13 +278,13 @@ startowi serwera dev.
 
 ### HUD
 
-- Pakiety stanu i bitmap w `DisplayTest` nie mają niezawodności wymaganej dla
-  finalnego urządzenia.
-- PWA i firmware mogą mieć różną fazę animacji trasy.
-- Podgląd canvas nie jest bitowo identyczny z rasteryzacją Adafruit GFX.
-- Brak synchronizacji callbacku BLE z renderowaniem bitmap na ESP32.
-- Wartości większe niż 999 mogą wejść w obszar mapy.
-- Nazwa pola `average` nie zgadza się z etykietą `MAX` na OLED.
+- Hero „max zjazdu" zależy od wysokości; przy braku barometru fuzja zbiega do
+  GPS (wolniejsza reakcja na kształt wysokości) — do obserwacji w terenie.
+- Brak testu sprzętowego renderu (font ASCII, skrót nazwy do 6 znaków, kontrast)
+  i odczytu kątem oka na realnym OLED.
+- Wysokość z fuzji jest wrażliwa na dryf barometru na długich odcinkach.
+- Wysłanie trasy z PWA do urządzenia (linia tras na OLED) nie jest
+  zaimplementowane — tylko zarezerwowane miejsce w layoucie.
 
 ### Mapy
 
@@ -300,8 +306,8 @@ Przed uznaniem funkcji za gotową trzeba mieć:
 3. kontrolowany test utraty, duplikacji i zmiany kolejności ramek;
 4. test timeoutu, `STOP`, rozłączenia i ponownego połączenia;
 5. test różnych MTU i co najmniej dwóch telefonów Android;
-6. test bitmapy niepełnej, uszkodzonej i podmienianej atomowo;
-7. test zgodności podglądu HUD z OLED dla skrajnych wartości;
+6. test renderu HUD dla skrajnych wartości (0, 999, clamp, brak fixa, czas `--:--`);
+7. test hero „max zjazdu" na realnym śladzie (live/zamrożony, przerwa w danych);
 8. test routingu na trasach z wyciągiem, połączeniem, ostrzeżeniem i brakiem DEM;
 9. test GPS na rzeczywistym śladzie w kilku ośrodkach;
 10. pomiar pamięci, czasu CPU, czasu transferu i opóźnienia UI.

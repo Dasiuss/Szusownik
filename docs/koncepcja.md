@@ -42,8 +42,10 @@ Dwa główne elementy:
 - **Moduł GNSS (u-blox, ≥10 Hz)** po UART — źródło pozycji i prędkości.
 - **Zapis surowego CSV na microSD** (SPI) w czasie rzeczywistym.
 - **Feedback dźwiękowy** przez **pasywny buzzer piezo** (tony generowane PWM).
-- **Wyświetlacz OLED 0,96" (SSD1306, I2C)** pokazuje podstawowe dane: **max prędkość
-  ostatniego zjazdu** i **max prędkość dnia** (od włączenia urządzenia).
+- **Wyświetlacz OLED 0,96" (SSD1306, I2C)** — jeden ekran statystyk: **max
+  ostatniego zjazdu** (hero, na żywo w zjeździe / zamrożony na wyciągu), **max
+  dnia**, **dystans dnia**, **wysokość** (fuzja baro+GPS) i **czas lokalny**.
+  Bez mapy na Szusowniku; layout i detekcja zjazdu w `docs/hud-display.md`.
 - **Osobny ekran HudRekaw** (ESP8266 + ST7789 240×240) dostaje przez **ESP-NOW**
   (kanał 1) pozycję i statystyki: mapę z bieżącą pozycją na postoju albo ekran
   statystyk w ruchu (`docs/hud-rekaw.md`).

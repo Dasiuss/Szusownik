@@ -15,6 +15,8 @@
 #include "src/ble/ble.h"
 #include "src/health/health.h"
 #include "src/link/hud_link.h"
+#include "src/core/run_tracker.h"
+#include "src/core/hud_format.h"
 
 static Gnss gnss;
 static Storage storage;
@@ -24,14 +26,13 @@ static Baro baro;
 static BleFiles ble;
 static Health health;
 static HudLink hudLink;
+static core::RunTracker runTracker;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
-static float maxLastKmh = 0.0f;
 static float totalKm = 0.0f;
 static double prevLat = 0.0, prevLon = 0.0;
 static bool havePrev = false;
-static bool runActive = false;
 
 static unsigned long nextHud = 0;
 static unsigned long nextSync = 0;
@@ -153,12 +154,11 @@ void loop() {
   // i nie trafia do listy pobierania (PWA go nie widzi).
   storage.ensureMeta();
 
-  // Statystyki: dystans z kolejnych fixów (haversine), max dnia / ostatniego zjazdu.
+  // Statystyki: dystans z kolejnych fixów (haversine) i max dnia. Max zjazdu
+  // liczy core::RunTracker (port ZigZag z PWA), karmiony per epoka GNSS niżej.
   if (fix) {
     if (kmh > maxDayKmh) maxDayKmh = kmh;
     if (kmh >= SZ_SPD_STATIC_BELOW_KMH) {
-      runActive = true;
-      if (kmh > maxLastKmh) maxLastKmh = kmh;
       double la = gnss.lat(), lo = gnss.lon();
       if (havePrev) {
         double d = TinyGPSPlus::distanceBetween(prevLat, prevLon, la, lo);
@@ -167,8 +167,6 @@ void loop() {
       prevLat = la;
       prevLon = lo;
       havePrev = true;
-    } else if (runActive) {
-      runActive = false;  // koniec zjazdu — maxLast zamrożone do następnego
     }
   }
 
@@ -193,6 +191,14 @@ void loop() {
 #endif
 
     if (fix) {
+      // Baro czytamy raz na epokę (i tak potrzebny do CSV i do fuzji HUD).
+      if (baro.present()) baro.read();
+      const bool baroOk = baro.present() && baro.valid();
+      const float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
+
+      // HUD: tracker zjazdu (fuzja baro+GPS + ZigZag) na każdej epoce z fixem.
+      runTracker.update(kmh, gnss.altM(), baroAlt, true, now);
+
       // Plik powstaje dopiero, gdy GNSS poda poprawną datę/czas (nazwa = UTC).
       // Bez tego nie nazwiemy pliku, więc próbkę pomijamy i nie dotykamy SD.
       if (storage.isReady() && !storage.isOpen()) {
@@ -200,11 +206,6 @@ void loop() {
         if (stamp.length()) storage.openLog(stamp);
       }
       if (storage.isReady() && storage.isOpen()) {
-        // baro.read() aktualizuje cache; przy chwilowym bledzie zostaje ostatni
-        // poprawny odczyt (bez zera w CSV).
-        if (baro.present()) baro.read();
-        bool baroOk = baro.present() && baro.valid();
-        float baroAlt = baroOk ? baro.altitudeM() : 0.0f;
         const GnssSampleQuality quality = gnss.sampleQuality();
         storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
                             gnss.headingDeg(), baroAlt, quality);
@@ -220,7 +221,19 @@ void loop() {
   }
   if (now >= nextHud) {
     nextHud = now + 500;
-    hud.draw(kmh, maxDayKmh, totalKm, maxLastKmh, fix);
+    int utcHour = -1, utcMinute = 0, utcSecond = 0;
+    gnss.utcTime(utcHour, utcMinute, utcSecond);
+    HudData data;
+    data.speedKmh = kmh;
+    data.maxRunKmh = runTracker.displayMaxKmh();
+    data.maxDayKmh = maxDayKmh;
+    data.totalKm = totalKm;
+    data.altitudeM = runTracker.altitudeM();
+    data.utcHour = utcHour;
+    data.utcMinute = utcMinute;
+    data.hasFix = fix;
+    data.routeLine = nullptr;  // trasa z PWA: roadmapa (miejsce zarezerwowane)
+    hud.draw(data);
   }
 
   // Jedna linia statusu (DEBUG) zamiast dawnych "GPS:" + "LOG:".

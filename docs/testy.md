@@ -45,8 +45,9 @@ powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1
 Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
 `firmware/HudRekaw/src/core/` (bez `Arduino.h`): pasma GNSS, bufor listy, rotacja
 pliku, format linii CSV, wzorce buzzera, progi termiczne, kodowanie pakietów
-ESP-NOW HUD; a po stronie odbiorcy dekodowanie pakietów, matematyka mapy
-(projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
+ESP-NOW HUD, detekcja zjazdu `RunTracker` (fuzja baro+GPS + ZigZag) i
+formatowanie HUD (`hud_format`); a po stronie odbiorcy dekodowanie pakietów,
+matematyka mapy (projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
 testy hostowe linkują tylko `core/` + `src/ble/crc32.h`. `run.ps1` buduje dwa
 binaria (`host_tests_szusownik`, `host_tests_hudrekaw`). Test CRC32 porównuje
 realne nagranie `test data/20260926_181420.csv` z goldenem z urządzenia

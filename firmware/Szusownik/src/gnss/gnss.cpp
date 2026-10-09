@@ -84,6 +84,14 @@ float Gnss::headingDeg() { return gps_.course.isValid() ? (float)gps_.course.deg
 uint32_t Gnss::sats() { return gps_.satellites.isValid() ? gps_.satellites.value() : 0; }
 bool Gnss::timeValid() { return gps_.date.isValid() && gps_.time.isValid(); }
 
+bool Gnss::utcTime(int& hour, int& minute, int& second) {
+  if (!timeValid()) return false;
+  hour = gps_.time.hour();
+  minute = gps_.time.minute();
+  second = gps_.time.second();
+  return true;
+}
+
 String Gnss::utcStamp() {
   if (!timeValid()) return String("");
   char b[20];

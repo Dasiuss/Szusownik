@@ -1,11 +1,21 @@
 #include "hud.h"
 #include "../config/pins.h"
 #include "../config/config.h"
+#include "../core/hud_format.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
 static Adafruit_SSD1306 disp(128, 64, &Wire, -1);
+
+namespace {
+// Dwie kolumny: lewa (hero + dystans), prawa (czas/SPEED/MAX DNIA/WYSOKOSC).
+constexpr int16_t LEFT_X = 1;
+constexpr int16_t RIGHT_X = 76;
+constexpr int16_t TIME_RIGHT_X = 97;  // "HH:MM" (5 znakow) wyrownane do x=127
+constexpr int16_t ROUTE_LINE_Y = 55;
+constexpr int16_t ROUTE_TEXT_Y = 56;
+}  // namespace
 
 bool Hud::begin() {
   Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL, 400000);
@@ -15,42 +25,80 @@ bool Hud::begin() {
   return true;
 }
 
-void Hud::draw(float speedKmh, float maxDayKmh, float totalKm, float maxLastKmh,
-               bool hasFix) {
-  // SPD: poniżej 5 km/h pokazuj max ostatniego zjazdu (stanie w miejscu / wyciąg).
-  float shown = (speedKmh < SZ_SPD_STATIC_BELOW_KMH) ? maxLastKmh : speedKmh;
-  if (shown < 0) shown = 0;
-  if (shown > 999) shown = 999;
-  float mx = maxDayKmh;
-  if (mx < 0) mx = 0;
-  if (mx > 999) mx = 999;
-  char bSpd[8], bMax[8], bTot[16];
-  snprintf(bSpd, sizeof(bSpd), "%3u", (unsigned)shown);
-  snprintf(bMax, sizeof(bMax), "%3u", (unsigned)mx);
-  snprintf(bTot, sizeof(bTot), "%.1f", totalKm);
+void Hud::draw(const HudData& d) {
+  char time[8];
+  char spd[8];
+  char maxDay[8];
+  char dist[8];
+  char alt[8];
+  char spdLine[12];
+
+  core::formatLocalHm(d.utcHour, d.utcMinute, SZ_HUD_TZ_OFFSET_MIN, time, sizeof(time));
+  core::formatUint(spd, sizeof(spd), d.speedKmh, 999);
+  core::formatUint(maxDay, sizeof(maxDay), d.maxDayKmh, 999);
+  core::formatTenthsKm(dist, sizeof(dist), d.totalKm);
+  core::formatMeters(alt, sizeof(alt), d.altitudeM);
+  snprintf(spdLine, sizeof(spdLine), "SPD %s", spd);
+
+  const bool route = d.routeLine != nullptr && d.routeLine[0] != '\0';
 
   disp.clearDisplay();
   disp.setTextColor(SSD1306_WHITE);
+
+  // --- kolumna lewa ---
+  char hero[8];
+  core::formatUint(hero, sizeof(hero), d.maxRunKmh, 999);
   disp.setTextSize(1);
-  disp.setCursor(1, 0);
-  disp.print(F("SPD"));
-  disp.setTextSize(3);
-  disp.setCursor(1, 9);
-  disp.print(bSpd);
+  disp.setCursor(LEFT_X, 0);
+  disp.print(F("MAX ZJAZDU"));
+  disp.setTextSize(route ? 2 : 3);
+  disp.setCursor(LEFT_X, 8);
+  disp.print(hero);
+
   disp.setTextSize(1);
-  disp.setCursor(62, 27);
-  disp.print(F("MAX"));
-  disp.setCursor(62, 35);
-  disp.print(bMax);
-  disp.setCursor(50, 48);
-  disp.print(F("TOTAL"));
-  disp.setCursor(62, 56);
-  disp.print(bTot);
-  disp.drawFastVLine(87, 0, 64, SSD1306_WHITE);
-  if (!hasFix) {
-    disp.setCursor(1, 56);
+  disp.setCursor(LEFT_X, route ? 24 : 40);
+  disp.print(F("DYSTANS"));
+  disp.setTextSize(2);
+  disp.setCursor(LEFT_X, route ? 32 : 48);
+  disp.print(dist);
+  disp.setTextSize(1);
+  disp.setCursor(LEFT_X + 48, route ? 40 : 56);
+  disp.print(F("km"));
+
+  // --- kolumna prawa ---
+  disp.setTextSize(1);
+  disp.setCursor(TIME_RIGHT_X, 0);
+  disp.print(time);
+
+  if (!d.hasFix) {
+    disp.setCursor(RIGHT_X, route ? 8 : 16);
     disp.print(F("NO FIX"));
+  } else if (route) {
+    disp.setCursor(RIGHT_X, 8);
+    disp.print(spdLine);
+  } else {
+    disp.setCursor(RIGHT_X, 16);
+    disp.print(F("SPEED"));
+    disp.setCursor(RIGHT_X, 24);
+    disp.print(spd);
   }
+  const int16_t labelTop = route ? 16 : 32;
+  disp.setCursor(RIGHT_X, labelTop);
+  disp.print(F("MAX DNIA"));
+  disp.setCursor(RIGHT_X, labelTop + 8);
+  disp.print(maxDay);
+  disp.setCursor(RIGHT_X, labelTop + 16);
+  disp.print(F("WYSOKOSC"));
+  disp.setCursor(RIGHT_X, labelTop + 24);
+  disp.print(alt);
+
+  // --- linia trasy (tylko gdy trasa aktywna) ---
+  if (route) {
+    disp.drawFastHLine(0, ROUTE_LINE_Y, 128, SSD1306_WHITE);
+    disp.setCursor(LEFT_X, ROUTE_TEXT_Y);
+    disp.print(d.routeLine);
+  }
+
   disp.display();
 }
 
