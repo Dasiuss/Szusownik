@@ -62,3 +62,27 @@ TEST_CASE("HudRekaw mapa: sortowanie labeli po odleglosci") {
   REQUIRE(labels[1].distanceSq == 50);
   REQUIRE(labels[2].distanceSq == 100);
 }
+
+TEST_CASE("HudRekaw mapa: brak przerysowania w martwej strefie ruchu") {
+  // Bez ruchu i bez zmiany kursu -> nic nie rysujemy.
+  REQUIRE_FALSE(mapShouldRedraw(0, 0, 100, 0, 0, 100, 5.0f, 8));
+  // 4 m < 5 m -> jeszcze nie.
+  REQUIRE_FALSE(mapShouldRedraw(0, 0, 100, 4, 0, 100, 5.0f, 8));
+  // 3-4-5 -> dokladnie 5 m -> rysujemy (prog >=).
+  REQUIRE(mapShouldRedraw(0, 0, 100, 3, 4, 100, 5.0f, 8));
+  // 6 m -> rysujemy.
+  REQUIRE(mapShouldRedraw(0, 0, 100, 0, 6, 100, 5.0f, 8));
+}
+
+TEST_CASE("HudRekaw mapa: histereza kursu z zawijaniem 0/360") {
+  // 5 stopni < 8 -> nie.
+  REQUIRE_FALSE(mapShouldRedraw(0, 0, 0, 0, 0, 5, 5.0f, 8));
+  // 8 stopni -> rysujemy (prog >=).
+  REQUIRE(mapShouldRedraw(0, 0, 0, 0, 0, 8, 5.0f, 8));
+  // Zawijanie: 358 -> 2 to 4 stopnie, nie rysujemy.
+  REQUIRE_FALSE(mapShouldRedraw(0, 0, 358, 0, 0, 2, 5.0f, 8));
+  // Zawijanie: 356 -> 2 to 6 stopni, nie rysujemy.
+  REQUIRE_FALSE(mapShouldRedraw(0, 0, 356, 0, 0, 2, 5.0f, 8));
+  // Zawijanie: 350 -> 2 to 12 stopni, rysujemy.
+  REQUIRE(mapShouldRedraw(0, 0, 350, 0, 0, 2, 5.0f, 8));
+}

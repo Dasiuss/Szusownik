@@ -132,6 +132,21 @@ Cache danych i raport kierunków lądują w `scripts/data/`. Mapa jest rysowana
 środkowo na rowerzyście z projekcją „rybiego oka"; przy profilu Wrocław nie ma
 tras narciarskich, więc widok pozostaje zorientowany na północ.
 
+Rysowanie jest pełnym przerysowaniem (żadnego dirty-rect — obrót i fisheye
+zmieniają układ nieliniowo). Wszystkie polilinie lecą w **jednej transakcji
+SPI** (`startWrite`/`endWrite` w `Display::drawMap`), a segmenty rysuje
+niskopoziomowy `Display::drawMapLine` przez `writePixel()`. Uwaga: `drawLine`
+z Adafruit_GFX sam otwiera i zamyka transakcję na segment, więc nie da się go
+użyć wewnątrz wspólnej transakcji. Bez zmiany wyglądu.
+
+Przerysowanie ma **martwą strefę**: odpala się dopiero, gdy rower przesunął się
+o `MAP_REDRAW_MOVE_M` (5 m) względem **ostatnio narysowanej** pozycji albo kurs
+zmienił się o `MAP_REDRAW_BEARING_DEG` (8°, z zawijaniem 0/360). Zmiana trybu,
+zoomu lub fisheye wymusza rysunek niezależnie od progu. Dzięki temu przy postoju
+(i szumie GNSS) ekran nie miga — tryb mapy jest aktywny tylko ≤5 km/h.
+Logika progu jest czysta (`mapShouldRedraw` w `src/core/map_math`) i pokryta
+testami hostowymi (`firmware/test/host/hudrekaw/test_map_math.cpp`).
+
 W repo jest zbudowany profil **Wrocław** (2818 punktów, 1156 dróg). `build-map.mjs`
 domyślnie buduje jednak profil `solden`, więc do wgrania mapy Wrocław trzeba
 jawnie podać `--profile wroclaw`.

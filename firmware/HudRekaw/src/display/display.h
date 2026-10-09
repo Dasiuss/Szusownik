@@ -7,14 +7,16 @@
 #include "../core/hud_packet.h"
 
 // ST7789 240x240: statystyki (SPD/REM/MAX/TOT) albo mapa z pozycją. Rysowanie
-// jest przyrostowe dla statystyk; mapa przerysowuje całość.
+// jest przyrostowe dla statystyk; mapa przerysowuje całość, ale tylko po
+// przekroczeniu martwej strefy (ruch/kurs/zoom/fisheye albo force). Zwraca true
+// gdy faktycznie przerysowała.
 class Display {
  public:
   bool begin();
   void drawStatsLayout();
   void invalidateStats() { layoutDrawn_ = false; }
   void updateStats(const HudTelemetry& telemetry, bool fresh);
-  void drawMap(const HudLocation& location);
+  bool drawMap(const HudLocation& location, bool force);
   Adafruit_ST7789& tft() { return tft_; }
 
  private:
@@ -32,8 +34,17 @@ class Display {
   // Stan mapy.
   int16_t mapBearing_ = 0;
   float metersPerDegLon_ = 0.0f;
+  // Ostatnio narysowany widok — podstawa martwej strefy przerysowania.
+  bool mapDrawn_ = false;
+  float mapDrawnEast_ = 0.0f;
+  float mapDrawnNorth_ = 0.0f;
+  int16_t mapDrawnBearing_ = 0;
+  uint8_t mapDrawnZoom_ = 0;
+  uint16_t mapDrawnFisheye_ = 0;
 
   int16_t findNearestDownhillBearing(float riderEast, float riderNorth, bool* found);
+  // Odcinek niskopoziomowy (writePixel) — tylko wewnątrz jednej transakcji SPI.
+  void drawMapLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
   void drawMapPolyline(uint16_t firstPoint, uint16_t pointCount, uint16_t color, float riderEast,
                        float riderNorth, float cosBearing, float sinBearing, float fisheyeK,
                        uint16_t fisheyeRadius);

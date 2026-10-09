@@ -51,6 +51,12 @@ static const unsigned long NET_SEARCH_INTERVAL_MS = 30000;
 static const unsigned long LINK_TIMEOUT_MS = 3000;
 static const unsigned long RENDER_MIN_INTERVAL_MS = 50;
 
+// Martwa strefa przerysowania mapy: rysujemy dopiero, gdy rower przesunął się
+// o >= MAP_REDRAW_MOVE_M albo kurs zmienił się o >= MAP_REDRAW_BEARING_DEG.
+// Zoom/fisheye i zmiana trybu wymuszają przerysowanie niezależnie od tego.
+static const float MAP_REDRAW_MOVE_M = 5.0f;
+static const int16_t MAP_REDRAW_BEARING_DEG = 8;
+
 // Układ mapy (piksele / metry).
 static const int16_t MAP_RIDER_X = 120;
 static const int16_t MAP_RIDER_Y = 190;

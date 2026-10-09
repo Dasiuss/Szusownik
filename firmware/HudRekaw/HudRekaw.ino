@@ -35,7 +35,8 @@ void loop() {
 
   if (mode == HUD_MODE_MAP) {
     if (link.locationValid() && (link.takeLocationDirty() || mode != lastMode)) {
-      display.drawMap(link.location());
+      // Zmiana trybu wymusza rysunek; inaczej decyduje martwa strefa w drawMap.
+      display.drawMap(link.location(), mode != lastMode);
     }
   } else {
     if (mode != lastMode) display.invalidateStats();

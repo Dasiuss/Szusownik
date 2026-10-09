@@ -63,6 +63,44 @@ int16_t Display::findNearestDownhillBearing(float riderEast, float riderNorth, b
   return bearing;
 }
 
+// Bresenham z Adafruit_GFX::writeLine, ale przez writePixel() (bez
+// startWrite/endWrite). Wołany TYLKO wewnątrz transakcji otwartej w drawMap.
+void Display::drawMapLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+  const bool steep = abs(y1 - y0) > abs(x1 - x0);
+  if (steep) {
+    int16_t swap = x0;
+    x0 = y0;
+    y0 = swap;
+    swap = x1;
+    x1 = y1;
+    y1 = swap;
+  }
+  if (x0 > x1) {
+    int16_t swap = x0;
+    x0 = x1;
+    x1 = swap;
+    swap = y0;
+    y0 = y1;
+    y1 = swap;
+  }
+  const int16_t dx = x1 - x0;
+  const int16_t dy = abs(y1 - y0);
+  int16_t err = dx / 2;
+  const int16_t ystep = (y0 < y1) ? 1 : -1;
+  for (; x0 <= x1; x0++) {
+    if (steep) {
+      tft_.writePixel(y0, x0, color);
+    } else {
+      tft_.writePixel(x0, y0, color);
+    }
+    err -= dy;
+    if (err < 0) {
+      y0 += ystep;
+      err += dx;
+    }
+  }
+}
+
 void Display::drawMapPolyline(uint16_t firstPoint, uint16_t pointCount, uint16_t color,
                               float riderEast, float riderNorth, float cosBearing, float sinBearing,
                               float fisheyeK, uint16_t fisheyeRadius) {
@@ -85,7 +123,7 @@ void Display::drawMapPolyline(uint16_t firstPoint, uint16_t pointCount, uint16_t
     const bool bothTop = previousY < -20 && currentY < -20;
     const bool bothBottom = previousY > 259 && currentY > 259;
     if (!(bothLeft || bothRight || bothTop || bothBottom)) {
-      tft_.drawLine(previousX, previousY, currentX, currentY, color);
+      drawMapLine(previousX, previousY, currentX, currentY, color);
     }
     previousX = currentX;
     previousY = currentY;
@@ -173,7 +211,7 @@ void Display::drawRiderDot() {
   tft_.drawCircle(MAP_RIDER_X, MAP_RIDER_Y, 6, COLOR_WHITE);
 }
 
-void Display::drawMap(const HudLocation& location) {
+bool Display::drawMap(const HudLocation& location, bool force) {
   if (metersPerDegLon_ == 0.0f) {
     metersPerDegLon_ =
         111320.0f * cosf((static_cast<float>(MAP_ORIGIN_LAT_E7) / 1e7f) * PI / 180.0f);
@@ -192,17 +230,38 @@ void Display::drawMap(const HudLocation& location) {
 
   bool found = false;
   const int16_t nearest = findNearestDownhillBearing(riderEast, riderNorth, &found);
-  if (found) mapBearing_ = nearest;
-  const float cosBearing = cosf(static_cast<float>(mapBearing_) * PI / 180.0f);
-  const float sinBearing = sinf(static_cast<float>(mapBearing_) * PI / 180.0f);
+  const int16_t bearing = found ? nearest : mapBearing_;
+
+  // Martwa strefa: pomiń przerysowanie, gdy pozycja i kurs nie ruszyły się
+  // wystarczająco, a zoom/fisheye/tryb się nie zmieniły.
+  if (!force && mapDrawn_ && zoom == mapDrawnZoom_ && fisheyeRadius == mapDrawnFisheye_ &&
+      !mapShouldRedraw(mapDrawnEast_, mapDrawnNorth_, mapDrawnBearing_, riderEast, riderNorth,
+                       bearing, MAP_REDRAW_MOVE_M, MAP_REDRAW_BEARING_DEG)) {
+    return false;
+  }
+
+  mapBearing_ = bearing;
+  mapDrawn_ = true;
+  mapDrawnEast_ = riderEast;
+  mapDrawnNorth_ = riderNorth;
+  mapDrawnBearing_ = bearing;
+  mapDrawnZoom_ = zoom;
+  mapDrawnFisheye_ = fisheyeRadius;
+
+  const float cosBearing = cosf(static_cast<float>(bearing) * PI / 180.0f);
+  const float sinBearing = sinf(static_cast<float>(bearing) * PI / 180.0f);
 
   tft_.fillScreen(COLOR_BG);
 
+  // Jedna transakcja SPI na wszystkie polilinie (drawMapLine przez writePixel).
+  // fillScreen/labele/kropka zostają poza nią — wołają własne startWrite/endWrite.
+  tft_.startWrite();
   for (uint16_t i = 0; i < MAP_WAY_COUNT; i++) {
     MapWay way;
     memcpy_P(&way, &mapWays[i], sizeof(MapWay));
     drawMapPolyline(way.firstPoint, way.pointCount, mapWayColor(way.kind, way.difficulty), riderEast,
                     riderNorth, cosBearing, sinBearing, fisheyeK, fisheyeRadius);
+    if ((i & 0x1F) == 0) yield();  // watchdog: bez yield() z writeLine
   }
   for (uint16_t i = 0; i < MAP_LIFT_COUNT; i++) {
     MapLift lift;
@@ -210,9 +269,11 @@ void Display::drawMap(const HudLocation& location) {
     drawMapPolyline(lift.firstPoint, lift.pointCount, COLOR_LIFT, riderEast, riderNorth, cosBearing,
                     sinBearing, fisheyeK, fisheyeRadius);
   }
+  tft_.endWrite();
 
   drawMapLabels(riderEast, riderNorth, cosBearing, sinBearing, fisheyeK, fisheyeRadius);
   drawRiderDot();
+  return true;
 }
 
 void Display::drawArrow(int16_t centerX, int16_t centerY, int16_t angle, float tipLength,

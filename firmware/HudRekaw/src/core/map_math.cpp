@@ -1,6 +1,7 @@
 #include "map_math.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 #include "../config/config.h"
 
@@ -67,4 +68,15 @@ void mapSortLabelsByDistance(MapLabelBox* labels, int count) {
     }
     labels[j + 1] = key;
   }
+}
+
+bool mapShouldRedraw(float lastEast, float lastNorth, int16_t lastBearing, float east, float north,
+                     int16_t bearing, float moveThresholdM, int16_t bearingThresholdDeg) {
+  const float dx = east - lastEast;
+  const float dy = north - lastNorth;
+  if (dx * dx + dy * dy >= moveThresholdM * moveThresholdM) return true;
+
+  int16_t delta = static_cast<int16_t>(abs(static_cast<int>(bearing) - lastBearing) % 360);
+  if (delta > 180) delta = static_cast<int16_t>(360 - delta);
+  return delta >= bearingThresholdDeg;
 }

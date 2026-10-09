@@ -30,3 +30,10 @@ bool mapLabelOverlaps(const MapLabelBox& label, const MapLabelBox* placed, int p
 
 // Sortowanie labeli-kandydatów rosnąco po distanceSq (najbliższe pierwsze).
 void mapSortLabelsByDistance(MapLabelBox* labels, int count);
+
+// Czy warto przerysować mapę. Martwa strefa: rysujemy dopiero, gdy rower
+// przesunął się o >= moveThresholdM względem ostatnio narysowanej pozycji albo
+// kurs zmienił się o >= bearingThresholdDeg (z zawijaniem 0/360). Zmiana zoomu
+// lub fisheye jest obsługiwana osobno przez wołającego (poza tą funkcją).
+bool mapShouldRedraw(float lastEast, float lastNorth, int16_t lastBearing, float east, float north,
+                     int16_t bearing, float moveThresholdM, int16_t bearingThresholdDeg);
