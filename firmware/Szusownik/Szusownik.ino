@@ -14,6 +14,7 @@
 #include "src/baro/baro.h"
 #include "src/ble/ble.h"
 #include "src/health/health.h"
+#include "src/link/hud_link.h"
 
 static Gnss gnss;
 static Storage storage;
@@ -22,6 +23,7 @@ static Hud hud;
 static Baro baro;
 static BleFiles ble;
 static Health health;
+static HudLink hudLink;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
@@ -99,6 +101,7 @@ void setup() {
   ble.setBeeper(&beeper);
   ble.begin(&storage);
   health.begin(&storage, &beeper, &hud, &baro);
+  hudLink.begin();  // ESP-NOW do HudRekaw (kanał 1)
 
   windowStart = millis();
   nextSync = windowStart + SZ_SD_COMMIT_MS;
@@ -255,4 +258,15 @@ void loop() {
   beeper.tick(kmh, now);
   health.tick(now);  // termika: alarm >95C, deep sleep >100C
   ble.poll();  // callback BLE tylko ustawia flagi (poll czyta CTRL); bez blokowania SD
+
+  // ESP-NOW do HudRekaw. Pauza w trakcie transferu BLE chroni sprawdzone pasmo.
+  HudInput hudIn;
+  hudIn.fix = fix;
+  hudIn.speedKmh = kmh;
+  hudIn.maxDayKmh = static_cast<uint16_t>(maxDayKmh + 0.5f);
+  hudIn.heading = static_cast<int16_t>(lroundf(gnss.headingDeg()));
+  hudIn.totalKm = totalKm;
+  hudIn.latE7 = static_cast<int32_t>(lround(gnss.lat() * 1e7));
+  hudIn.lonE7 = static_cast<int32_t>(lround(gnss.lon() * 1e7));
+  hudLink.tick(now, hudIn, ble.busy());
 }

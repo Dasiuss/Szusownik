@@ -5,7 +5,7 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md, docs/jakosc-danych.md.
 
-#define SZ_FW_VERSION "1.7.0-per-run-file"
+#define SZ_FW_VERSION "1.8.0-hud-espnow"
 // SZ_WIRE_PROTO, SZ_CSV_HEADER i SZ_CSV_META_SUFFIX są w protocol.h.
 
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
