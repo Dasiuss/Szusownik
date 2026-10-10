@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../ble/crc32.h"
+#include "hud_format.h"
 
 namespace {
 
@@ -145,6 +146,38 @@ uint8_t routeSegmentIndex(const RouteData& route, double lat, double lon) {
     }
   }
   return route.segmentCount > 0 ? static_cast<uint8_t>(route.segmentCount - 1) : HUD_SEGMENT_NONE;
+}
+
+size_t routeFormatLine(const RouteData& route, uint8_t startIndex, char* out, size_t n) {
+  if (out == nullptr || n == 0) return 0;
+  out[0] = '\0';
+  if (!route.valid) return 0;
+
+  size_t pos = 0;
+  for (uint16_t index = startIndex; index < route.segmentCount; index++) {
+    char label[8];
+    core::formatRouteLabel(route.steps[index].label, label, sizeof(label));
+    const size_t labelLen = strlen(label);
+    if (index > startIndex) {
+      // Separator tylko, gdy po nim zmieści się choć jeden znak nazwy — bez
+      // wiszącego "->" na końcu linii.
+      if (pos + 2 + (labelLen ? 1 : 0) > n - 1) break;
+      out[pos++] = '-';
+      out[pos++] = '>';
+      out[pos] = '\0';
+    }
+    bool clipped = false;
+    for (size_t charIndex = 0; charIndex < labelLen; charIndex++) {
+      if (pos + 1 >= n) {
+        clipped = true;
+        break;
+      }
+      out[pos++] = label[charIndex];
+    }
+    out[pos] = '\0';
+    if (clipped) break;
+  }
+  return pos;
 }
 
 float routeDistanceToEndM(const RouteData& route, double lat, double lon) {

@@ -44,3 +44,9 @@ uint8_t routeSegmentIndex(const RouteData& route, double lat, double lon);
 // Odległość w metrach od końca trasy (odcinek prosty do ostatniego punktu).
 // Wartość ujemna, gdy brak trasy.
 float routeDistanceToEndM(const RouteData& route, double lat, double lon);
+
+// Jednolinijkowa lista etykiet odcinków od `startIndex` (włącznie), łączonych
+// ASCII "->", z nazwami skróconymi wg core::formatRouteLabel. Wynik ucinany do
+// n-1 znaków (bez wiszącego "->"). Zwraca długość napisu (0 gdy brak trasy,
+// start poza zakresem albo brak miejsca). Pusty `out` przy błędzie/braku danych.
+size_t routeFormatLine(const RouteData& route, uint8_t startIndex, char* out, size_t n);

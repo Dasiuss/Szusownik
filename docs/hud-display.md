@@ -2,9 +2,9 @@
 
 > Status: layout i render zaimplementowane w firmware (`firmware/Szusownik/src/hud/`,
 > `src/core/run_tracker`, `src/core/hud_format`). Mapa/trasa/bitmapy/animation
-> usunięte z planu (greenfield). Linia trasy z PWA: **transport i dane
-> zaimplementowane** (Szusownik trzyma trasę + `segmentIndex`), render linii na
-> OLED nadal roadmapa (zarezerwowane miejsce).
+> usunięte z planu (greenfield). Linia trasy z PWA: **transport, dane i render
+> zaimplementowane** (Szusownik trzyma trasę + `segmentIndex`, dolna linia pokazuje
+> kolejne odcinki).
 
 ## 1. Zasada działania
 
@@ -57,7 +57,7 @@ DYSTANS                 12
 - Prawa kolumna: czas na górze (bez etykiety), przerwa, potem SPEED, MAX DNIA,
   WYSOKOSC (każda etykieta nad wartością).
 
-### 3.2 Z trasą (miejsce zarezerwowane)
+### 3.2 Z trasą
 
 ```text
 MAX ZJAZDU              14:23
@@ -68,18 +68,27 @@ DYSTANS                 MAX DNIA
                         2013m
       (odstęp)
 ────────────────────────────────
->11 >8 >Wycia1
+1->Gai.gl
 ```
 
 - Gdy `HudData.routeLine != nullptr` (trasa z PWA): hero maleje do rozmiaru 2,
-  `SPEED` + wartość zwijają się do jednej linii `SPD n`, co daje odstęp nad
-  dolną linią, a dolna linia (pełna szerokość, `y=55` separator, `y=56` tekst)
-  pokazuje kolejne trasy/wyciągi **jedna po drugiej**.
-- Strzałka przed nazwą = kierunek skrętu; nazwy skrócone do **6 znaków**.
-- **Transport i dane gotowe, render niepodłączony**: PWA wysyła trasę po BLE, a
-  Szusownik trzyma ją w RAM i liczy bieżący odcinek (`segmentIndex`, `docs/wymagania-ESP.md` §13,
-  `AGENTS.md` pkt 9). Sam render dolnej linii (`routeLine`) na OLED czeka na
-  redesign ekranu — na razie jest `nullptr` (kroki widzi tylko HudRekaw).
+  `SPEED` + wartość zwijają się do jednej linii `SPD n` (co daje odstęp nad
+  dolną linią), a dolna linia (separator `y=55`, tekst `y=56`, font 1, `x=1`)
+  pokazuje **kolejne odcinki od bieżącego**.
+- Linię buduje `Szusownik.ino` przez `core::routeFormatLine(activeRoute, start, …)`.
+  `start` = bieżący `segmentIndex`; przy chwilowym braku fixa zostaje ostatni
+  znany odcinek (ekran nie migocze), a świeżo odebrana trasa bez fixa startuje od
+  pierwszego odcinka.
+- Etykiety łączone są ASCII `->`. `core::formatRouteLabel`: nazwy **≤ 6 znaków**
+  bez zmian, **≥ 7** → pierwsze 3 + `.` + ostatnie 2 (np. `Gaislachkogl` →
+  `Gai.gl`).
+- Mieści się `SZ_HUD_ROUTE_CHARS` (21) znaków; nadmiar jest urywany w środku
+  nazwy, bez wiszącego `->`.
+- **Bez kierunków skrętów**: blob trasy (`protocol/route-v1.json`) niesie dla
+  odcinka tylko etykietę, typ (`piste`/`lift`) i zakres dystansu. Strzałki
+  kierunku wymagałyby rozszerzenia protokołu i PWA (poza zakresem).
+- Bez trasy (`routeLine == nullptr`, także gdy `segmentCount == 0`) cały ekran to
+  statystyki (§3.1).
 
 ### 3.3 Brak fixa
 
@@ -135,10 +144,12 @@ spójne z numeracją zjazdów w PWA.
 ## 7. Testy
 
 - Hostowe (Catch2): `firmware/test/host/test_run_tracker.cpp` (hero live/zamrożony,
-  brak fixa, przerwa 1 h, wysokość z fuzji) i `test_hud_format.cpp` (czas z
-  offsetem, clampy, dystans/wysokość, skrót nazwy). Runner:
+  brak fixa, przerwa 1 h, wysokość z fuzji), `test_hud_format.cpp` (czas z
+  offsetem, clampy, dystans/wysokość, skrót nazwy odcinka) i `test_route.cpp`
+  (dekod bloba, indeks odcinka, dotarcie, linia kroków od bieżącego z urywaniem
+  bez wiszącego `->`). Runner:
   `powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1`.
 - Render OLED, realny GNSS, baro i odczyt kątem oka — **manualne** (`docs/testy.md`).
 - Testy akceptacyjne (manualne): brak fixa (`NO FIX` w slocie SPEED), czas
   `--:--` przed pierwszym fixem, hero zamrożony na wyciągu i live w zjeździe,
-  dystans/wysokość po clampach, ekran z trasą (po zaimplementowaniu wysyłki).
+  dystans/wysokość po clampach, dolna linia trasy (kolejne odcinki od bieżącego).

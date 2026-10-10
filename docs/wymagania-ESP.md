@@ -230,5 +230,6 @@ jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik
   (`segmentIndex`, `HUD_SEGMENT_NONE` bez trasy). Odległość do końca ≤
   `ROUTE_ARRIVAL_M` (30 m) **czyści trasę lokalnie** (pusty blob; zniknie też z
   HudRekaw). Bez powiadamiania PWA — PWA ma własną logikę dotarcia.
-- Kroki trasy na OLED Szusownika nie są teraz wyświetlane (przyszły redesign), ale
-  dane są dostępne w RAM.
+- **Kroki trasy na OLED Szusownika**: dolna linia pokazuje kolejne odcinki od
+  bieżącego (`segmentIndex`), łączone `->` i skracane — szczegóły
+  `docs/hud-display.md` §3.2.

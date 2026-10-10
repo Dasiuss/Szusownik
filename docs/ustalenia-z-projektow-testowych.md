@@ -238,9 +238,9 @@ nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, broadcast).
 Protokół `S`/`L` i reguła trybu wg prędkości są w `docs/hud-rekaw.md`.
 
 Szusownik **nie dostaje już małych pakietów HUD** (mapa/bitmapy/animacja usunięte
-z planu). Jedyny planowany kanał w tę stronę to wysłanie trasy z PWA do
-urządzenia (roadmapa); miejsce na listę tras w layoucie jest zarezerwowane
-(`docs/hud-display.md` §3.2).
+z planu). Jedyny kanał w tę stronę to wysłanie trasy z PWA do urządzenia; jest
+zaimplementowany, a dolna linia OLED pokazuje kolejne odcinki (`docs/hud-display.md`
+§3.2).
 
 ## 6. Wersjonowanie i cache
 
@@ -280,11 +280,9 @@ startowi serwera dev.
 
 - Hero „max zjazdu" zależy od wysokości; przy braku barometru fuzja zbiega do
   GPS (wolniejsza reakcja na kształt wysokości) — do obserwacji w terenie.
-- Brak testu sprzętowego renderu (font ASCII, skrót nazwy do 6 znaków, kontrast)
-  i odczytu kątem oka na realnym OLED.
+- Brak testu sprzętowego renderu (font ASCII, skrót i urywanie nazw odcinków
+  trasy, kontrast) i odczytu kątem oka na realnym OLED.
 - Wysokość z fuzji jest wrażliwa na dryf barometru na długich odcinkach.
-- Wysłanie trasy z PWA do urządzenia (linia tras na OLED) nie jest
-  zaimplementowane — tylko zarezerwowane miejsce w layoucie.
 
 ### Mapy
 

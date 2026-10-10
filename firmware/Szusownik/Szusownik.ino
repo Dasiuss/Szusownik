@@ -33,6 +33,9 @@ static core::RunTracker runTracker;
 static RouteData activeRoute;
 static uint32_t lastRouteVersion = 0;
 static bool arrivalCleared = false;
+// Ostatni znany odcinek trasy — zamrazany przy chwilowym braku fixa, żeby dolna
+// linia OLED nie migotała i pokazywała ostatni znany stan.
+static uint8_t routeSegmentNow = HUD_SEGMENT_NONE;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
@@ -231,6 +234,7 @@ void loop() {
   if (now >= nextHud) {
     nextHud = now + 500;
     int utcHour = -1, utcMinute = 0, utcSecond = 0;
+    char routeLine[SZ_HUD_ROUTE_CHARS + 1];
     gnss.utcTime(utcHour, utcMinute, utcSecond);
     HudData data;
     data.speedKmh = kmh;
@@ -241,7 +245,15 @@ void loop() {
     data.utcHour = utcHour;
     data.utcMinute = utcMinute;
     data.hasFix = fix;
-    data.routeLine = nullptr;  // trasa z PWA: roadmapa (miejsce zarezerwowane)
+    // Dolna linia: kolejne odcinki od bieżącego (albo od początku, gdy odcinek
+    // jeszcze nieznany). Bez trasy linia zostaje pusta (pełny ekran statystyk).
+    data.routeLine = nullptr;
+    if (activeRoute.valid && activeRoute.segmentCount > 0) {
+      const uint8_t start =
+          routeSegmentNow != HUD_SEGMENT_NONE ? routeSegmentNow : 0;
+      routeFormatLine(activeRoute, start, routeLine, sizeof(routeLine));
+      if (routeLine[0] != '\0') data.routeLine = routeLine;
+    }
     hud.draw(data);
   }
 
@@ -289,17 +301,20 @@ void loop() {
     routeDecode(ble.routeRaw(), ble.routeRawLen(), &activeRoute);
     hudLink.setRoute(ble.routeRaw(), ble.routeRawLen(), routeVersion);
     arrivalCleared = false;
+    routeSegmentNow = HUD_SEGMENT_NONE;  // nowa trasa: brak znanego odcinka
   }
   uint8_t segmentIndex = HUD_SEGMENT_NONE;
   if (activeRoute.valid && fix) {
     const double lat = gnss.lat();
     const double lon = gnss.lon();
     segmentIndex = routeSegmentIndex(activeRoute, lat, lon);
+    routeSegmentNow = segmentIndex;  // zamrazany, gdy fix zniknie
     if (!arrivalCleared && routeDistanceToEndM(activeRoute, lat, lon) <= ROUTE_ARRIVAL_M) {
       arrivalCleared = true;
       ble.clearRoute();  // trasa znika też z HudRekaw (przez ESP-NOW)
     }
   }
+  if (!activeRoute.valid) routeSegmentNow = HUD_SEGMENT_NONE;
 
   // ESP-NOW do HudRekaw. Pauza w trakcie transferu BLE chroni sprawdzone pasmo.
   HudInput hudIn;

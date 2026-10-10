@@ -1,6 +1,7 @@
 #include <catch_amalgamated.hpp>
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 
 #include "core/route.h"
@@ -75,6 +76,38 @@ TEST_CASE("trasa: indeks odcinka i dystans do celu") {
   REQUIRE(routeDistanceToEndM(route, 46.95, 11.0) < 5.0f);
   // Srodek wyciagu jest setki metrow od konca.
   REQUIRE(routeDistanceToEndM(route, 46.947, 11.004) > 100.0f);
+}
+
+TEST_CASE("trasa: linia krokow od biezacego odcinka, nazwy skrocone") {
+  RouteData route;
+  REQUIRE(routeDecode(kGolden, sizeof(kGolden), &route));
+  char b[24];
+  routeFormatLine(route, 0, b, sizeof b);
+  REQUIRE(std::string(b) == "1->Gai.gl");
+  routeFormatLine(route, 1, b, sizeof b);
+  REQUIRE(std::string(b) == "Gai.gl");
+  routeFormatLine(route, 2, b, sizeof b);  // poza zakresem
+  REQUIRE(std::string(b) == "");
+}
+
+TEST_CASE("trasa: linia krokow urywana bez wiszacej strzalki") {
+  RouteData route;
+  route.valid = true;
+  route.segmentCount = 3;
+  for (uint16_t index = 0; index < route.segmentCount; index++) {
+    std::snprintf(route.steps[index].label, sizeof(route.steps[index].label), "111111%d", index);
+  }
+
+  char b[13];  // 12 widocznych znakow
+  routeFormatLine(route, 0, b, sizeof b);
+  const std::string line(b);
+  REQUIRE(line.size() == 12);
+  REQUIRE(line.substr(line.size() - 2) != "->");  // brak wiszacej strzalki na koncu
+  REQUIRE(line == "111.10->111.");
+
+  char narrow[9];  // 8 widocznych — strzalka juz sie nie zmiesci
+  routeFormatLine(route, 0, narrow, sizeof narrow);
+  REQUIRE(std::string(narrow) == "111.10");
 }
 
 TEST_CASE("trasa: brak trasy zwraca sentinel") {

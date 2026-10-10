@@ -40,12 +40,18 @@ TEST_CASE("hud_format: dystans i wysokość z jednostką") {
   REQUIRE(std::string(b) == "2013m");
 }
 
-TEST_CASE("hud_format: skrót nazwy do 6 znaków") {
+TEST_CASE("hud_format: skrót nazwy trasy (<=6 pełna, >=7 -> 3+.+2)") {
   char b[8];
-  truncateName("Wycia1g", b, sizeof b, 6);
-  REQUIRE(std::string(b) == "Wycia1");
-  truncateName("11", b, sizeof b, 6);
-  REQUIRE(std::string(b) == "11");
-  truncateName(nullptr, b, sizeof b, 6);
+  formatRouteLabel("1", b, sizeof b);
+  REQUIRE(std::string(b) == "1");
+  formatRouteLabel("123456", b, sizeof b);  // dokładnie 6 — bez zmian
+  REQUIRE(std::string(b) == "123456");
+  formatRouteLabel("1234567", b, sizeof b);  // 7 — skracana
+  REQUIRE(std::string(b) == "123.67");
+  formatRouteLabel("grond.e2", b, sizeof b);  // 8 -> gro.e2
+  REQUIRE(std::string(b) == "gro.e2");
+  formatRouteLabel("Gaislachkogl", b, sizeof b);  // 12 -> Gai.gl
+  REQUIRE(std::string(b) == "Gai.gl");
+  formatRouteLabel(nullptr, b, sizeof b);
   REQUIRE(std::string(b) == "");
 }

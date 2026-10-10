@@ -56,7 +56,7 @@ Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
 pliku, format linii CSV, wzorce buzzera, progi termiczne, kodowanie pakietów
 ESP-NOW HUD, detekcja zjazdu `RunTracker` (fuzja baro+GPS + ZigZag) i
 formatowanie HUD (`hud_format`) oraz logika trasy (dekod bloba, indeks odcinka,
-dotarcie); a po stronie odbiorcy dekodowanie pakietów, dekod trasy,
+dotarcie, linia kroków); a po stronie odbiorcy dekodowanie pakietów, dekod trasy,
 matematyka mapy (projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
 testy hostowe linkują tylko `core/` + `src/ble/crc32.h`. `run.ps1` buduje dwa
 binaria (`host_tests_szusownik`, `host_tests_hudrekaw`). Test CRC32 porównuje

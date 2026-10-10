@@ -1,6 +1,7 @@
 #include "hud_format.h"
 
 #include <stdio.h>
+#include <string.h>
 
 namespace core {
 
@@ -39,15 +40,29 @@ void formatMeters(char* out, size_t n, float meters) {
   snprintf(out, n, "%dm", v);
 }
 
-void truncateName(const char* in, char* out, size_t n, unsigned maxLen) {
+void formatRouteLabel(const char* in, char* out, size_t n) {
   if (!out || n == 0) return;
   if (!in) {
     out[0] = '\0';
     return;
   }
-  unsigned i = 0;
-  for (; in[i] != '\0' && i < maxLen && i + 1 < n; i++) out[i] = in[i];
-  out[i] = '\0';
+  const size_t len = strlen(in);
+  char tmp[8];
+  size_t copy = 0;
+  if (len <= 6) {
+    for (; copy < len; copy++) tmp[copy] = in[copy];
+  } else {
+    tmp[0] = in[0];
+    tmp[1] = in[1];
+    tmp[2] = in[2];
+    tmp[3] = '.';
+    tmp[4] = in[len - 2];
+    tmp[5] = in[len - 1];
+    copy = 6;
+  }
+  const size_t outLen = copy < n - 1 ? copy : n - 1;
+  memcpy(out, tmp, outLen);
+  out[outLen] = '\0';
 }
 
 }  // namespace core

@@ -19,7 +19,9 @@ void formatTenthsKm(char* out, size_t n, float km);
 // Wysokość w metrach z przyrostkiem "m", zakres [0, 99999].
 void formatMeters(char* out, size_t n, float meters);
 
-// Pierwsze maxLen znaków nazwy (na potrzeby linii trasy).
-void truncateName(const char* in, char* out, size_t n, unsigned maxLen);
+// Skrót nazwy odcinka trasy na jedną linię OLED: nazwy <= 6 znaków bez zmian,
+// nazwy >= 7 znaków -> pierwsze 3 + '.' + ostatnie 2 (max 6, np. "Gaislachkogl"
+// -> "Gai.gl").
+void formatRouteLabel(const char* in, char* out, size_t n);
 
 }  // namespace core
