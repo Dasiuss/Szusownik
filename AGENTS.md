@@ -66,18 +66,6 @@ najnowszej wersji firmware i PWA. Dlatego:
 7. Wyniki niepotwierdzone sprzętowo oznaczaj jako niepotwierdzone.
 8. Nie sprawdzaj statusu GitHub Actions po wypchnięciu i nie wspominaj, że tego
    nie zrobiłeś(-aś) — build weryfikuje użytkownik.
-9. Tryb nawigacji: PWA wysyła wyznaczoną trasę do Szusownika dedykowaną
-   charakterystyką BLE (binarny blob; SSOT `protocol/route-v1.json` +
-   `scripts/gen-route-protocol.mjs`). Trasa = uporządkowane odcinki (nazwa+typ) +
-   uproszczona polilinia (`int16` metry od origin, decymacja 10 m, limity 512
-   punktów / 24 odcinki) + CRC32; **tożsamość trasy = CRC32**. Szusownik trzyma
-   trasę w RAM i przekazuje ją do HudRekaw po ESP-NOW (heartbeat `H` + chunki `R`
-   z CRC; `segmentIndex` bieżącego odcinka w `S`/`L`). Wysyłka po każdej zmianie
-   geometrii (także trim), `CLEAR` przy czyszczeniu, dotarcie ≤30 m czyszczone
-   lokalnie na Szusowniku; po reconnect PWA dosyła raz tylko przy różnicy wersji.
-   HudRekaw: próg mapy/statystyk 30 km/h, trasa wyróżniona (gruba niebieska linia),
-   na dole bieżący + 2 odcinki. Bez trwałego zapisu trasy i bez bramkowania wersji.
-   Szczegóły: `docs/hud-rekaw.md`, `docs/ble-transfer.md` §10, `docs/wymagania-ESP.md` §13.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
