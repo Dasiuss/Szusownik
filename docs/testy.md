@@ -13,11 +13,11 @@ Automatyzacja pokrywa wszystko poniżej tego progu.
 
 | Warstwa | Gdzie | Runner | Co pokrywa |
 |---|---|---|---|
-| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, routeMatching, traceMap, czyste helpery BLE |
-| Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y |
-| Kontrakt | `web/src/lib/protocol.test.ts` | Vitest | zgodność wygenerowanego protokołu z `protocol/ble-file-v1.json` |
+| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, routeMatching, traceMap, routeTransfer (kod trasy), czyste helpery BLE |
+| Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y, wysyłka trasy |
+| Kontrakt | `web/src/lib/protocol.test.ts`, `hudProtocol.test.ts`, `routeProtocol.test.ts` | Vitest | zgodność wygenerowanych plików z `protocol/ble-file-v1.json`, `hud-espnow-v1.json`, `route-v1.json` |
 | E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, mapa i mini-mapa śladu (mock Overpass) |
-| Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/` + CRC32 z goldenem z urządzenia |
+| Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/` + CRC32 z goldenem z urządzenia + golden bloba trasy |
 
 ## PWA — komendy (katalog `web/`)
 
@@ -55,7 +55,8 @@ Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
 `firmware/HudRekaw/src/core/` (bez `Arduino.h`): pasma GNSS, bufor listy, rotacja
 pliku, format linii CSV, wzorce buzzera, progi termiczne, kodowanie pakietów
 ESP-NOW HUD, detekcja zjazdu `RunTracker` (fuzja baro+GPS + ZigZag) i
-formatowanie HUD (`hud_format`); a po stronie odbiorcy dekodowanie pakietów,
+formatowanie HUD (`hud_format`) oraz logika trasy (dekod bloba, indeks odcinka,
+dotarcie); a po stronie odbiorcy dekodowanie pakietów, dekod trasy,
 matematyka mapy (projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
 testy hostowe linkują tylko `core/` + `src/ble/crc32.h`. `run.ps1` buduje dwa
 binaria (`host_tests_szusownik`, `host_tests_hudrekaw`). Test CRC32 porównuje
@@ -83,9 +84,21 @@ Protokół ESP-NOW HUD ma osobny SSOT `protocol/hud-espnow-v1.json` i generator
 node scripts/gen-hud-protocol.mjs  # albo: npm run gen:hud-protocol (w web/)
 ```
 
-Nie edytuj wygenerowanych plików ręcznie. `web/src/lib/protocol.test.ts` i
-`web/src/lib/hudProtocol.test.ts` regenerują je w pamięci i porównują z
-zawartością na dysku — rozjazd wywala test.
+Protokół trasy ma SSOT `protocol/route-v1.json` i generator
+`scripts/gen-route-protocol.mjs`, który tworzy `web/src/lib/routeProtocol.ts` oraz
+identyczne nagłówki `route_protocol.h` do obu firmware:
+
+```powershell
+node scripts/gen-route-protocol.mjs  # albo: npm run gen:route-protocol (w web/)
+```
+
+Układ bloba trasy jest zweryfikowany przez **golden** (ten sam 69-bajtowy blob,
+CRC `26EA8EF9`) w `routeTransfer.test.ts` (PWA), `test_route.cpp` (Szusownik) i
+`hudrekaw/test_route.cpp` (HudRekaw) — rozjazd PWA <-> firmware wywala testy hostowe.
+
+Nie edytuj wygenerowanych plików ręcznie. `web/src/lib/protocol.test.ts`,
+`hudProtocol.test.ts` i `routeProtocol.test.ts` regenerują je w pamięci i
+porównują z zawartością na dysku — rozjazd wywala test.
 
 ## Dane testowe
 

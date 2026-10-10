@@ -6,6 +6,7 @@ web/playwright-report/
 web/coverage/
 
 # Arduino CLI build cache (poza repo, ale na wszelki wypadek)
+build/
 *.hex
 *.elf
 *.bin

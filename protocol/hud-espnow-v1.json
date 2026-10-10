@@ -1,8 +1,18 @@
 {
-  "$comment": "SSOT protokołu ESP-NOW między Szusownikiem (nadajnik) a HudRekaw (odbiornik, wire-proto szusownik/hud-espnow-v1). Ten plik jest jedynym źródłem prawdy dla obu firmware. Zmieniasz TU, potem uruchamiasz: node scripts/gen-hud-protocol.mjs (generuje firmware/Szusownik/src/config/hud_protocol.h i firmware/HudRekaw/src/config/hud_protocol.h). Test web/src/lib/hudProtocol.test.ts pilnuje, że wygenerowane pliki są aktualne.",
+  "$comment": "SSOT protokołu ESP-NOW między Szusownikiem (nadajnik) a HudRekaw (odbiornik, wire-proto szusownik/hud-espnow-v1). Ten plik jest jedynym źródłem prawdy dla obu firmware. Zmieniasz TU, potem uruchamiasz: node scripts/gen-hud-protocol.mjs (generuje firmware/Szusownik/src/config/hud_protocol.h i firmware/HudRekaw/src/config/hud_protocol.h). Test web/src/lib/hudProtocol.test.ts pilnuje, że wygenerowane pliki są aktualne. PAKIETY: S=telemetria (14 B, na końcu segmentIndex), L=pozycja+tryb (17 B, na końcu segmentIndex), H=heartbeat HudRekaw->Szusownik (8 B, niesie wersję trzymanej trasy = CRC32 bloba), R=chunk trasy Szusownik->HudRekaw (10 B nagłówka + do HUD_ROUTE_CHUNK_BYTES danych). Blob trasy ma własny SSOT: protocol/route-v1.json. segmentIndex = HUD_SEGMENT_NONE, gdy brak aktywnej trasy.",
   "numbers": {
-    "HUD_PKT_TELEMETRY_SIZE": 13,
-    "HUD_PKT_LOCATION_SIZE": 16,
+    "HUD_PKT_TELEMETRY_SIZE": 14,
+    "HUD_PKT_LOCATION_SIZE": 17,
+    "HUD_PKT_HEARTBEAT_SIZE": 8,
+    "HUD_PKT_ROUTE_HEADER_SIZE": 10,
+    "HUD_ROUTE_CHUNK_BYTES": 200,
+    "HUD_PKT_ROUTE_SIZE": 210,
+    "HUD_HEARTBEAT_MS": 3000,
+    "HUD_HEARTBEAT_TIMEOUT_MS": 10000,
+    "HUD_ROUTE_CHUNK_MS": 60,
+    "HUD_ROUTE_MAX_CYCLES": 4,
+    "HUD_SEGMENT_NONE": 255,
+    "HUD_SEGMENTS_SHOWN": 3,
     "HUD_LINK_CHANNEL": 1,
     "HUD_SEND_TELEMETRY_MS": 1000,
     "HUD_SEND_LOCATION_MS": 5000,
@@ -17,13 +27,15 @@
     "HUD_ANGLE_MAX": 359
   },
   "floats": {
-    "HUD_STATS_ABOVE_KMH": 5
+    "HUD_STATS_ABOVE_KMH": 30
   },
   "strings": {
     "HUD_WIRE_PROTO": "szusownik/hud-espnow-v1"
   },
   "chars": {
     "HUD_PKT_TELEMETRY": "S",
-    "HUD_PKT_LOCATION": "L"
+    "HUD_PKT_LOCATION": "L",
+    "HUD_PKT_HEARTBEAT": "H",
+    "HUD_PKT_ROUTE": "R"
   }
 }

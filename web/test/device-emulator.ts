@@ -12,6 +12,7 @@
 
 import { deflateSync } from "node:zlib";
 import { crc32 } from "../test/crc32.ts";
+import { SZ_UUID_ROUTE } from "../src/lib/routeProtocol.ts";
 import {
   SZ_BEEP_GAP_DEFAULT_MS,
   SZ_BEEP_INTERVAL_DEFAULT_MS,
@@ -132,6 +133,10 @@ class FakeCharacteristic {
   }
 
   async writeValueWithResponse(bytes: Uint8Array): Promise<void> {
+    if (this.uuid === SZ_UUID_ROUTE) {
+      this.emulator.writeRoute(bytes);
+      return;
+    }
     await this.emulator.writeCtrl(decode(toDataView(bytes)));
   }
 
@@ -179,10 +184,16 @@ export class DeviceEmulator {
   private signalGapMs = SZ_BEEP_INTERVAL_DEFAULT_MS;
   private minBeepKmh = SZ_BEEP_MIN_KMH_DEFAULT;
 
+  // Trasa (RAM): ostatni odebrany blob i jego tożsamość (CRC32).
+  private routeBuffer = new Uint8Array(0);
+  private routeReceived = 0;
+  private routeCrc = 0;
+  private routePoints = 0;
+
   readonly commands: string[] = [];
 
   constructor(private readonly options: EmulatorOptions) {
-    for (const uuid of [SZ_UUID_INFO, SZ_UUID_CTRL, SZ_UUID_DATA, SZ_UUID_STAT]) {
+    for (const uuid of [SZ_UUID_INFO, SZ_UUID_CTRL, SZ_UUID_DATA, SZ_UUID_STAT, SZ_UUID_ROUTE]) {
       this.characteristics.set(uuid, new FakeCharacteristic(uuid, this));
     }
     this.dataChar = this.characteristics.get(SZ_UUID_DATA)!;
@@ -227,6 +238,8 @@ export class DeviceEmulator {
       proto: SZ_WIRE_PROTO,
       fw: "emulator",
       fileCount: this.visibleFiles().length,
+      routeCrc: this.routeCrc,
+      routePoints: this.routePoints,
       volLow: this.volLow,
       volHigh: this.volHigh,
       freqShort: this.freqShort,
@@ -290,6 +303,34 @@ export class DeviceEmulator {
     } else if (command.startsWith(SZ_CMD_SETMINBEEP)) {
       this.minBeepKmh = this.clamp(Number(command.slice(SZ_CMD_SETMINBEEP.length)), 60, 120);
       this.setStatus(`beep min=${this.minBeepKmh}`);
+    }
+  }
+
+  /** Odbiór binarnego bloba trasy: ramki [offset u16, totalLen u16, payload...]. */
+  writeRoute(frame: Uint8Array): void {
+    if (frame.length < 4) return;
+    const view = toDataView(frame);
+    const offset = view.getUint16(0, true);
+    const totalLen = view.getUint16(2, true);
+    if (offset === 0 || totalLen > this.routeBuffer.length) {
+      this.routeBuffer = new Uint8Array(totalLen);
+      this.routeReceived = 0;
+    }
+    const payload = frame.subarray(4);
+    if (offset + payload.length <= this.routeBuffer.length) this.routeBuffer.set(payload, offset);
+    this.routeReceived = Math.max(this.routeReceived, offset + payload.length);
+    if (totalLen >= 20 && this.routeReceived >= totalLen) {
+      const blob = this.routeBuffer.subarray(0, totalLen);
+      const blobView = toDataView(blob);
+      const stored = blobView.getUint32(totalLen - 4, true);
+      const computed = crc32(blob.subarray(0, totalLen - 4));
+      if (stored === computed) {
+        this.routeCrc = stored;
+        this.routePoints = blobView.getUint16(10, true);
+        this.setStatus(`route ok crc=${crcHex(stored)} points=${this.routePoints}`);
+      } else {
+        this.setStatus(`route err crc=${crcHex(stored)}`);
+      }
     }
   }
 

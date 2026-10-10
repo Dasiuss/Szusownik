@@ -70,6 +70,8 @@ export function buildDeviceConfig(name: string, csv: string): E2eDeviceConfig {
       proto: SZ_WIRE_PROTO,
       fw: "e2e",
       fileCount: 1,
+      routeCrc: 0,
+      routePoints: 0,
       volLow: SZ_VOL_LOW_DEFAULT,
       volHigh: SZ_VOL_HIGH_DEFAULT,
       freqShort: SZ_FREQ_SHORT_DEFAULT,
@@ -115,6 +117,11 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
       return toDV(this.value ? new Uint8Array(this.value.buffer, this.value.byteOffset, this.value.byteLength) : new Uint8Array(0));
     }
     async writeValueWithResponse(bytes: Uint8Array): Promise<void> {
+      if (this.uuid === "3f9a0006-7c4e-4b2a-9e11-000000000006") {
+        // Trasa: e2e sprawdza przepływ UI, więc wystarczy potwierdzenie.
+        status = "route ok crc=00000000 points=0";
+        return;
+      }
       const command = decoder.decode(bytes);
       if (command.startsWith("ROTATE") || command.startsWith("STOP")) {
         streaming = false;
@@ -166,6 +173,7 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
     ["3f9a0003-7c4e-4b2a-9e11-000000000003", new Characteristic("3f9a0003-7c4e-4b2a-9e11-000000000003")],
     ["3f9a0004-7c4e-4b2a-9e11-000000000004", new Characteristic("3f9a0004-7c4e-4b2a-9e11-000000000004")],
     ["3f9a0005-7c4e-4b2a-9e11-000000000005", new Characteristic("3f9a0005-7c4e-4b2a-9e11-000000000005")],
+    ["3f9a0006-7c4e-4b2a-9e11-000000000006", new Characteristic("3f9a0006-7c4e-4b2a-9e11-000000000006")],
   ]);
 
   const service = {

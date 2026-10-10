@@ -341,6 +341,16 @@ góry mapy. Przycisk routingu uruchamia trzyklikowy flow: przycisk, punkt starto
 punkt docelowy. Po drugim kliknięciu wynik jest liczony automatycznie. Początek
 i koniec są markerami MapLibre, nie punktami circle-layer.
 
+Wyznaczona trasa jest też kodowana (`web/src/lib/routeTransfer.ts`, SSOT
+`protocol/route-v1.json`) i wysyłana do Szusownika dedykowaną charakterystyką BLE
+(`docs/ble-transfer.md` §10). Wysyłka ponawia się po każdej zmianie geometrii —
+także po każdym `trimRoute` w nawigacji (~5 s) — więc urządzenie trzyma aktualny,
+przycięty odcinek. `clearRoute` wysyła `CLEAR`, a po ponownym połączeniu PWA
+porównuje wersję trasy urządzenia z własną i dosyła raz tylko przy różnicy
+(restart Szusownika nie wymaga ponownego planowania). Bez połączenia w panelu
+trasy pokazuje się status „Połącz, aby wysłać trasę na urządzenie". Dalsza droga
+trasy (Szusownik -> HudRekaw) i rysowanie są w `docs/hud-rekaw.md`.
+
 Karta zaznaczonej trasy pokazuje `opening_hours`, `grooming`, długość oraz bezwzględną różnicę
 między najniższą i najwyższą próbką geometrii z DEM. Ma również przycisk
 `Nawiguj`, który używa pozycji GPS jako startu lub markera domu przy braku GPS.

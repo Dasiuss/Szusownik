@@ -85,14 +85,45 @@ miejscem po przecinku (np. `1234` → `123.4 km`). Odbiornik formatuje to przez
 | 8..11 | lon int32 LE (stopnie × 1e7) |
 | 12..13 | heading int16 LE [°] |
 | 14..15 | fisheye uint16 LE (klamp 100..500) |
+| 16 | segmentIndex uint8: bieżący odcinek trasy, `HUD_SEGMENT_NONE` = brak |
 
 Tryb ekranu odbiornik poznaje **wyłącznie z pakietu `L`** (bajt `mode`).
+
+### Pakiet `H` — heartbeat, 8 B (HudRekaw -> Szusownik)
+
+| Bajt | Znaczenie |
+| --- | --- |
+| 0 | `H` |
+| 1 | sekwencja uint8 |
+| 2..5 | routeCrc uint32 LE (CRC32 trzymanej trasy) |
+| 6 | flagi: bit0 = ma trasę |
+| 7 | zarezerwowane (0) |
+
+HudRekaw nadaje `H` co `HUD_HEARTBEAT_MS` (3 s). Szusownik traktuje odbiornik jako
+dostępny, gdy heartbeat dotarł w ciągu `HUD_HEARTBEAT_TIMEOUT_MS` (10 s).
+
+### Pakiet `R` — chunk trasy, 10 B nagłówka + do 200 B (Szusownik -> HudRekaw)
+
+| Bajt | Znaczenie |
+| --- | --- |
+| 0 | `R` |
+| 1 | sekwencja uint8 |
+| 2 | chunkIndex uint8 (0..chunkCount-1) |
+| 3 | chunkCount uint8 |
+| 4..5 | totalLen uint16 LE (długość bloba) |
+| 6..9 | routeCrc uint32 LE (CRC32 całego bloba) |
+| 10.. | payload (do `HUD_ROUTE_CHUNK_BYTES` = 200 B) |
+
+Szusownik dzieli blob trasy (SSOT `protocol/route-v1.json`) na chunki i wysyła je
+tylko, gdy odbiornik jest dostępny i zgłasza inną wersję (`routeCrc`). HudRekaw
+składa chunki, waliduje CRC całości i zapamiętuje trasę w RAM. Pusty blob
+(pointCount=0) = CLEAR.
 
 ## 4. Reguła trybu i częstotliwość wysyłki
 
 Szusownik wybiera tryb po własnej prędkości:
 
-- `speed > HUD_STATS_ABOVE_KMH (5 km/h)` → **statystyki**,
+- `speed > HUD_STATS_ABOVE_KMH (30 km/h)` → **statystyki**,
 - `speed <= 5 km/h` (w tym postój) → **mapa**.
 
 Wysyłka jest zależna od trybu (żadnych zbędnych pakietów):
@@ -157,6 +188,24 @@ ESP8266 ma tylko 4 KB stosu zadania `loop()` (`CONT_STACKSIZE`), a tablica
 urządzenie przy pierwszej ramce `L` (objaw: mapa mignie i wraca ekran statystyk,
 a podgląd pokazuje `last packet: never`).
 
+### Tryb nawigacji (trasa na mapie)
+
+Gdy Szusownik przekazał trasę (pakiety `R`), odbiornik rysuje ją **na wierzchu**
+mapy jako grubą niebieską linię (`COLOR_ROUTE`, „jak Google Maps"), bez zmiany
+obecnej orientacji mapy (nadal wg najbliższej trasy zjazdowej). Punkty trasy są w
+metrach względem origin trasy; odbiornik przesuwa je do układu własnej mapy
+(`MAP_ORIGIN_*`) i przepuszcza przez tę samą projekcję „rybiego oka".
+
+Na dole ekranu pojawiają się **bieżący + 2 następne odcinki trasy**
+(`HUD_SEGMENTS_SHOWN`), z bieżącym w kolorze trasy. `segmentIndex` przychodzi z
+pakietów `S`/`L` (liczy go Szusownik z GNSS), więc lista działa zarówno na mapie
+(≤30 km/h), jak i na ekranie statystyk (>30 km/h). Ekran statystyk przy aktywnej
+trasie rezerwuje dolny pas: wiersz `TOT` przesuwa się wyżej, a nazwy odcinków
+zajmują dolną krawędź. Trasa trzymana jest **tylko w RAM** (brak zapisu we flashu);
+po restarcie odbiornik zgłasza heartbeat z pustą trasą i Szusownik dosyła ją
+ponownie. Zmiana trasy wymusza przerysowanie mapy (`routeCrc` w martwej strefie)
+i unieważnienie layoutu statystyk.
+
 ## 6. Budowanie i wgrywanie
 
 ```powershell
@@ -200,8 +249,10 @@ Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,
 
 ## 9. Ograniczenia
 
-- Brak potwierdzeń/retry na ESP-NOW — pojedynczy, niepotwierdzony broadcast
-  (jak w DisplayTest). Kolejny pakiet i tak nadchodzi w następnym okresie.
+- Telemetria `S` i pozycja `L` nadal są pojedynczym, niepotwierdzonym broadcastem
+  (jak w DisplayTest) — kolejny pakiet i tak nadchodzi w następnym okresie. Trasa
+  `R` ma mocniejszą ochronę: chunki z indeksem i CRC całości, wznawiane po
+  heartbeacie, a potwierdzeniem dostarczenia jest zmiana `routeCrc` w kolejnym `H`.
 - Utrata fixa w trybie mapy nie czyści ekranu — rysowana jest ostatnia pozycja.
 - Przy połączeniu z routerem HudRekaw zmienia kanał i traci łączność z
   Szusownikiem (kanał 1). Docelowo oba urządzenia są poza zasięgiem routera.

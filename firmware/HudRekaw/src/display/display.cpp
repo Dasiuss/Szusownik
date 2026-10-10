@@ -130,6 +130,57 @@ void Display::drawMapPolyline(uint16_t firstPoint, uint16_t pointCount, uint16_t
   }
 }
 
+void Display::drawRoute(const HudRoute& route, float riderEast, float riderNorth, float cosBearing,
+                        float sinBearing, float fisheyeK, uint16_t fisheyeRadius) {
+  if (!route.valid || route.pointCount < 2) return;
+  const float routeOriginLat = static_cast<float>(route.originLatE7) / 1e7f;
+  const float routeOriginLon = static_cast<float>(route.originLonE7) / 1e7f;
+  const float mapOriginLat = static_cast<float>(MAP_ORIGIN_LAT_E7) / 1e7f;
+  const float mapOriginLon = static_cast<float>(MAP_ORIGIN_LON_E7) / 1e7f;
+  const float lonScale = 111320.0f * cosf(routeOriginLat * PI / 180.0f);
+  const float offsetEast = (routeOriginLon - mapOriginLon) * lonScale;
+  const float offsetNorth = (routeOriginLat - mapOriginLat) * MAP_METERS_PER_DEG_LAT;
+
+  tft_.startWrite();
+  int16_t previousX = 0;
+  int16_t previousY = 0;
+  for (uint16_t index = 0; index < route.pointCount; index++) {
+    const float mapEast = offsetEast + static_cast<float>(route.east[index]);
+    const float mapNorth = offsetNorth + static_cast<float>(route.north[index]);
+    int16_t x = 0;
+    int16_t y = 0;
+    mapProjectPoint(static_cast<int16_t>(mapEast), static_cast<int16_t>(mapNorth), riderEast,
+                    riderNorth, cosBearing, sinBearing, fisheyeRadius, fisheyeK, &x, &y);
+    if (index > 0) {
+      // Gruba linia: kilka przesuniętych przebiegów Bresenhama.
+      drawMapLine(previousX, previousY, x, y, COLOR_ROUTE);
+      drawMapLine(previousX + 1, previousY, x + 1, y, COLOR_ROUTE);
+      drawMapLine(previousX, previousY + 1, x, y + 1, COLOR_ROUTE);
+    }
+    previousX = x;
+    previousY = y;
+    if ((index & 0x3F) == 0) yield();
+  }
+  tft_.endWrite();
+}
+
+void Display::drawRouteSteps(const HudRoute& route, uint8_t segmentIndex, int16_t firstY,
+                             int16_t lineStep) {
+  if (!route.valid || route.segmentCount == 0) return;
+  const int16_t bandHeight = static_cast<int16_t>(HUD_SEGMENTS_SHOWN * lineStep + 2);
+  tft_.fillRect(0, firstY - 2, TFT_WIDTH, bandHeight, COLOR_BG);
+  tft_.setFont(NULL);
+  tft_.setTextSize(1);
+  for (uint8_t row = 0; row < HUD_SEGMENTS_SHOWN; row++) {
+    const uint16_t index = static_cast<uint16_t>(segmentIndex) + row;
+    if (index >= route.segmentCount) break;
+    const uint16_t color = row == 0 ? COLOR_ROUTE : COLOR_GRAY;
+    tft_.setTextColor(color);
+    tft_.setCursor(6, firstY + static_cast<int16_t>(row * lineStep));
+    tft_.print(route.steps[index].label);
+  }
+}
+
 void Display::drawMapLabels(float riderEast, float riderNorth, float cosBearing, float sinBearing,
                             float fisheyeK, uint16_t fisheyeRadius) {
   MapLabelBox* const candidates = gLabelCandidates;
@@ -211,7 +262,7 @@ void Display::drawRiderDot() {
   tft_.drawCircle(MAP_RIDER_X, MAP_RIDER_Y, 6, COLOR_WHITE);
 }
 
-bool Display::drawMap(const HudLocation& location, bool force) {
+bool Display::drawMap(const HudLocation& location, const HudRoute& route, bool force) {
   if (metersPerDegLon_ == 0.0f) {
     metersPerDegLon_ =
         111320.0f * cosf((static_cast<float>(MAP_ORIGIN_LAT_E7) / 1e7f) * PI / 180.0f);
@@ -233,8 +284,9 @@ bool Display::drawMap(const HudLocation& location, bool force) {
   const int16_t bearing = found ? nearest : mapBearing_;
 
   // Martwa strefa: pomiń przerysowanie, gdy pozycja i kurs nie ruszyły się
-  // wystarczająco, a zoom/fisheye/tryb się nie zmieniły.
+  // wystarczająco, a zoom/fisheye/trasa się nie zmieniły.
   if (!force && mapDrawn_ && zoom == mapDrawnZoom_ && fisheyeRadius == mapDrawnFisheye_ &&
+      route.crc == mapDrawnRouteCrc_ &&
       !mapShouldRedraw(mapDrawnEast_, mapDrawnNorth_, mapDrawnBearing_, riderEast, riderNorth,
                        bearing, MAP_REDRAW_MOVE_M, MAP_REDRAW_BEARING_DEG)) {
     return false;
@@ -247,6 +299,7 @@ bool Display::drawMap(const HudLocation& location, bool force) {
   mapDrawnBearing_ = bearing;
   mapDrawnZoom_ = zoom;
   mapDrawnFisheye_ = fisheyeRadius;
+  mapDrawnRouteCrc_ = route.crc;
 
   const float cosBearing = cosf(static_cast<float>(bearing) * PI / 180.0f);
   const float sinBearing = sinf(static_cast<float>(bearing) * PI / 180.0f);
@@ -272,7 +325,11 @@ bool Display::drawMap(const HudLocation& location, bool force) {
   tft_.endWrite();
 
   drawMapLabels(riderEast, riderNorth, cosBearing, sinBearing, fisheyeK, fisheyeRadius);
+  drawRoute(route, riderEast, riderNorth, cosBearing, sinBearing, fisheyeK, fisheyeRadius);
   drawRiderDot();
+  if (route.valid && route.pointCount > 0 && location.segmentIndex != HUD_SEGMENT_NONE) {
+    drawRouteSteps(route, location.segmentIndex, 204, 12);
+  }
   return true;
 }
 
@@ -315,7 +372,7 @@ void Display::drawStatsLayout() {
   drawLabel("SPD", 14, 36, COLOR_CYAN);
   drawLabel("REM", 14, 150, COLOR_ORANGE);
   drawLabel("MAX", 14, 188, COLOR_VIOLET);
-  drawLabel("TOT", 14, 226, COLOR_YELLOW);
+  drawLabel("TOT", 14, statTotBaseline_, COLOR_YELLOW);
   tft_.drawFastHLine(12, 114, TFT_WIDTH - 24, COLOR_DARK);
   layoutDrawn_ = true;
 }
@@ -355,14 +412,18 @@ void Display::drawLinkDot(bool fresh) {
   tft_.fillCircle(18, 16, 5, fresh ? COLOR_GREEN : COLOR_RED);
 }
 
-void Display::updateStats(const HudTelemetry& telemetry, bool fresh) {
+void Display::updateStats(const HudTelemetry& telemetry, const HudRoute& route, bool fresh) {
   const uint16_t valueColor = fresh ? COLOR_WHITE : COLOR_GRAY;
+  const bool routeActive = route.valid && route.pointCount > 0;
 
-  if (!layoutDrawn_) {
+  if (!layoutDrawn_ || routeActive != layoutWithRoute_) {
+    layoutWithRoute_ = routeActive;
+    statTotBaseline_ = routeActive ? 184 : 226;
     drawStatsLayout();
     lastSpeed_ = lastRemaining_ = lastAverage_ = lastTotal_ = -1;
     lastAngle_ = -1000;
     lastFresh_ = !fresh;
+    lastSegmentIndex_ = -1;
   }
 
   if (telemetry.speed != lastSpeed_ || fresh != lastFresh_) {
@@ -389,4 +450,13 @@ void Display::updateStats(const HudTelemetry& telemetry, bool fresh) {
     drawLinkDot(fresh);
     lastFresh_ = fresh;
   }
+
+  const int16_t segment = routeActive ? static_cast<int16_t>(telemetry.segmentIndex) : HUD_SEGMENT_NONE;
+  if (routeActive && segment != HUD_SEGMENT_NONE) {
+    if (segment != lastSegmentIndex_) drawRouteSteps(route, static_cast<uint8_t>(segment), statTotBaseline_ + 20, 12);
+  } else if (!routeActive && lastRouteActive_) {
+    tft_.fillRect(0, 196, TFT_WIDTH, TFT_HEIGHT - 196, COLOR_BG);
+  }
+  lastRouteActive_ = routeActive;
+  lastSegmentIndex_ = segment;
 }

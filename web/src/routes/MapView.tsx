@@ -7,6 +7,7 @@ import { LiftIcon, LIFT_EMPTY_IMAGE_ID, LIFT_ICON_IMAGE_EXPRESSION, LIFT_MAP_IMA
 import { getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import { findRoute, snapToPiste, snapToRoute, trimRoute, type RouteResult } from "../lib/mapRouting.ts";
+import { encodeRoute } from "../lib/routeTransfer.ts";
 import {
   AERIALWAY_LABELS,
   DIFFICULTY_COLORS,
@@ -381,6 +382,11 @@ export default function MapView() {
   const [now, setNow] = useState(() => Date.now());
   const [samples, setSamples] = useState<Sample[]>([]);
   const device = useDevice();
+  // Najświeższa funkcja syncRoute bez wywoływania efektu przy każdym renderze.
+  const syncRouteRef = useRef(device.syncRoute);
+  useEffect(() => {
+    syncRouteRef.current = device.syncRoute;
+  });
 
   const deviceStart = position && withinBounds(position.coordinate) ? position.coordinate : null;
   const start = manualStart ?? deviceStart;
@@ -643,6 +649,14 @@ export default function MapView() {
     if (map.getLayer("lifts-names")) map.setFilter("lifts-names", withExclusion(LIFTS_LABEL_CONDITIONS) as never);
   }, [mapReady, route]);
 
+  // Po każdej zmianie geometrii trasy (także po przycięciu w nawigacji co ~5 s)
+  // wysyłamy ją na urządzenie. Kontekst urządzenia porównuje CRC i nie wysyła,
+  // gdy urządzenie ma już tę wersję.
+  useEffect(() => {
+    if (!route) return;
+    syncRouteRef.current(encodeRoute(route));
+  }, [route]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !position || hasCenteredOnPosition.current || !withinBounds(position.coordinate)) return;
@@ -862,6 +876,7 @@ export default function MapView() {
     setManualStart(null);
     setRouteError(null);
     setRouteMode("idle");
+    syncRouteRef.current(null); // CLEAR na urządzeniu
   }
 
   return (
@@ -922,6 +937,17 @@ export default function MapView() {
             ))}
           </div>
           <button className="map-clear-route" type="button" onClick={clearRoute}>Wyczyść</button>
+          <div className={`map-route-sync map-route-sync-${device.routeSync}`}>
+            {device.routeSync === "sending" && <span>Wysyłam trasę na urządzenie…</span>}
+            {device.routeSync === "sent" && <span>Trasa na urządzeniu</span>}
+            {device.routeSync === "error" && <span>{device.routeSyncError ?? "Nie udało się wysłać trasy"}</span>}
+            {device.routeSync === "offline" && (
+              <>
+                <span>Połącz, aby wysłać trasę na urządzenie</span>
+                <button className="map-route-connect" type="button" onClick={() => void device.connectAndCheck()}>Połącz</button>
+              </>
+            )}
+          </div>
         </section>
       )}
 

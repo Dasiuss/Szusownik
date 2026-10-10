@@ -2,6 +2,7 @@
 #include "crc32.h"
 #include "../storage/storage.h"
 #include "../audio/audio.h"
+#include "../core/route.h"
 #include "../config/config.h"
 #include "../config/log.h"
 #include <NimBLEDevice.h>
@@ -11,6 +12,10 @@ static NimBLECharacteristic* chrInfo = nullptr;
 static NimBLECharacteristic* chrCtrl = nullptr;
 static NimBLECharacteristic* chrData = nullptr;
 static NimBLECharacteristic* chrStat = nullptr;
+static NimBLECharacteristic* chrRoute = nullptr;
+
+class BleFiles;
+static BleFiles* g_bleSelf = nullptr;
 
 // Callbacki serwera tylko ustawiaja flagi (kontekst taska NimBLE). Logi
 // wystawiamy w poll() z glownej petli, zeby nie mieszac strumieni Serial.
@@ -69,8 +74,20 @@ class SzCtrlCallbacks : public NimBLECharacteristicCallbacks {
 };
 static SzCtrlCallbacks szCtrlCallbacks;
 
+// Charakterystyka trasy: porcja = [offset u16, totalLen u16, payload...].
+class SzRouteCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+    std::string v = c->getValue();  // ten sam task, który zmienił m_value
+    if (g_bleSelf && !v.empty()) {
+      g_bleSelf->onRouteWrite(reinterpret_cast<const uint8_t*>(v.data()), v.size());
+    }
+  }
+};
+static SzRouteCallbacks szRouteCallbacks;
+
 void BleFiles::begin(Storage* storage) {
   storage_ = storage;
+  g_bleSelf = this;
   allocStreamMem();
   NimBLEDevice::init(SZ_BLE_NAME);
   NimBLEDevice::setMTU(517);
@@ -84,6 +101,9 @@ void BleFiles::begin(Storage* storage) {
   chrData = svc->createCharacteristic(SZ_UUID_DATA, NIMBLE_PROPERTY::NOTIFY);
   chrStat = svc->createCharacteristic(SZ_UUID_STAT,
                                       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+  chrRoute = svc->createCharacteristic(SZ_UUID_ROUTE,
+                                       NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  chrRoute->setCallbacks(&szRouteCallbacks);
   // Rozgrzej pojemność buforów wartości do maksimum, żeby późniejsze setValue()
   // z pętli głównej nie robiło realloc() równolegle z odczytem z taska hosta
   // (ten sam wyścig, który niszczy stertę przy CTRL — patrz SzCtrlCallbacks).
@@ -92,6 +112,22 @@ void BleFiles::begin(Storage* storage) {
     chrInfo->setValue(pad.c_str());
     chrStat->setValue(pad.c_str());
   }
+  {
+    // Rozgrzej bufor charakterystyki trasy do maksymalnego zapisu, żeby zapis
+    // porcji nie robił realloc() równolegle z odczytem z taska hosta.
+    std::string pad(ROUTE_BLE_MAX_WRITE, ' ');
+    chrRoute->setValue(pad.c_str());
+  }
+  // Start z kanonicznym pustym blobem (CLEAR): HudRekaw dostanie go, gdy zgłosi
+  // inną wersję, a porównanie wersji z PWA działa od pierwszego połączenia.
+  routeRawLen_ = static_cast<uint16_t>(routeBuildEmpty(routeRaw_, sizeof(routeRaw_)));
+  routeCrc_ = 0;
+  if (routeRawLen_ >= ROUTE_CRC_SIZE) {
+    const uint8_t* p = routeRaw_ + routeRawLen_ - ROUTE_CRC_SIZE;
+    routeCrc_ = static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+                (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+  }
+  routePoints_ = 0;
   refreshInfo();
   setStatus(SZ_ST_OK);
   svc->start();
@@ -129,6 +165,10 @@ void BleFiles::refreshInfo() {
   // w NimBLE. Metadane plików PWA pobiera stronicowanym LIST:<since>.
   String j = "{\"proto\":\"" SZ_WIRE_PROTO "\",\"fw\":\"" SZ_FW_VERSION "\",\"fileCount\":";
   j += String(storage_ ? (unsigned long)storage_->countCsv() : 0UL);
+  j += ",\"routeCrc\":";
+  j += String((unsigned long)routeCrc_);
+  j += ",\"routePoints\":";
+  j += String((unsigned)routePoints_);
   if (beeper_) {
     j += ",\"volLow\":";
     j += String(beeper_->volLow());
@@ -356,7 +396,73 @@ void BleFiles::poll() {
     portEXIT_CRITICAL(&g_ctrlMux);
     handleCommand(String(cmd));
   }
+  if (routeCommitPending_) commitRoute();
   if (transferring_) pumpStream();
+}
+
+void BleFiles::onRouteWrite(const uint8_t* data, size_t len) {
+  if (data == nullptr || len < ROUTE_BLE_HEADER_SIZE) return;
+  if (routeCommitPending_) return;  // poczekaj, aż pętla zatwierdzi porcję
+  const uint16_t offset =
+      static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
+  const uint16_t total =
+      static_cast<uint16_t>(data[2]) | (static_cast<uint16_t>(data[3]) << 8);
+  if (total < ROUTE_HEADER_SIZE + ROUTE_CRC_SIZE || total > ROUTE_MAX_BLOB) return;
+  const size_t payloadLen = len - ROUTE_BLE_HEADER_SIZE;
+  if (static_cast<size_t>(offset) + payloadLen > total) return;
+  if (offset == 0) {
+    routeStageTotal_ = total;
+    routeStageLen_ = 0;
+  } else if (total != routeStageTotal_) {
+    return;  // porcja bez początku albo mieszanie dwóch transferów
+  }
+  memcpy(routeStage_ + offset, data + ROUTE_BLE_HEADER_SIZE, payloadLen);
+  const uint16_t end = static_cast<uint16_t>(offset + payloadLen);
+  if (end > routeStageLen_) routeStageLen_ = end;
+  if (end >= total) routeCommitPending_ = true;
+}
+
+void BleFiles::clearRoute() {
+  routeRawLen_ = static_cast<uint16_t>(routeBuildEmpty(routeRaw_, sizeof(routeRaw_)));
+  routePoints_ = 0;
+  routeCrc_ = 0;
+  if (routeRawLen_ >= ROUTE_CRC_SIZE) {
+    const uint8_t* p = routeRaw_ + routeRawLen_ - ROUTE_CRC_SIZE;
+    routeCrc_ = static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+                (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+  }
+  routeCommitPending_ = false;
+  refreshInfo();
+  setStatus(SZ_ST_OK);
+}
+
+void BleFiles::commitRoute() {
+  routeCommitPending_ = false;
+  static RouteData decoded;
+  const uint16_t len = routeStageTotal_;
+  uint32_t storedCrc = 0;
+  if (len >= ROUTE_CRC_SIZE) {
+    const uint8_t* p = routeStage_ + len - ROUTE_CRC_SIZE;
+    storedCrc = static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+                (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+  }
+  if (routeDecode(routeStage_, routeStageLen_, &decoded)) {
+    memcpy(routeRaw_, routeStage_, routeStageLen_);
+    routeRawLen_ = routeStageLen_;
+    routeCrc_ = decoded.crc;
+    routePoints_ = decoded.pointCount;
+    char msg[64];
+    snprintf(msg, sizeof(msg), "route ok crc=%08lX points=%u", (unsigned long)decoded.crc,
+             (unsigned)decoded.pointCount);
+    refreshInfo();
+    setStatus(String(msg));
+    SZ_LOGIF("BLE %s", msg);
+  } else {
+    char msg[48];
+    snprintf(msg, sizeof(msg), "route err crc=%08lX", (unsigned long)storedCrc);
+    setStatus(String(msg));
+    SZ_LOGWF("BLE %s", msg);
+  }
 }
 
 bool BleFiles::startStream(const String& name) {

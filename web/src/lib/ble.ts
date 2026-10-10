@@ -1,5 +1,6 @@
 import { db } from "./db.ts";
 import { DEVICE_CSV_V2_HEADER } from "./csv.ts";
+import { ROUTE_BLE_CHUNK, ROUTE_BLE_HEADER_SIZE, SZ_UUID_ROUTE } from "./routeProtocol.ts";
 import {
   SZ_BEEP_GAP_MAX_MS,
   SZ_BEEP_GAP_MIN_MS,
@@ -62,6 +63,8 @@ export interface FileMeta {
 export interface DeviceInfo {
   fw: string;
   fileCount: number;
+  routeCrc: number;
+  routePoints: number;
   volLow: number;
   volHigh: number;
   freqShort: number;
@@ -225,6 +228,7 @@ export class SzusownikBle {
   private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private ctrl: BluetoothRemoteGATTCharacteristic | null = null;
+  private route: BluetoothRemoteGATTCharacteristic | null = null;
   private info: BluetoothRemoteGATTCharacteristic | null = null;
   private data: BluetoothRemoteGATTCharacteristic | null = null;
   private stat: BluetoothRemoteGATTCharacteristic | null = null;
@@ -248,6 +252,7 @@ export class SzusownikBle {
     const svc = await this.server.getPrimaryService(SZ_UUID_SVC);
     this.info = await svc.getCharacteristic(SZ_UUID_INFO);
     this.ctrl = await svc.getCharacteristic(SZ_UUID_CTRL);
+    this.route = await svc.getCharacteristic(SZ_UUID_ROUTE);
     this.data = await svc.getCharacteristic(SZ_UUID_DATA);
     this.stat = await svc.getCharacteristic(SZ_UUID_STAT);
     await this.data.startNotifications();
@@ -274,6 +279,7 @@ export class SzusownikBle {
     }
     this.server = null;
     this.device = null;
+    this.route = null;
   }
 
   private async writeCtrl(cmd: string): Promise<void> {
@@ -281,6 +287,8 @@ export class SzusownikBle {
   }
 
   private static readonly INFO_NUMBER_FIELDS = [
+    "routeCrc",
+    "routePoints",
     "volLow",
     "volHigh",
     "freqShort",
@@ -317,6 +325,38 @@ export class SzusownikBle {
   private async readStatus(): Promise<string> {
     const v = await this.stat!.readValue();
     return new TextDecoder().decode(dvBytes(v));
+  }
+
+  /**
+   * Wysyła binarny blob trasy na dedykowaną charakterystykę WRITE.
+   * Każdy zapis to ramka [offset u16 LE, totalLen u16 LE, payload...].
+   * `writeValueWithResponse` daje potwierdzenie na poziomie GATT, więc nie
+   * potrzebujemy ACK na każdą porcję; urządzenie składa porcje i waliduje CRC
+   * całości. Przy zbyt dużym zapisie (mniejszy MTU) zmniejszamy porcję i
+   * ponawiamy od tego samego offsetu. Zwraca STATUS urządzenia
+   * ("route ok ..." / "route err ...").
+   */
+  async sendRoute(bytes: Uint8Array): Promise<string> {
+    if (!this.route) throw new Error("Brak charakterystyki trasy w urządzeniu");
+    const total = bytes.length;
+    let chunk = ROUTE_BLE_CHUNK;
+    let offset = 0;
+    while (offset < total) {
+      const take = Math.min(chunk, total - offset);
+      const frame = new Uint8Array(ROUTE_BLE_HEADER_SIZE + take);
+      const view = new DataView(frame.buffer);
+      view.setUint16(0, offset, true);
+      view.setUint16(2, total, true);
+      frame.set(bytes.subarray(offset, offset + take), ROUTE_BLE_HEADER_SIZE);
+      try {
+        await this.route.writeValueWithResponse(frame);
+        offset += take;
+      } catch (error) {
+        if (take <= 16) throw error;
+        chunk = Math.max(16, Math.floor(take / 2));
+      }
+    }
+    return this.pollStatus(/^route /);
   }
 
   // Firmware konsumuje komendy w poll() w głównej pętli i dopiero wtedy

@@ -1,0 +1,27 @@
+// GENERATED FILE - DO NOT EDIT.
+// Source: protocol/route-v1.json
+// Regenerate: node scripts/gen-route-protocol.mjs
+#pragma once
+
+#define ROUTE_FORMAT_VERSION 1
+#define ROUTE_HEADER_SIZE 16
+#define ROUTE_POINT_SIZE 4
+#define ROUTE_SEGMENT_HEADER_SIZE 6
+#define ROUTE_CRC_SIZE 4
+#define ROUTE_MAX_POINTS 512
+#define ROUTE_MAX_SEGMENTS 24
+#define ROUTE_MAX_LABEL 12
+#define ROUTE_MAX_BLOB 2500
+#define ROUTE_SAMPLE_SPACING_M 10
+#define ROUTE_ARRIVAL_M 30
+#define ROUTE_KIND_PISTE 0
+#define ROUTE_KIND_LIFT 1
+#define ROUTE_SEGMENT_NONE 255
+#define ROUTE_BLE_HEADER_SIZE 4
+#define ROUTE_BLE_MAX_WRITE 512
+#define ROUTE_BLE_CHUNK 508
+#define ROUTE_METERS_PER_DEG_LAT 110540.0f
+#define ROUTE_METERS_PER_DEG_LON 111320.0f
+
+#define ROUTE_WIRE_PROTO "szusownik/route-v1"
+#define SZ_UUID_ROUTE "3f9a0006-7c4e-4b2a-9e11-000000000006"

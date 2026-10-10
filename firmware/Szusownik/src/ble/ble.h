@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "../miniz/miniz_tdef.h"
+#include "../config/route_protocol.h"
 
 class Storage;
 class Beeper;
@@ -18,6 +19,16 @@ class BleFiles {
   bool busy() const { return transferring_; }
   String lastError() const { return lastError_; }
   uint16_t mtu() const { return mtu_; }  // ostatnio wynegocjowane MTU (0 = brak)
+
+  // Trasa nawigacyjna trzymana w RAM (SSOT: protocol/route-v1.json).
+  const uint8_t* routeRaw() const { return routeRaw_; }
+  uint16_t routeRawLen() const { return routeRawLen_; }
+  uint32_t routeVersion() const { return routeCrc_; }  // tożsamość = CRC32 bloba
+  // Lokalne wyczyszczenie trasy (dotarcie do celu): pusty blob + odświeżenie INFO.
+  void clearRoute();
+  // Wywoływane z callbacku charakterystyki trasy (host task NimBLE): kopiuje
+  // porcję [offset,totalLen] do bufora stagingu i ustawia flagę commitu.
+  void onRouteWrite(const uint8_t* data, size_t len);
 
  private:
   Storage* storage_ = nullptr;
@@ -57,6 +68,21 @@ class BleFiles {
   // bo emitFrame() przy pacingu nie kopiuje danych i nie wolno ich zgubić.
   uint8_t pend_[512];
   size_t pendLen_ = 0;
+
+  // Trasa: `routeRaw_` to zatwierdzony blob (RAM), `routeStage_` to bufor
+  // składania porcji z charakterystyki. Komit w pętli głównej (poza taskiem
+  // NimBLE), z walidacją CRC.
+  uint8_t routeRaw_[ROUTE_MAX_BLOB];
+  uint16_t routeRawLen_ = 0;
+  uint32_t routeCrc_ = 0;
+  uint16_t routePoints_ = 0;
+  uint8_t routeStage_[ROUTE_MAX_BLOB];
+  uint16_t routeStageLen_ = 0;
+  uint16_t routeStageTotal_ = 0;
+  volatile bool routeCommitPending_ = false;
+
+  void commitRoute();
+
   bool allocStreamMem();
   void handleCommand(const String& cmd);
   void refreshInfo();

@@ -213,3 +213,22 @@ asocjacji WiFi. Pakiet `S` (statystyki, 1 s) idzie w ruchu, `L` (pozycja + tryb,
 dzieli radio z BLE, więc w trakcie transferu pliku (`BleFiles::busy()`) wysyłka
 jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik:
 `docs/hud-rekaw.md`, reguła `AGENTS.md` pkt 18.
+
+## 13. Tryb nawigacji (trasa)
+
+- PWA wysyła wyznaczoną trasę do Szusownika **dedykowaną charakterystyką BLE
+  WRITE** (binarny blob; SSOT `protocol/route-v1.json`). Blob: nagłówek + punkty
+  `int16` w metrach od origin (decymacja 10 m, limit 512) + odcinki (nazwa + typ +
+  zakres dystansu, limit 24) + CRC32. Tożsamość trasy = CRC32.
+- Szusownik trzyma trasę **tylko w RAM** (start z kanonicznym pustym blobem =
+  CLEAR). `BleFiles` składa porcje w staging i waliduje CRC w pętli głównej;
+  INFO niesie `routeCrc`/`routePoints`, STATUS `route ok ...` / `route err ...`.
+- Szusownik przekazuje trasę dalej do HudRekaw po ESP-NOW: odbiera heartbeat `H`,
+  a gdy odbiornik jest dostępny i ma inną wersję, wysyła chunki `R` (patrz
+  `docs/hud-rekaw.md`).
+- Z GNSS liczy **indeks bieżącego odcinka trasy** i dokłada go do pakietów `S`/`L`
+  (`segmentIndex`, `HUD_SEGMENT_NONE` bez trasy). Odległość do końca ≤
+  `ROUTE_ARRIVAL_M` (30 m) **czyści trasę lokalnie** (pusty blob; zniknie też z
+  HudRekaw). Bez powiadamiania PWA — PWA ma własną logikę dotarcia.
+- Kroki trasy na OLED Szusownika nie są teraz wyświetlane (przyszły redesign), ale
+  dane są dostępne w RAM.

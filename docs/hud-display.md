@@ -2,8 +2,9 @@
 
 > Status: layout i render zaimplementowane w firmware (`firmware/Szusownik/src/hud/`,
 > `src/core/run_tracker`, `src/core/hud_format`). Mapa/trasa/bitmapy/animation
-> usunięte z planu (greenfield). Linia trasy z PWA: roadmapa (zarezerwowane
-> miejsce).
+> usunięte z planu (greenfield). Linia trasy z PWA: **transport i dane
+> zaimplementowane** (Szusownik trzyma trasę + `segmentIndex`), render linii na
+> OLED nadal roadmapa (zarezerwowane miejsce).
 
 ## 1. Zasada działania
 
@@ -75,8 +76,10 @@ DYSTANS                 MAX DNIA
   dolną linią, a dolna linia (pełna szerokość, `y=55` separator, `y=56` tekst)
   pokazuje kolejne trasy/wyciągi **jedna po drugiej**.
 - Strzałka przed nazwą = kierunek skrętu; nazwy skrócone do **6 znaków**.
-- **Na teraz tylko rezerwa miejsca**: protokół BLE wysyłki trasy i dopasowanie
-  nie są zaimplementowane (roadmapa). `routeLine` jest zawsze `nullptr`.
+- **Transport i dane gotowe, render niepodłączony**: PWA wysyła trasę po BLE, a
+  Szusownik trzyma ją w RAM i liczy bieżący odcinek (`segmentIndex`, `docs/wymagania-ESP.md` §13,
+  `AGENTS.md` pkt 9). Sam render dolnej linii (`routeLine`) na OLED czeka na
+  redesign ekranu — na razie jest `nullptr` (kroki widzi tylko HudRekaw).
 
 ### 3.3 Brak fixa
 

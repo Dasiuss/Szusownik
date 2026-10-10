@@ -32,17 +32,19 @@ void loop() {
 
   const uint8_t mode = link.mode();
   const bool fresh = link.linkFresh();
+  const bool routeDirty = link.takeRouteDirty();
+  if (routeDirty) display.invalidateStats();
 
   if (mode == HUD_MODE_MAP) {
-    if (link.locationValid() && (link.takeLocationDirty() || mode != lastMode)) {
-      // Zmiana trybu wymusza rysunek; inaczej decyduje martwa strefa w drawMap.
-      display.drawMap(link.location(), mode != lastMode);
+    if (link.locationValid() && (link.takeLocationDirty() || mode != lastMode || routeDirty)) {
+      // Zmiana trybu/trasy wymusza rysunek; inaczej decyduje martwa strefa.
+      display.drawMap(link.location(), link.route(), mode != lastMode || routeDirty);
     }
   } else {
     if (mode != lastMode) display.invalidateStats();
     const bool dirty = link.takeTelemetryDirty();
-    if (dirty || mode != lastMode || fresh != lastFresh) {
-      display.updateStats(link.telemetry(), fresh);
+    if (dirty || mode != lastMode || fresh != lastFresh || routeDirty) {
+      display.updateStats(link.telemetry(), link.route(), fresh);
     }
   }
 

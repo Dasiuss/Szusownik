@@ -17,6 +17,7 @@
 #include "src/link/hud_link.h"
 #include "src/core/run_tracker.h"
 #include "src/core/hud_format.h"
+#include "src/core/route.h"
 
 static Gnss gnss;
 static Storage storage;
@@ -27,6 +28,11 @@ static BleFiles ble;
 static Health health;
 static HudLink hudLink;
 static core::RunTracker runTracker;
+
+// Trasa nawigacyjna (RAM). Tożsamość = CRC32 bloba (routeVersion).
+static RouteData activeRoute;
+static uint32_t lastRouteVersion = 0;
+static bool arrivalCleared = false;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
@@ -103,6 +109,9 @@ void setup() {
   ble.begin(&storage);
   health.begin(&storage, &beeper, &hud, &baro);
   hudLink.begin();  // ESP-NOW do HudRekaw (kanał 1)
+  lastRouteVersion = ble.routeVersion();
+  routeDecode(ble.routeRaw(), ble.routeRawLen(), &activeRoute);
+  hudLink.setRoute(ble.routeRaw(), ble.routeRawLen(), lastRouteVersion);
 
   windowStart = millis();
   nextSync = windowStart + SZ_SD_COMMIT_MS;
@@ -272,6 +281,26 @@ void loop() {
   health.tick(now);  // termika: alarm >95C, deep sleep >100C
   ble.poll();  // callback BLE tylko ustawia flagi (poll czyta CTRL); bez blokowania SD
 
+  // Trasa nawigacyjna: wykryj zmianę wersji (PWA albo lokalny CLEAR po dotarciu),
+  // przelicz bieżący odcinek i obsłuż dotarcie do celu.
+  const uint32_t routeVersion = ble.routeVersion();
+  if (routeVersion != lastRouteVersion) {
+    lastRouteVersion = routeVersion;
+    routeDecode(ble.routeRaw(), ble.routeRawLen(), &activeRoute);
+    hudLink.setRoute(ble.routeRaw(), ble.routeRawLen(), routeVersion);
+    arrivalCleared = false;
+  }
+  uint8_t segmentIndex = HUD_SEGMENT_NONE;
+  if (activeRoute.valid && fix) {
+    const double lat = gnss.lat();
+    const double lon = gnss.lon();
+    segmentIndex = routeSegmentIndex(activeRoute, lat, lon);
+    if (!arrivalCleared && routeDistanceToEndM(activeRoute, lat, lon) <= ROUTE_ARRIVAL_M) {
+      arrivalCleared = true;
+      ble.clearRoute();  // trasa znika też z HudRekaw (przez ESP-NOW)
+    }
+  }
+
   // ESP-NOW do HudRekaw. Pauza w trakcie transferu BLE chroni sprawdzone pasmo.
   HudInput hudIn;
   hudIn.fix = fix;
@@ -281,5 +310,6 @@ void loop() {
   hudIn.totalKm = totalKm;
   hudIn.latE7 = static_cast<int32_t>(lround(gnss.lat() * 1e7));
   hudIn.lonE7 = static_cast<int32_t>(lround(gnss.lon() * 1e7));
+  hudIn.segmentIndex = segmentIndex;
   hudLink.tick(now, hudIn, ble.busy());
 }

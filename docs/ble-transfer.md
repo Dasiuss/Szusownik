@@ -233,7 +233,7 @@ GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
 
 ```text
 Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: "Szusownik")
-INFO:    3f9a0002-...  READ    — JSON {proto, fw, fileCount, ...ustawienia}
+INFO:    3f9a0002-...  READ    — JSON {proto, fw, fileCount, routeCrc, routePoints, ...ustawienia}
 CTRL:    3f9a0003-...  WRITE   — komendy tekstowe (patrz niżej)
 DATA:    3f9a0004-...  NOTIFY  — ramki 244 B (seq LE32 + do 240 B payload)
 STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów. Statusy transferu niosą
@@ -242,6 +242,11 @@ STATUS:  3f9a0005-...  READ+NOTIFY — stan i kody błędów. Statusy transferu 
                           "done <nazwa> raw=.. comp=.. frames=.. crc=..",
                           "err:<kod> <nazwa>" (np. err:open, err:read,
                           err:ack-timeout, err:no-storage).
+ROUTE:   3f9a0006-...  WRITE   — binarny blob trasy (SSOT protocol/route-v1.json).
+                          Porcja = [offset u16 LE, totalLen u16 LE, payload...];
+                          PWA pisze porcje przez writeValueWithResponse (potwierdzenie
+                          GATT), urządzenie składa je w RAM i waliduje CRC32 całości.
+                          STATUS: "route ok crc=.. points=.." / "route err crc=..".
 ```
 
 Komendy CTRL:
@@ -290,7 +295,10 @@ stertę (objaw: `CORRUPT HEAP ... got 0x00767363` = końcówka `...csv` komendy
 z pętli nie robiło `realloc` w trakcie odczytu przez hosta.
 
 INFO niesie `volLow/volHigh`, `freqShort/freqLong`,
-`beepShortMs/beepLongMs/beepGapMs/signalGapMs` oraz `minBeepKmh`. PWA nie odpytuje
+`beepShortMs/beepLongMs/beepGapMs/signalGapMs` oraz `minBeepKmh`. Dodatkowo
+`routeCrc` (CRC32 trzymanej trasy w RAM, 0 = brak/pusty) i `routePoints` (liczba
+punktów trasy) — PWA porównuje `routeCrc` ze swoją trasą i dosyła tylko różnicę
+(szczegóły niżej). PWA nie odpytuje
 urządzenia przez `GET*` (komendy usunięte z firmware) — bieżące ustawienia czyta
 wprost z INFO po połączeniu, a INFO jest odświeżane po każdym `SET*`. PWA nie
 sprawdza wersji firmware ani nie bramkuje sekcji ustawień. Transport ramek
@@ -360,6 +368,14 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `err:busy`, `err:no-storage`, `err:nomem`); PWA po błędzie zawsze wysyła `STOP`.
   `err:read` = `read()` zwrócił 0 mimo `pos < size` (uszkodzony/nośnik), a nie EOF —
   firmware nie raportuje wtedy pustego pliku jako sukcesu.
+- **Trasa nawigacyjna po BLE** (2026-10-10): dedykowana charakterystyka WRITE
+  `3f9a0006-…` (SSOT `protocol/route-v1.json` + `scripts/gen-route-protocol.mjs`).
+  Blob jest binarny (nagłówek + punkty int16 + odcinki + CRC32), dzielony na
+  porcje po 4 B nagłówka + do 508 B; `writeValueWithResponse` daje potwierdzenie
+  GATT, a urządzenie składa porcje w staging i waliduje CRC w pętli głównej
+  (`commitRoute`). Tożsamość trasy = CRC32; PWA wysyła po każdej zmianie geometrii
+  i dosyła raz po reconnect. Nie mieszamy tego z kanałem komend CTRL ani z
+  zamrożonym profilem ramek plików — to osobny kanał.
 - **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`listCsv` listują
   wyłącznie CSV z plikiem towarzyszącym `<nazwa>.csv.meta`, który powstaje po
   potwierdzonym ruchu (`docs/wymagania-ESP.md` §7). Pliki postojowe są ukryte, więc

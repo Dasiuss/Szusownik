@@ -44,6 +44,8 @@ static const uint16_t COLOR_SNOWPARK = 0xF81F;
 static const uint16_t COLOR_CONNECTION = 0x7BEF;
 static const uint16_t COLOR_LIFT = 0xFD20;
 static const uint16_t COLOR_RIDER = 0x001F;
+// Trasa nawigacyjna: niebieski "jak Google Maps" (#1A73E8).
+static const uint16_t COLOR_ROUTE = 0x1B9D;
 
 // Czas i budżety (ms).
 static const unsigned long NET_ATTEMPT_TIMEOUT_MS = 12000;

@@ -275,6 +275,10 @@ najnowsze wydanie i czyta bieżące ustawienia wprost z INFO po połączeniu.
   60 km/h. Poniżej ustawionego progu jest cisza, ale wzór sygnału dla prędkości
   powyżej progu pozostaje bez zmian. Wartość startowa z INFO (`minBeepKmh`),
   wysyłka `SETMINBEEP` działa z debounce, a Reset przywraca 60 km/h.
+- **Trasa nawigacyjna**: wyznaczona trasa z widoku mapy jest automatycznie
+  wysyłana do Szusownika (dedykowana charakterystyka BLE, `routeCrc` w INFO).
+  Status wysyłki i przycisk połączenia są w panelu trasy na mapie, nie na tym
+  ekranie. Szczegóły: `docs/mapy-routing.md` §7, `docs/ble-transfer.md` §10.
 - Tu trafią kolejne opcje urządzenia (progi, interwały, tryb stokowy).
 
 ## 11. Otwarte pytania

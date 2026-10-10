@@ -1,0 +1,30 @@
+{
+  "$comment": "SSOT trasy nawigacyjnej (wire-proto szusownik/route-v1). Ten plik jest jedynym źródłem prawdy dla: (1) binarnego bloba trasy wymienianego PWA -> Szusownik -> HudRekaw, (2) charakterystyki BLE, którą PWA wysyła trasę do Szusownika. Zmieniasz TU, potem uruchamiasz: node scripts/gen-route-protocol.mjs (generuje web/src/lib/routeProtocol.ts, firmware/Szusownik/src/config/route_protocol.h i firmware/HudRekaw/src/config/route_protocol.h). Test web/src/lib/routeProtocol.test.ts pilnuje zgodności. Blob jest LITTLE-ENDIAN; CRC32 jak w reszcie projektu (IEEE 802.3, init 0xFFFFFFFF, final xor). UKŁAD BLOBA: nagłówek 16 B (u16 formatVersion, i32 originLatE7, i32 originLonE7, u16 pointCount, u16 segmentCount, u16 totalDistanceM), potem pointCount x (i16 east, i16 north) [metry od origin], potem segmentCount x rekordow (u8 kind, u8 labelLength, u16 startDistM, u16 endDistM, char[labelLength] ASCII), na końcu u32 crc32 liczony po WSZYSTKICH poprzedzających bajtach. Pusty blob (pointCount=0, segmentCount=0) oznacza brak trasy (CLEAR). Metry liczone: east=(lon-originLon)*ROUTE_METERS_PER_DEG_LON*cos(originLat), north=(lat-originLat)*ROUTE_METERS_PER_DEG_LAT.",
+  "numbers": {
+    "ROUTE_FORMAT_VERSION": 1,
+    "ROUTE_HEADER_SIZE": 16,
+    "ROUTE_POINT_SIZE": 4,
+    "ROUTE_SEGMENT_HEADER_SIZE": 6,
+    "ROUTE_CRC_SIZE": 4,
+    "ROUTE_MAX_POINTS": 512,
+    "ROUTE_MAX_SEGMENTS": 24,
+    "ROUTE_MAX_LABEL": 12,
+    "ROUTE_MAX_BLOB": 2500,
+    "ROUTE_SAMPLE_SPACING_M": 10,
+    "ROUTE_ARRIVAL_M": 30,
+    "ROUTE_KIND_PISTE": 0,
+    "ROUTE_KIND_LIFT": 1,
+    "ROUTE_SEGMENT_NONE": 255,
+    "ROUTE_BLE_HEADER_SIZE": 4,
+    "ROUTE_BLE_MAX_WRITE": 512,
+    "ROUTE_BLE_CHUNK": 508
+  },
+  "floats": {
+    "ROUTE_METERS_PER_DEG_LAT": 110540,
+    "ROUTE_METERS_PER_DEG_LON": 111320
+  },
+  "strings": {
+    "ROUTE_WIRE_PROTO": "szusownik/route-v1",
+    "SZ_UUID_ROUTE": "3f9a0006-7c4e-4b2a-9e11-000000000006"
+  }
+}

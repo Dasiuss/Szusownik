@@ -346,6 +346,12 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .map-route-badge svg, .map-route-badge img { flex: 0 0 auto; }
 .map-route-badge > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .map-clear-route { border: 0; border-radius: 9px; padding: 7px 8px; color: #527176; background: #edf3f1; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.map-route-sync { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 0; color: #527176; font-size: 10px; font-weight: 700; }
+.map-route-sync:empty { display: none; }
+.map-route-sync-error { color: #9b4838; }
+.map-route-sync-offline { color: #8a6d1d; }
+.map-route-sync-sent { color: #2f8a55; }
+.map-route-connect { margin-left: auto; border: 0; border-radius: 9px; padding: 6px 10px; color: #fff; background: #0b3d66; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .map-route-message { position: absolute; z-index: 40; top: 62px; left: 50%; max-width: calc(100% - 24px); padding: 9px 12px; border-radius: 11px; color: #fff; background: #0f172ae6; box-shadow: 0 8px 20px #0f172a38; font-size: 11px; font-weight: 700; text-align: center; transform: translateX(-50%); }
 .map-search-panel { top: 0; bottom: 12px; left: 12px; display: flex; width: min(290px, calc(100% - 24px)); flex-direction: column; overflow: hidden; padding: 12px; border-top-left-radius: 0; border-top-right-radius: 0; }
 .map-search-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

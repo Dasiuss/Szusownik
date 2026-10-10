@@ -49,6 +49,10 @@ Dwa główne elementy:
 - **Osobny ekran HudRekaw** (ESP8266 + ST7789 240×240) dostaje przez **ESP-NOW**
   (kanał 1) pozycję i statystyki: mapę z bieżącą pozycją na postoju albo ekran
   statystyk w ruchu (`docs/hud-rekaw.md`).
+- **Tryb nawigacji**: wyznaczona w PWA trasa trafia przez BLE do Szusownika
+  (RAM), a stamtąd przez ESP-NOW do HudRekaw. Szusownik liczy bieżący odcinek,
+  HudRekaw rysuje trasę wyróżnioną i pokazuje kolejne odcinki; dotarcie do celu
+  kończy nawigację (`docs/hud-rekaw.md`, `docs/wymagania-ESP.md` §13).
 - **Zasilanie 5 V przez USB-C z power banka** (min. 5000 mAh, tryb low-current);
   szyna 3,3 V zasila peryferia (GNSS, SD, buzzer).
 - **Montaż**: cała elektronika w jednej obudowie na kasku; zasilanie kablem USB-C

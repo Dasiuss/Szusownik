@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { materializeAll } from "./data.ts";
 import { db } from "./db.ts";
+import { emptyRouteBlob } from "./routeTransfer.ts";
 import {
   SzusownikBle,
   type DeviceInfo,
@@ -13,6 +14,14 @@ import {
 
 export type DeviceState = "disconnected" | "connecting" | "checking" | "connected" | "downloading" | "error";
 
+/** Stan wysyłki trasy na urządzenie (panel trasy w PWA). */
+export type RouteSyncState = "idle" | "offline" | "sending" | "sent" | "error";
+
+interface RouteBlob {
+  bytes: Uint8Array;
+  crc: number;
+}
+
 interface DeviceContextValue {
   state: DeviceState;
   info: DeviceInfo | null;
@@ -22,6 +31,8 @@ interface DeviceContextValue {
   clearError: () => void;
   lastSyncAt: string | null;
   dataRevision: number;
+  routeSync: RouteSyncState;
+  routeSyncError: string | null;
   connectAndCheck: () => Promise<void>;
   downloadPending: () => Promise<void>;
   disconnect: () => void;
@@ -29,6 +40,8 @@ interface DeviceContextValue {
   setFrequency: (which: "short" | "long", value: number) => Promise<Freq>;
   setTiming: (which: keyof Timing, value: number) => Promise<Timing>;
   setMinBeepKmh: (value: number) => Promise<number>;
+  /** Żąda zsynchronizowania trasy na urządzeniu (null = wyślij CLEAR). */
+  syncRoute: (encoded: RouteBlob | null) => void;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -44,6 +57,11 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempted = useRef(false);
   const downloadingRef = useRef(false);
+  const infoRef = useRef<DeviceInfo | null>(null);
+  const desiredRouteRef = useRef<RouteBlob | null>(null);
+  const hasDesiredRouteRef = useRef(false);
+  const routeSendingRef = useRef(false);
+  const routeDirtyRef = useRef(false);
   const [state, setState] = useState<DeviceState>("disconnected");
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [pendingFiles, setPendingFiles] = useState<FileMeta[]>([]);
@@ -51,6 +69,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
+  const [routeSync, setRouteSync] = useState<RouteSyncState>("idle");
+  const [routeSyncError, setRouteSyncError] = useState<string | null>(null);
 
   function clearError() {
     setError(null);
@@ -65,6 +85,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     clearIdleTimer();
     bleRef.current?.disconnect();
     bleRef.current = null;
+    infoRef.current = null;
     setInfo(null);
     setPendingFiles([]);
     setProgress(null);
@@ -82,12 +103,70 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   async function finishConnection(client: SzusownikBle, connectedInfo: DeviceInfo) {
     bleRef.current = client;
+    infoRef.current = connectedInfo;
     setInfo(connectedInfo);
     setState("checking");
     const fresh = await client.collectNewFiles();
     setPendingFiles(fresh);
     setState("connected");
     armIdleTimer();
+  }
+
+  // --- Synchronizacja trasy nawigacyjnej (PWA -> Szusownik) ---
+  // Trasa jest wysyłana, gdy jej CRC (tożsamość) różni się od trzymanej przez
+  // urządzenie. Po reconnect PWA dosyła aktywną trasę raz, więc restart
+  // urządzenia (trasa w RAM) nie wymaga ponownego planowania w PWA.
+  function syncRoute(encoded: RouteBlob | null) {
+    if (encoded) {
+      desiredRouteRef.current = encoded;
+      hasDesiredRouteRef.current = true;
+    } else if (hasDesiredRouteRef.current) {
+      desiredRouteRef.current = null;
+    } else {
+      return; // PWA nigdy nie miała trasy — nie ruszamy trasy na urządzeniu
+    }
+    void flushRoute();
+  }
+
+  async function flushRoute() {
+    if (!hasDesiredRouteRef.current) return;
+    if (routeSendingRef.current) {
+      routeDirtyRef.current = true;
+      return;
+    }
+    const client = bleRef.current;
+    if (!client) {
+      setRouteSync("offline");
+      return;
+    }
+    const target = desiredRouteRef.current ?? emptyRouteBlob();
+    if (infoRef.current && infoRef.current.routeCrc === target.crc) {
+      setRouteSyncError(null);
+      setRouteSync("sent");
+      return;
+    }
+    routeSendingRef.current = true;
+    routeDirtyRef.current = false;
+    setRouteSync("sending");
+    try {
+      const status = await client.sendRoute(target.bytes);
+      const fresh = await client.readInfo();
+      infoRef.current = fresh;
+      setInfo(fresh);
+      if (status.startsWith("err:")) {
+        setRouteSyncError(`Urządzenie odrzuciło trasę (${status})`);
+        setRouteSync("error");
+      } else {
+        setRouteSyncError(null);
+        setRouteSync("sent");
+      }
+    } catch (caught) {
+      setRouteSyncError(errorMessage(caught));
+      setRouteSync("error");
+    } finally {
+      routeSendingRef.current = false;
+      if (routeDirtyRef.current) void flushRoute();
+    }
   }
 
   async function connectAndCheck() {
@@ -98,6 +177,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     try {
       const connectedInfo = await client.connect();
       await finishConnection(client, connectedInfo);
+      void flushRoute();
     } catch (caught) {
       disconnect();
       setState("error");
@@ -114,6 +194,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       if (!connectedInfo) return;
       setState("checking");
       await finishConnection(client, connectedInfo);
+      void flushRoute();
     } catch {
       disconnect();
     }
@@ -203,6 +284,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         clearError,
         lastSyncAt,
         dataRevision,
+        routeSync,
+        routeSyncError,
         connectAndCheck,
         downloadPending,
         disconnect,
@@ -210,6 +293,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setFrequency,
         setTiming,
         setMinBeepKmh,
+        syncRoute,
       }}
     >
       {children}
