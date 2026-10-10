@@ -135,21 +135,6 @@ do tego AP wgraj tak samo przez `http://192.168.4.1/update`.
 
 Do OTA nie jest potrzebny zamknięty monitor `COM7` — to inne urządzenie.
 
-## Termika i monitoring (Health)
-
-- ESP32-S3 **nie ma sprzętowego zabezpieczenia termicznego** — sam się nie
-  wyłączy przy przegrzaniu. Ochrona jest programowa: moduł `src/health/`
-  (`Health`) wołany z głównej pętli (`millis`, bez tasków/ISR).
-- Co 30 s (`SZ_HEALTH_CHECK_MS`) czyta `temperatureRead()` (temperatura
-  **rdzenia/die**, nie otoczenia; słabo skalibrowana). ≥95 °C po 3 kolejnych
-  potwierdzeniach → alarm buzzerem 3 s przy każdym kolejnym odczycie ≥95 °C;
-  ≥100 °C → zamknięcie SD, ekran „PRZEGRZANIE" (die/air), alarm i deep sleep.
-  Progi/histereza w `config.h` (`SZ_HEALTH_*`).
-- Diagnostyka na Serial: linia statusu SYS co 5 s (poziom DEBUG) z
-  `die=..C air=..C`; domyślny poziom INFO pokazuje tylko zdarzenia.
-- Deep sleep **nie odcina 3V3** — GNSS dalej pobiera ~30 mA i dogrzewa. Na
-  stoku nieistotne; przy testach w domu nie trzymać szczelnej obudowy.
-
 ## Praca w worktree (zależności PWA)
 
 `node_modules` nie jest współdzielone między worktree. Domyślna zasada:
@@ -164,4 +149,4 @@ Do OTA nie jest potrzebny zamknięty monitor `COM7` — to inne urządzenie.
    (deterministycznie, nie modyfikuje locka) — odświeży shared `node_modules`
    dla wszystkich worktree.
 4. Nie uruchamiaj instalacji równolegle w kilku worktree — to ten sam katalog.
-
+5. Kiedy użytkownik prosi o wypchnięcie zmian do repozytorium, zawsze przenoś sesję do folderu głównego, upewnij się, że pracujesz na najnowszym main, wypchnij zmiany a następnie usuń nie używany już worktree.
