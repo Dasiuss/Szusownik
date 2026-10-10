@@ -14,6 +14,7 @@ web/coverage/
 # Testy hostowe firmware (binarki budowane lokalnie)
 firmware/test/host/host_tests_szusownik.exe
 firmware/test/host/host_tests_hudrekaw.exe
+firmware/test/host/.build/
 
 # Sekrety WiFi/OTA HudRekaw (szablon: secrets.example.h)
 firmware/HudRekaw/secrets.h

@@ -38,9 +38,18 @@ headless — testy wstrzykują symulator przez `addInitScript` (`web/e2e/device.
 ```powershell
 # Raz: kompilator C++
 winget install BrechtSanders.WinLibs.POSIX.UCRT
-# Testy:
+# Wszystkie testy (build przyrostowy; Catch2 prekompilowany raz):
 powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1
+# Tylko pasujące testy albo jedna binarka (szybka pętla):
+powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1 -Filter "run_tracker*"
+powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1 -Binaries szusownik
 ```
+
+Build jest **przyrostowy**: każdy `.cpp` trafia do `.o` w
+`firmware/test/host/.build/` tylko gdy jest nowszy niż źródło lub którykolwiek
+nagłówek, a Catch2 jest prekompilowany raz. Powtórne uruchomienie bez zmian to
+~2 s (samo linkowanie). W testach Catch2 `Approx` wymaga kwalifikacji `Catch::`
+(dodaj `using Catch::Approx;`) — pliki testów nie mają `using namespace Catch`.
 
 Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
 `firmware/HudRekaw/src/core/` (bez `Arduino.h`): pasma GNSS, bufor listy, rotacja

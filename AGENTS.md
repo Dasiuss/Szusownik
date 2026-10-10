@@ -53,10 +53,12 @@ najnowszej wersji firmware i PWA. Dlatego:
    ramki), a dopiero potem dopisuj output kompresora — odwrotna kolejność przy
    zablokowanym pacingu przepełnia `pend_[512]` i crashuje przy plikach
    wieloramkowych.
-4. Firmware zapisuje dane surowe. Ciężkie przetwarzanie, cięcie zjazdów,
-   wygładzanie, map-matching i statystyki należą do PWA.
-5. PWA i firmware muszą mieć identyczne definicje wspólnego protokołu,
-   wymiarów bitmap, kolejności pikseli i wersji protokołu.
+4. Firmware zapisuje dane surowe. Ciężkie przetwarzanie (map-matching,
+   statystyki, **numeracja i SSOT cięcia zjazdów**) należy do PWA; urządzenie może
+   robić lekką, strumieniową derywację na potrzeby HUD (np. `core::RunTracker` —
+   port ZigZag dla hero, reguła 19).
+5. PWA i firmware muszą mieć identyczne definicje wspólnego protokołu
+   (SSOT: `protocol/*.json`) i zgodną wersję protokołu.
 6. Pinout `Szusownik` ma pierwszeństwo przed pinoutem `DisplayTest`. W finalnym
    projekcie OLED używa I2C na GPIO8/GPIO9, bo GPIO1-4 są przeznaczone dla SD.
    Barometr BME280 (adres `0x77`) dzieli tę samą magistralę I2C.
@@ -95,7 +97,9 @@ najnowszej wersji firmware i PWA. Dlatego:
     (ZigZag), ale cięcie robimy **jedno, na dołku** — „Zjazd X" = wyciąg + zjazd,
     a odcinki są ciągłe. Próg nie jest liczony per próbka (odporność na szum i
     częstotliwość próbkowania). Zmiana progu/reguły wymaga osobnego uzgodnienia.
-    Szczegóły w `docs/wymagania-PWA.md` §6/§7.
+    Szczegóły w `docs/wymagania-PWA.md` §6/§7. Gdzie to żyje: SSOT to ZigZag
+    w PWA; firmware pisze surowe dane, a `runActive` i rolka na urządzeniu to
+    **nie** zjazd; hero HUD to port ZigZag (`core::RunTracker`, reguła 19).
 14. Logi mają poziomy `E/W/I/D` (`src/config/log.h`, próg `SZ_LOG_LEVEL`).
     Domyślny INFO = zdarzenia (fix acquired/lost, SD, cykl życia BLE, health,
     boot) oraz szczegółowy przebieg transferu BLE. Status okresowy, per-próbka
@@ -260,16 +264,3 @@ Do OTA nie jest potrzebny zamknięty monitor `COM7` — to inne urządzenie.
    dla wszystkich worktree.
 4. Nie uruchamiaj instalacji równolegle w kilku worktree — to ten sam katalog.
 
-## Aktualne ograniczenia odziedziczone z testów
-
-- `BleTest` nie ma jeszcze pełnego testu wszystkich MTU ani kontrolowanej utraty
-  ramek.
-- `BLECharacteristic::notify()` nie zwraca wiarygodnego statusu przyjęcia przez
-  NimBLE.
-- `DisplayTest` używa małych pakietów bitmap bez CRC, ACK i retry.
-- `MapyTest` nie ma jeszcze GPS, nagrywania śladu ani map-matchingu.
-- Routing MapyTest działa synchronicznie w głównym wątku i używa prostego sortowania
-  kolejki Dijkstry.
-
-Te ograniczenia są opisane szerzej w dokumentach `docs/ble-transfer.md`,
-`docs/hud-display.md` i `docs/mapy-routing.md`.
