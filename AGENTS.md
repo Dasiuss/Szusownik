@@ -42,129 +42,30 @@ najnowszej wersji firmware i PWA. Dlatego:
 
 ## Zasady pracy
 
-1. Przed zmianą protokołu, layoutu OLED, algorytmu routingu lub analizy jakości
-   GNSS i rekordów prędkości przeczytaj odpowiedni dokument referencyjny.
-2. Nie zmieniaj potwierdzonego profilu BLE `244 B / 240 B payload / 128 ramek /
-   ACK co 32 / pacing 4 ms` bez osobnego benchmarku na rzeczywistym ESP32 i
-   Androidzie.
-3. Nie traktuj bufora aplikacyjnego ramek jako kolejki wewnętrznej NimBLE.
-   Stabilność transferu wynika ze stałego pacingu, a nie z prób sterowania
-   licznikiem mbufów. W `pumpStream` **najpierw opróżniaj `pend_`** (wyślij pełne
-   ramki), a dopiero potem dopisuj output kompresora — odwrotna kolejność przy
-   zablokowanym pacingu przepełnia `pend_[512]` i crashuje przy plikach
-   wieloramkowych.
-4. Firmware zapisuje dane surowe. Ciężkie przetwarzanie (map-matching,
-   statystyki, **numeracja i SSOT cięcia zjazdów**) należy do PWA; urządzenie może
-   robić lekką, strumieniową derywację na potrzeby HUD (np. `core::RunTracker` —
-   port ZigZag dla hero, reguła 19).
-5. PWA i firmware muszą mieć identyczne definicje wspólnego protokołu
-   (SSOT: `protocol/*.json`) i zgodną wersję protokołu.
-6. Pinout `Szusownik` ma pierwszeństwo przed pinoutem `DisplayTest`. W finalnym
-   projekcie OLED używa I2C na GPIO8/GPIO9, bo GPIO1-4 są przeznaczone dla SD.
-   Barometr BME280 (adres `0x77`) dzieli tę samą magistralę I2C.
-7. Wyniki testów, które nie były potwierdzone sprzętowo lub są znane tylko z
-   implementacji testowej, oznaczaj jako niepotwierdzone.
-8. Po zmianie decyzji technicznej aktualizuj dokument referencyjny oraz ten
-   plik, jeśli zmiana wpływa na zasady pracy kolejnych sesji.
-9. Zapis próbki GPS na SD jest wyzwalany **nadejściem nowej epoki GNSS**
-   (`Gnss::consumeNewSample()`), a nie zegarem pętli (`nextLog`). Nie wracaj do
-   zapisu sterowanego osobnym interwałem `millis()` — powodował duplikaty i cichy
-   hold pozycji przy dudnieniu z meas rate odbiornika. Szczegóły w
-   `docs/wymagania-ESP.md`.
-10. PWA **nie bramkuje funkcji po wersji firmware** (żadnych „To urządzenie wymaga
-    firmware X+"). Dystrybucja zawsze dostarcza najnowszy FW. Bieżące ustawienia
-    urządzenia PWA czyta wprost z INFO (odświeżanego po każdym `SET*`); komendy
-    `GETVOL/GETFREQ/GETTIMING/GETMINBEEP` zostały usunięte z firmware. Nie
-    przywracaj fallbacków wersji ani komend `GET*`.
-11. Nie sprawdzaj statusu GitHub Actions po wypchnięciu na repo i nie wspominaj,
-    że tego nie zrobiłeś(-aś) — to domyślne zachowanie, nie trzeba o nim
-    przypominać. Build weryfikuje sam użytkownik i zgłasza, jeśli coś się nie
-    powiodło.
-12. Nie wkładaj pełnej listy plików do INFO. Wartość atrybutu ATT ma limit 512 B
-    (Web Bluetooth nie odczyta więcej), a przekroczenie zeruje ją w NimBLE — PWA
-    dostaje 0 B. INFO niesie tylko `fileCount` i ustawienia; metadane plików
-    pobiera się stronicowanym `LIST:<since>` (STATUS `list <since> <nazwa> <rozmiar> ...`,
-    echo kursora, "0" = puste, do 12 wpisów). Kursor = największa rozwiązana nazwa; pusta lista = brak
-    nowych. Nieudane pobrania wracają po nazwie z `pendingFiles` bez listowania.
-    Szczegóły w `docs/ble-transfer.md` §10.
-13. PWA liczy zjazdy ze **scalonego śladu wszystkich plików** (jedna oś czasu,
-    sortowanie po `Date.parse(t)`, dedup tylko realnych powtórek na styku plików),
-    grupowanego po lokalnym dniu i ciętego raz na dzień. Nie wracaj do analizy
-    per plik: rotacja na postoju rozbijałaby jeden zjazd na kilka. Identyfikator
-    zjazdu jest stabilny (`dayKey::startT`), a etykiety (tabela `runLabels`) i
-    usunięcia (tombstone `deletedRuns`) kluczują się tym id i muszą przeżyć
-    re-analizę. Reguła cięcia: podejścia (wyciągi) >= 5 m wykrywamy histerezą
-    (ZigZag), ale cięcie robimy **jedno, na dołku** — „Zjazd X" = wyciąg + zjazd,
-    a odcinki są ciągłe. Próg nie jest liczony per próbka (odporność na szum i
-    częstotliwość próbkowania). Zmiana progu/reguły wymaga osobnego uzgodnienia.
-    Szczegóły w `docs/wymagania-PWA.md` §6/§7. Gdzie to żyje: SSOT to ZigZag
-    w PWA; firmware pisze surowe dane, a `runActive` i rolka na urządzeniu to
-    **nie** zjazd; hero HUD to port ZigZag (`core::RunTracker`, reguła 19).
-14. Logi mają poziomy `E/W/I/D` (`src/config/log.h`, próg `SZ_LOG_LEVEL`).
-    Domyślny INFO = zdarzenia (fix acquired/lost, SD, cykl życia BLE, health,
-    boot) oraz szczegółowy przebieg transferu BLE. Status okresowy, per-próbka
-    GNSS i diagnostyka UBX/BLE są tylko w DEBUG i wycinane kompilacyjnie.
-    Nie przywracaj osobnych `SZ_DEBUG_*`/`SZ_STOK_MODE` ani per-próbkowego
-    `FIX`/`SAMPLE` — dane per próbka są trwale w CSV.
-15. Plik CSV bez pliku towarzyszącego `<nazwa>.csv.meta` jest „postojowy":
-    firmware go **nie listuje** (`countCsv`/`csvAt` tylko z `.meta`), więc PWA go
-    nie widzi i nie pobiera. `.meta` powstaje po potwierdzonym ruchu (>5 km/h
-    przez 3 s, `Storage::ensureMeta`), a jego brak ma niezawodnie znaczyć „brak
-    jazdy". Nie wracaj do progu rozmiaru ani migracji starych plików (greenfield).
-    Trwale uszkodzone pliki z `.meta` (rozmiar/CRC/nagłówek/brak próbek) PWA
-    zapisuje w tabeli `ignoredFiles` i nie ponawia; ostrzega raz, z podpowiedzią
-    odzyskania z karty na komputerze. Błędy przejściowe (timeout, rozłączenie,
-    kody `err:`) zostają w kolejce do ponowienia. Szczegóły w
-    `docs/wymagania-ESP.md` §6/§7 i `docs/wymagania-PWA.md` §7.
-16. Testy: przepływy i funkcje integracyjnie/e2e, unitowe tylko dla cięższej
-    logiki, uruchamiane **lokalnie** (bez joba w CI, bez progu pokrycia). PWA: Vitest
-    (`web/src/lib/*.test.ts`, integracja z `fake-indexeddb`) i Playwright
-    (`web/e2e/`). Firmware: czysta logika w `firmware/Szusownik/src/core/`
-    (bez `Arduino.h`) i testy hostowe Catch2
-    (`firmware/test/host/run.ps1`, wymaga MinGW-w64). Wspólny protokół ma SSOT
-    w `protocol/ble-file-v1.json`; po zmianie uruchom `node scripts/gen-protocol.mjs`
-    — test `web/src/lib/protocol.test.ts` pilnuje zgodności wygenerowanych plików.
-    Testy sprzętowe (docs §12/§10/§11) zostają manualne. Szczegóły w `docs/testy.md`.
-17. Praca test-first (TDD): bugi i nowe funkcje zaczynaj od testu.
-    - **Bug**: najpierw dodaj test, który go reprodukuje (czerwony), potem napraw.
-      Test zostaje jako regresyjny.
-    - **Nowa funkcja / zmiana zachowania**: najpierw test (czerwony), potem
-      implementacja (zielony).
-    - Warstwę dobieraj wiernie wobec problemu, ale preferuj integracyjne/e2e;
-      unitowe tylko dla izolowanej, cięższej logiki.
-    - **Refaktor** opiera się na istniejących testach; test charakteryzujący dodaj
-      tylko, gdy brakuje pokrycia.
-    - Nie wszystko da się przetestować (sprzęt, render OLED, realne BLE, wygląd
-      mapy). Wtedy agent decyduje sam i krótko uzasadnia brak testu w zmianie/
-      commicie. Zanim uzna zmianę za nietestowalną, próbuje wydzielić czystą
-      logikę do `core/` albo czystych helperów, żeby dała się pokryć.
-    - Testy sprzętowe zostają manualne (`docs/testy.md`).
-
-18. Link HUD Szusownik -> HudRekaw działa po **ESP-NOW** (kanał `HUD_LINK_CHANNEL`
-    = 1, broadcast). Tryb odbiornika zależy od prędkości: `> 5 km/h` (próg
-    `HUD_STATS_ABOVE_KMH`) -> statystyki, inaczej mapa. Wysyłka jest zależna od
-    trybu: statystyki -> tylko `S` co 1 s, mapa -> tylko `L` co 5 s; **zmiana
-    trybu wysyła natychmiast jeden `L`** (tylko `L` niesie `mode`). TOT w `S`
-    jest w **0,1 km** (`km × HUD_TOT_SCALE`). Transfer BLE ma priorytet: gdy
-    `BleFiles::busy()`, wysyłka ESP-NOW jest wstrzymana. SSOT protokołu:
-    `protocol/hud-espnow-v1.json` + `scripts/gen-hud-protocol.mjs` (generuje
-    identyczny `hud_protocol.h` do obu firmware; pilnuje tego
-    `web/src/lib/hudProtocol.test.ts`). Odbiornik (ESP8266 + ST7789) mieszka w
-    `firmware/HudRekaw/` i jest rozwiązaniem docelowym — nie rozwijamy już
-    projektu testowego DisplayTest. Bufor kandydatów labeli mapy w odbiorniku
-    (`gLabelCandidates`) jest **statyczny, nigdy lokalny**: ESP8266 ma 4 KB
-    stosu `loop()`, a ~4,4 KB tablica na stosie resetuje urządzenie przy
-    pierwszej ramce `L`. Szczegóły: `docs/hud-rekaw.md`.
-
-19. OLED Szusownika to **jeden ekran statystyk**: hero „MAX ZJAZDU", MAX DNIA,
-    DYSTANS, WYSOKOSC (fuzja baro+GPS) i czas lokalny (UTC + `SZ_HUD_TZ_OFFSET_MIN`,
-    bez etykiety). **Nie ma tam mapy, bitmap trasy ani animacji** — mapę ma
-    HudRekaw. Hero liczy `core::RunTracker` (strumieniowy port ZigZag z PWA:
-    fuzja baro+GPS τ=10 s → MA5 → histereza 5 m): **live w zjeździe, zamrożony na
-    wyciągu**. Font Adafruit GFX jest ASCII — brak polskich znaków (`WYSOKOSC`)
-    i glifu strzałki (linia trasy używa `<`/`>`). Dolna linia to zarezerwowane
-    miejsce na przyszłą trasę z PWA (roadmapa; bez protokołu wysyłki). Szczegóły:
-    `docs/hud-display.md`.
+1. Dokument referencyjny jest źródłem prawdy. Przed zmianą protokołu, layoutu
+   OLED, algorytmu routingu lub analizy jakości GNSS i rekordów prędkości
+   przeczytaj odpowiedni dokument. Po zmianie decyzji technicznej zaktualizuj
+   ten dokument, a `AGENTS.md` tylko wtedy, gdy zmienia reguły pracy kolejnych
+   sesji.
+2. Firmware zapisuje dane surowe. Ciężkie przetwarzanie — map-matching,
+   statystyki oraz numeracja i SSOT cięcia zjazdów — należy do PWA. Urządzenie
+   może robić tylko lekką, strumieniową derywację na potrzeby HUD
+   (np. `core::RunTracker`).
+3. PWA i firmware mają identyczne definicje wspólnego protokołu i wspólny SSOT
+   w `protocol/*.json`; wygenerowanych plików nie edytuje się ręcznie.
+4. Nie zmieniaj potwierdzonych sprzętowo profili i progów (zamrożony profil BLE,
+   reguły cięcia zjazdu) bez osobnego benchmarku na realnym ESP32 i Androidzie
+   albo wyraźnego uzgodnienia.
+5. PWA nie bramkuje funkcji po wersji firmware; bieżące ustawienia urządzenia
+   czyta wprost z INFO.
+6. Pracuj test-first: bug i nową funkcję zaczynaj od testu (czerwony, potem
+   zielony), a test zostaje jako regresyjny. Warstwę dobieraj wiernie wobec
+   problemu. Czego nie da się przetestować (sprzęt, render OLED, realne BLE,
+   wygląd mapy), krótko uzasadnij w zmianie; zanim uznasz coś za nietestowalne,
+   wydziel czystą logikę do `core/` albo czystych helperów.
+7. Wyniki niepotwierdzone sprzętowo oznaczaj jako niepotwierdzone.
+8. Nie sprawdzaj statusu GitHub Actions po wypchnięciu i nie wspominaj, że tego
+   nie zrobiłeś(-aś) — build weryfikuje użytkownik.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 
