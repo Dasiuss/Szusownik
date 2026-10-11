@@ -5,6 +5,8 @@
 #include "../core/csv_line.h"
 #include <SPI.h>
 #include <SD.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 static File logFile;
 static File readFile;
@@ -115,73 +117,71 @@ void Storage::ensureMeta() {
 
 uint32_t Storage::countCsv() const {
   if (!ready_) return 0;
+  // Liczymy pliki ".meta" tanim iterowaniem (opendir/readdir) — bez otwierania
+  // każdego wpisu (openNextFile otwiera plik, ~O(n^2) na tej karcie).
   uint32_t count = 0;
-  File root = SD.open("/");
-  if (!root) return 0;
-  while (true) {
-    File f = root.openNextFile();
-    if (!f) break;
-    if (!f.isDirectory()) {
-      // Plik widoczny dla PWA = CSV z plikiem .meta. Zamiast robić SD.exists()
-      // na każdym CSV (osobny odczyt katalogu, przy wielu plikach blokuje pętlę
-      // setki ms — a na starcie transferu zjadało to timeout ACK), liczymy
-      // pliki ".meta" w jednym przebiegu. Każdy .meta należy do CSV.
-      String n = String(f.name());
-      if (n.endsWith(SZ_CSV_META_SUFFIX)) count++;
-    }
-    f.close();
+  DIR* dir = opendir("/");
+  if (!dir) return 0;
+  struct dirent* ent;
+  while ((ent = readdir(dir)) != nullptr) {
+    if (String(ent->d_name).endsWith(SZ_CSV_META_SUFFIX)) count++;
   }
-  root.close();
+  closedir(dir);
   return count;
 }
 
 uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const {
   if (!ready_ || maxCount == 0) return 0;
-  // Skan katalogu SD na tej karcie jest bardzo wolny (~O(n^2) — kolejne
-  // openNextFile/istnienie pliku kosztuje dziesiątki–setki ms), a SD.exists() na
-  // każdym CSV dawało ~4 s i przekraczało timeout LIST w PWA. Dlatego JEDEN
-  // przebieg katalogu: zbieramy rozmiary CSV > since oraz nazwy widocznych CSV
-  // (pliki .meta), a łączymy dopiero potem — bez SD.exists() i drugiego skanu.
-  static const size_t kCap = 200;  // zapas; karta FIFO trzyma dużo mniej
-  static char s_csvName[kCap][sizeof(out[0].name)];
-  static char s_metaName[kCap][sizeof(out[0].name)];
-  static uint32_t s_csvSize[kCap];
+  // Skan katalogu na tej karcie jest wolny, a `openNextFile()`/`SD.open()` na
+  // wpisie dokłada O(n) pracy (otwiera każdy plik) — razem ~O(n^2): przy
+  // kilkudziesięciu plikach `LIST` trwał sekundy i przekraczał timeout w PWA.
+  // Iterujemy tanio (`opendir`/`readdir`, bez otwierania plików) i pobieramy
+  // rozmiar tylko dla wybranych (<= maxCount) przez `stat()`.
+  static const size_t kCap = 256;  // zapas; karta FIFO trzyma rozsądną liczbę
+  static char s_csv[kCap][sizeof(out[0].name)];
+  static char s_meta[kCap][sizeof(out[0].name)];
   size_t csvCount = 0, metaCount = 0;
-  File root = SD.open("/");
-  if (!root) return 0;
+  DIR* dir = opendir("/");
+  if (!dir) return 0;
   const size_t suffixLen = strlen(SZ_CSV_META_SUFFIX);
-  while (true) {
-    File f = root.openNextFile();
-    if (!f) break;
-    if (!f.isDirectory()) {
-      String n = String(f.name());
-      if (n.endsWith(SZ_CSV_META_SUFFIX)) {
-        String csv = n.substring(0, n.length() - suffixLen);
-        if (csv > since && metaCount < kCap) {
-          strncpy(s_metaName[metaCount], csv.c_str(), sizeof(s_metaName[0]) - 1);
-          s_metaName[metaCount][sizeof(s_metaName[0]) - 1] = '\0';
-          metaCount++;
-        }
-      } else if ((n.endsWith(".csv") || n.endsWith(".CSV")) && n > since && csvCount < kCap) {
-        strncpy(s_csvName[csvCount], n.c_str(), sizeof(s_csvName[0]) - 1);
-        s_csvName[csvCount][sizeof(s_csvName[0]) - 1] = '\0';
-        s_csvSize[csvCount] = (uint32_t)f.size();
-        csvCount++;
+  struct dirent* ent;
+  while ((ent = readdir(dir)) != nullptr) {
+    String n = String(ent->d_name);
+    if (n.endsWith(SZ_CSV_META_SUFFIX)) {
+      String csv = n.substring(0, n.length() - suffixLen);
+      if (csv > since && metaCount < kCap) {
+        strncpy(s_meta[metaCount], csv.c_str(), sizeof(s_meta[0]) - 1);
+        s_meta[metaCount][sizeof(s_meta[0]) - 1] = '\0';
+        metaCount++;
       }
+    } else if ((n.endsWith(".csv") || n.endsWith(".CSV")) && n > since && csvCount < kCap) {
+      strncpy(s_csv[csvCount], n.c_str(), sizeof(s_csv[0]) - 1);
+      s_csv[csvCount][sizeof(s_csv[0]) - 1] = '\0';
+      csvCount++;
     }
-    f.close();
   }
-  root.close();
+  closedir(dir);
 
   uint32_t count = 0;
   for (size_t i = 0; i < csvCount; i++) {
+    bool visible = false;
     for (size_t j = 0; j < metaCount; j++) {
-      if (strcmp(s_csvName[i], s_metaName[j]) == 0) {
-        // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
-        count = (uint32_t)core::listInsert(out, count, maxCount, s_csvName[i], s_csvSize[i]);
+      if (strcmp(s_csv[i], s_meta[j]) == 0) {
+        visible = true;
         break;
       }
     }
+    if (visible) {
+      // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
+      count = (uint32_t)core::listInsert(out, count, maxCount, s_csv[i], 0);
+    }
+  }
+  // Rozmiar tylko dla wybranych (<= maxCount) — stat nie otwiera danych pliku.
+  for (uint32_t k = 0; k < count; k++) {
+    String p = "/";
+    p += out[k].name;
+    struct stat st;
+    if (stat(p.c_str(), &st) == 0) out[k].size = (unsigned long)st.st_size;
   }
   return count;
 }
