@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { asciiFold } from '../web/src/lib/asciiFold.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -130,14 +131,6 @@ function bearingDegrees(from, to) {
   let bearing = (Math.atan2(east, north) * 180) / Math.PI;
   if (bearing < 0) bearing += 360;
   return bearing;
-}
-
-function asciiOnly(value) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7E]/g, '')
-    .trim();
 }
 
 function hasLifecyclePrefix(tags) {
@@ -340,8 +333,8 @@ function collectWays(elements) {
         const simplified = simplify(meters, SIMPLIFY_METERS);
         pistes.push({
           id: element.id,
-          name: asciiOnly(tags.name ?? tags.ref ?? '').slice(0, 10),
-          fullName: asciiOnly(tags.name ?? tags.ref ?? ''),
+          name: asciiFold(tags.name ?? tags.ref ?? '').slice(0, 10),
+          fullName: asciiFold(tags.name ?? tags.ref ?? ''),
           kind: 'road',
           highway,
           difficulty: ROAD_DIFFICULTY[highway] ?? DIFFICULTY_FALLBACK,
@@ -362,8 +355,8 @@ function collectWays(elements) {
       const bearing = downhill ? wayBearing(simplified) : -1;
       pistes.push({
         id: element.id,
-        name: asciiOnly(tags.name ?? tags.ref ?? '').slice(0, 10),
-        fullName: asciiOnly(tags.name ?? tags.ref ?? ''),
+        name: asciiFold(tags.name ?? tags.ref ?? '').slice(0, 10),
+        fullName: asciiFold(tags.name ?? tags.ref ?? ''),
         kind,
         difficulty: downhill ? (DIFFICULTY_CODE[tags['piste:difficulty']] ?? DIFFICULTY_FALLBACK) : DIFFICULTY_FALLBACK,
         difficultyName: downhill ? (tags['piste:difficulty'] ?? null) : null,
@@ -382,8 +375,8 @@ function collectWays(elements) {
       const simplified = simplify(meters, SIMPLIFY_METERS);
       lifts.push({
         id: element.id,
-        name: asciiOnly(tags.name ?? '').slice(0, 3),
-        fullName: asciiOnly(tags.name ?? ''),
+        name: asciiFold(tags.name ?? '').slice(0, 3),
+        fullName: asciiFold(tags.name ?? ''),
         type: LIFT_TYPES.indexOf(aerialway),
         typeName: aerialway,
         points: simplified,

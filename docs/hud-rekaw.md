@@ -119,12 +119,21 @@ tylko, gdy odbiornik jest dostępny i zgłasza inną wersję (`routeCrc`). HudRe
 składa chunki, waliduje CRC całości i zapamiętuje trasę w RAM. Pusty blob
 (pointCount=0) = CLEAR.
 
+Bez potwierdzenia Szusownik ponawia wysyłkę **rzadko, nie non-stop**: jedno okno
+(burst = do `HUD_ROUTE_MAX_CYCLES` cykli chunków) startuje co najwyżej raz na
+`SZ_HUD_ROUTE_RESEND_MS` (**9 s** = 3 heartbeaty), a nowa trasa (`setRoute`)
+wysyła się od razu, z pominięciem progu. Potwierdzeniem dostarczenia jest
+zgodność `routeCrc` z CRC trzymanego bloba w kolejnym heartbeacie `H` — wtedy
+wysyłka się zatrzymuje. Tożsamością jest sam CRC32, także dla pustej trasy
+(CLEAR): flaga `hasRoute` jest dla niej fałszywa, więc **nie** bramkuje
+potwierdzenia.
+
 ## 4. Reguła trybu i częstotliwość wysyłki
 
 Szusownik wybiera tryb po własnej prędkości:
 
 - `speed > HUD_STATS_ABOVE_KMH (30 km/h)` → **statystyki**,
-- `speed <= 5 km/h` (w tym postój) → **mapa**.
+- `speed <= HUD_STATS_ABOVE_KMH (30 km/h)` (w tym postój) → **mapa**.
 
 Wysyłka jest zależna od trybu (żadnych zbędnych pakietów):
 
@@ -191,7 +200,8 @@ a podgląd pokazuje `last packet: never`).
 ### Tryb nawigacji (trasa na mapie)
 
 Gdy Szusownik przekazał trasę (pakiety `R`), odbiornik rysuje ją **na wierzchu**
-mapy jako grubą niebieską linię (`COLOR_ROUTE`, „jak Google Maps"), bez zmiany
+mapy jako grubą jasnofioletową linię (`COLOR_ROUTE`, grubość
+`ROUTE_LINE_THICKNESS`), bez zmiany
 obecnej orientacji mapy (nadal wg najbliższej trasy zjazdowej). Punkty trasy są w
 metrach względem origin trasy; odbiornik przesuwa je do układu własnej mapy
 (`MAP_ORIGIN_*`) i przepuszcza przez tę samą projekcję „rybiego oka".
@@ -205,6 +215,12 @@ zajmują dolną krawędź. Trasa trzymana jest **tylko w RAM** (brak zapisu we f
 po restarcie odbiornik zgłasza heartbeat z pustą trasą i Szusownik dosyła ją
 ponownie. Zmiana trasy wymusza przerysowanie mapy (`routeCrc` w martwej strefie)
 i unieważnienie layoutu statystyk.
+
+Nazwy odcinków trasy i nazwy wgrane w mapę flash są czystym ASCII. Zarówno PWA
+(`routeTransfer.ts`), jak i generator mapy (`scripts/build-map.mjs`) korzystają
+ze wspólnej transliteracji `web/src/lib/asciiFold.mjs`: niemieckie `ä/ö/ü`→`a/o/u`,
+`ß`→`ss`, polskie `ł`→`l` i pokrewne. Bez tego znaki bez rozkładu NFD (np. `ß`,
+`ł`) byłyby po prostu wyrzucane, a oba wyświetlacze mają czcionki tylko ASCII.
 
 ## 6. Budowanie i wgrywanie
 
@@ -251,8 +267,9 @@ Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,
 
 - Telemetria `S` i pozycja `L` nadal są pojedynczym, niepotwierdzonym broadcastem
   (jak w DisplayTest) — kolejny pakiet i tak nadchodzi w następnym okresie. Trasa
-  `R` ma mocniejszą ochronę: chunki z indeksem i CRC całości, wznawiane po
-  heartbeacie, a potwierdzeniem dostarczenia jest zmiana `routeCrc` w kolejnym `H`.
+  `R` ma mocniejszą ochronę: chunki z indeksem i CRC całości, ponawiane w oknach
+  co najwyżej raz na `SZ_HUD_ROUTE_RESEND_MS`, a potwierdzeniem dostarczenia jest
+  zgodność `routeCrc` w kolejnym `H` (sam CRC32 — obejmuje też CLEAR).
 - Utrata fixa w trybie mapy nie czyści ekranu — rysowana jest ostatnia pozycja.
 - Przy połączeniu z routerem HudRekaw zmienia kanał i traci łączność z
   Szusownikiem (kanał 1). Docelowo oba urządzenia są poza zasięgiem routera.

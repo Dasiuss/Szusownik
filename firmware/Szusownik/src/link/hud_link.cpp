@@ -5,7 +5,9 @@
 #include <esp_wifi.h>
 #include <math.h>
 
+#include "../config/config.h"
 #include "../config/log.h"
+#include "../core/route.h"
 
 namespace {
 
@@ -52,6 +54,7 @@ void HudLink::setRoute(const uint8_t* data, uint16_t len, uint32_t crc) {
   // Nowa trasa: zaczynamy wysyłkę od nowa (peer potwierdzi w heartbeacie).
   routeSending_ = false;
   routeCycle_ = 0;
+  lastRouteAttemptMs_ = 0;  // nowa trasa: wyślij od razu, bez progu odstępu
 }
 
 void HudLink::handlePacket(const uint8_t* data, size_t len) {
@@ -62,7 +65,6 @@ void HudLink::handlePacket(const uint8_t* data, size_t len) {
     peerSeen_ = true;
     lastHeartbeatMs_ = millis();
     peerRouteCrc_ = heartbeat.crc;
-    peerHasRoute_ = heartbeat.hasRoute;
   }
 }
 
@@ -143,19 +145,26 @@ void HudLink::serviceRoute(unsigned long nowMs) {
     routeCycle_ = 0;
     return;
   }
-  if (peerHasRoute_ && peerRouteCrc_ == routeCrc_) {
+  if (hudRouteConfirmed(peerRouteCrc_, routeCrc_)) {
     routeSending_ = false;
     routeCycle_ = 0;
-    return;  // odbiornik ma już tę wersję
+    return;  // odbiornik ma już tę wersję (także CLEAR — tożsamością jest CRC)
   }
 
   const uint8_t chunkCount = static_cast<uint8_t>(
       (static_cast<uint32_t>(routeLen_) + HUD_ROUTE_CHUNK_BYTES - 1) / HUD_ROUTE_CHUNK_BYTES);
   if (!routeSending_) {
+    // Jedno okno wysyłki (burst) na SZ_HUD_ROUTE_RESEND_MS. Odbiornik potwierdza
+    // kolejnym heartbeatem (routeCrc), więc po nieudanym oknie czekamy — bez
+    // tego progu burst wznawiał się natychmiast i radio nadawało non-stop.
+    if (lastRouteAttemptMs_ != 0 && nowMs - lastRouteAttemptMs_ < SZ_HUD_ROUTE_RESEND_MS) {
+      return;
+    }
     routeSending_ = true;
     routeChunk_ = 0;
     routeCycle_ = 0;
     lastChunkMs_ = 0;
+    lastRouteAttemptMs_ = nowMs;
   }
   if (nowMs - lastChunkMs_ < HUD_ROUTE_CHUNK_MS) return;
   if (routeChunk_ >= chunkCount) {

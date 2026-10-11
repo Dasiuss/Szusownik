@@ -343,7 +343,11 @@ i koniec są markerami MapLibre, nie punktami circle-layer.
 
 Wyznaczona trasa jest też kodowana (`web/src/lib/routeTransfer.ts`, SSOT
 `protocol/route-v1.json`) i wysyłana do Szusownika dedykowaną charakterystyką BLE
-(`docs/ble-transfer.md` §10). Wysyłka ponawia się po każdej zmianie geometrii —
+(`docs/ble-transfer.md` §10). Nazwy odcinków przechodzą przy kodowaniu przez
+wspólną transliterację do czystego ASCII (`web/src/lib/asciiFold.mjs`), bo oba
+firmware mają czcionki wyłącznie ASCII: umlauty składają się do pojedynczej litery
+(`ä/ö/ü`→`a/o/u`), `ß`→`ss`, polskie `ł`→`l` i pokrewne. Tego samego helpera używa
+generator mapy flash HudRekaw (`docs/hud-rekaw.md` §5). Wysyłka ponawia się po każdej zmianie geometrii —
 także po każdym `trimRoute` w nawigacji (~5 s) — więc urządzenie trzyma aktualny,
 przycięty odcinek. `clearRoute` wysyła `CLEAR`, a po ponownym połączeniu PWA
 porównuje wersję trasy urządzenia z własną i dosyła raz tylko przy różnicy

@@ -61,6 +61,28 @@ TEST_CASE("trasa: pusty blob (CLEAR)") {
   REQUIRE(route.crc != 0);
 }
 
+TEST_CASE("trasa: potwierdzenie dostarczenia po samym CRC (obejmuje CLEAR)") {
+  uint8_t empty[ROUTE_MAX_BLOB] = {0};
+  const size_t len = routeBuildEmpty(empty, sizeof(empty));
+  RouteData clear;
+  REQUIRE(routeDecode(empty, len, &clear));
+
+  // CLEAR: odbiornik raportuje hasRoute == false, ale CRC jest niezerowe —
+  // potwierdzenie musi isc po CRC, inaczej pusty blob leci non-stop.
+  REQUIRE(clear.pointCount == 0);
+  REQUIRE(clear.crc != 0);
+  REQUIRE(hudRouteConfirmed(clear.crc, clear.crc));
+
+  // Odbiornik, ktory jeszcze nic nie dostal (crc == 0), nie potwierdza.
+  REQUIRE_FALSE(hudRouteConfirmed(0, clear.crc));
+
+  // Zwykla trasa: rowne CRC potwierdza, rozne nie.
+  RouteData route;
+  REQUIRE(routeDecode(kGolden, sizeof(kGolden), &route));
+  REQUIRE(hudRouteConfirmed(route.crc, route.crc));
+  REQUIRE_FALSE(hudRouteConfirmed(route.crc ^ 0x1u, route.crc));
+}
+
 TEST_CASE("trasa: indeks odcinka i dystans do celu") {
   RouteData route;
   REQUIRE(routeDecode(kGolden, sizeof(kGolden), &route));

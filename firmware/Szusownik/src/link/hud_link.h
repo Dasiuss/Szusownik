@@ -52,12 +52,13 @@ class HudLink {
   bool peerSeen_ = false;
   unsigned long lastHeartbeatMs_ = 0;
   uint32_t peerRouteCrc_ = 0;
-  bool peerHasRoute_ = false;
   uint8_t routeSeq_ = 0;
   uint8_t routeChunk_ = 0;
   uint8_t routeCycle_ = 0;
   bool routeSending_ = false;
   unsigned long lastChunkMs_ = 0;
+  unsigned long lastRouteAttemptMs_ = 0;  // start ostatniego okna wysyłki trasy
+  // (0 = jeszcze nie próbowano — pozwala wysłać od razu po starcie/nowej trasie)
 
   void sendTelemetry(unsigned long nowMs, const HudInput& in);
   bool sendLocation(unsigned long nowMs, uint8_t mode);

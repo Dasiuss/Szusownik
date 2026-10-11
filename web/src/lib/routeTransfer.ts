@@ -1,5 +1,6 @@
 import type { Position } from "./mapData.ts";
 import type { RouteResult } from "./mapRouting.ts";
+import { asciiFold } from "./asciiFold.mjs";
 import {
   ROUTE_CRC_SIZE,
   ROUTE_FORMAT_VERSION,
@@ -65,14 +66,6 @@ export function crc32(bytes: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function asciiLabel(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7e]/g, "")
-    .trim();
-}
-
 function clampI16(value: number): number {
   if (value > 32767) return 32767;
   if (value < -32768) return -32768;
@@ -115,7 +108,7 @@ function collectSourcePoints(route: RouteResult): SourcePoint[] {
   for (const feature of route.segments.features) {
     const properties = feature.properties;
     const kind = properties.kind === "lift" ? "lift" : properties.kind === "piste" ? "piste" : null;
-    const label = asciiLabel(properties.label ?? "").slice(0, ROUTE_MAX_LABEL);
+    const label = asciiFold(properties.label ?? "").slice(0, ROUTE_MAX_LABEL);
     const key = kind ? `${kind}:${properties.uid ?? label}` : "";
     for (const coordinate of feature.geometry.coordinates) {
       points.push({ position: coordinate, label, kind, key });
@@ -236,7 +229,7 @@ export function encodeRoute(route: RouteResult | null): EncodedRoute {
   }
 
   const encodedSteps = steps.map((step) => {
-    const label = asciiLabel(step.label).slice(0, ROUTE_MAX_LABEL);
+    const label = asciiFold(step.label).slice(0, ROUTE_MAX_LABEL);
     return {
       kind: step.kind === "lift" ? ROUTE_KIND_LIFT : ROUTE_KIND_PISTE,
       label,

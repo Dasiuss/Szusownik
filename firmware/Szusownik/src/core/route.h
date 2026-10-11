@@ -37,6 +37,13 @@ size_t routeBuildEmpty(uint8_t* out, size_t outLen);
 // `out` (w tym etykiety odcinków). Zwraca false przy błędzie.
 bool routeDecode(const uint8_t* data, size_t len, RouteData* out);
 
+// Czy odbiornik potwierdził już dostarczenie trasy. Tożsamość trasy to CRC32
+// bloba (SSOT protocol/route-v1.json) — pusta trasa (CLEAR) też ma niezerowe CRC
+// i musi być potwierdzana tym samym porównaniem. Flaga `hasRoute` z heartbeatu
+// jest fałszywa właśnie dla CLEAR, więc nie może bramkować potwierdzenia.
+// `localCrc == 0` (brak trasy) nigdy nie jest traktowane jako potwierdzenie.
+bool hudRouteConfirmed(uint32_t peerCrc, uint32_t localCrc);
+
 // Indeks odcinka dla pozycji GNSS (najbliższy punkt trasy -> dystans wzdłuż).
 // HUD_SEGMENT_NONE, gdy brak trasy.
 uint8_t routeSegmentIndex(const RouteData& route, double lat, double lon);

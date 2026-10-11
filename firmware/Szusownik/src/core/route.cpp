@@ -115,6 +115,10 @@ bool routeDecode(const uint8_t* data, size_t len, RouteData* out) {
   return true;
 }
 
+bool hudRouteConfirmed(uint32_t peerCrc, uint32_t localCrc) {
+  return localCrc != 0 && peerCrc == localCrc;
+}
+
 uint8_t routeSegmentIndex(const RouteData& route, double lat, double lon) {
   if (!route.valid || route.pointCount < 2) return HUD_SEGMENT_NONE;
   double riderEast = 0.0;

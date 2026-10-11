@@ -91,6 +91,23 @@ describe("kod trasy (encode/decode)", () => {
     expect(bytes.length).toBeGreaterThanOrEqual(ROUTE_HEADER_SIZE + pointCount * ROUTE_POINT_SIZE + 4);
   });
 
+  it("transliteruje etykiety odcinków do ASCII (niemiecki i polski)", () => {
+    const route = sampleRoute();
+    route.segments.features = [
+      piste("way/1", "Grüßgott", [
+        [11.0, 46.95],
+        [11.001, 46.949],
+      ]),
+      piste("way/2", "Łódź", [
+        [11.001, 46.949],
+        [11.002, 46.948],
+      ]),
+    ];
+    const decoded = decodeRoute(encodeRoute(route).bytes)!;
+    expect(decoded.steps.map((step) => step.label)).toEqual(["Grussgott", "Lodz"]);
+    expect(decoded.steps.every((step) => step.label.length <= 12)).toBe(true);
+  });
+
   it("pusty blob reprezentuje brak trasy", () => {
     const { bytes, hasRoute } = emptyRouteBlob();
     const decoded = decodeRoute(bytes);

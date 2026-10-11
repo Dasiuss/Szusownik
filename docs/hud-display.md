@@ -32,7 +32,8 @@ ma przycisku — tylko GPIO0=BOOT). Ekran czyta się **na postoju i na wyciągu*
 
 Dwie kolumny, etykieta nad wartością. Font Adafruit GFX jest **ASCII** — brak
 polskich znaków (`WYSOKOSC`) i brak glifu strzałki (linia trasy używa ASCII
-`->`).
+`->`). Etykiety trasy przychodzą z PWA już jako czysty ASCII (wspólna
+transliteracja `web/src/lib/asciiFold.mjs`; np. `ß`→`ss`, `ł`→`l`).
 
 ```text
 x=0..63    kolumna lewa  (MAX/MAX ZJAZDU hero + DYSTANS)
@@ -76,7 +77,9 @@ DYSTANS                WYSOKOSC
 - Linię buduje `Szusownik.ino` przez `core::routeFormatLine(activeRoute, start, …)`.
   `start` = bieżący `segmentIndex`; przy chwilowym braku fixa zostaje ostatni
   znany odcinek (ekran nie migocze), a świeżo odebrana trasa bez fixa startuje od
-  pierwszego odcinka.
+  pierwszego odcinka. Bieżący odcinek przeliczany jest najwyżej raz na
+  `SZ_ROUTE_UPDATE_MS` (**3 s**) — pełny przebieg po punktach trasy jest kosztowny,
+  a odcinek zmienia się wolno.
 - Etykiety łączone są ASCII `->`. `core::formatRouteLabel`: nazwy **≤ 6 znaków**
   bez zmian, **≥ 7** → pierwsze 3 + `.` + ostatnie 2 (np. `Gaislachkogl` →
   `Gai.gl`).

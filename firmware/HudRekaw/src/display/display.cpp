@@ -152,10 +152,13 @@ void Display::drawRoute(const HudRoute& route, float riderEast, float riderNorth
     mapProjectPoint(static_cast<int16_t>(mapEast), static_cast<int16_t>(mapNorth), riderEast,
                     riderNorth, cosBearing, sinBearing, fisheyeRadius, fisheyeK, &x, &y);
     if (index > 0) {
-      // Gruba linia: kilka przesuniętych przebiegów Bresenhama.
-      drawMapLine(previousX, previousY, x, y, COLOR_ROUTE);
-      drawMapLine(previousX + 1, previousY, x + 1, y, COLOR_ROUTE);
-      drawMapLine(previousX, previousY + 1, x, y + 1, COLOR_ROUTE);
+      // Gruba linia: pędzel ROUTE_LINE_THICKNESS x ROUTE_LINE_THICKNESS px —
+      // przebiegi Bresenhama przesunięte o każdą kombinację offsetów.
+      for (int16_t oy = 0; oy < ROUTE_LINE_THICKNESS; oy++) {
+        for (int16_t ox = 0; ox < ROUTE_LINE_THICKNESS; ox++) {
+          drawMapLine(previousX + ox, previousY + oy, x + ox, y + oy, COLOR_ROUTE);
+        }
+      }
     }
     previousX = x;
     previousY = y;
