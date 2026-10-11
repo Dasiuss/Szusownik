@@ -81,14 +81,22 @@ Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 
 1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie):
    `taskkill /F /IM arduino-cli.exe`.
-2. Wgraj: `arduino-cli upload -p COM7 --fqbn "<FQBN>" firmware/Szusownik`
-   (z katalogu repo; biblioteki: TinyGPSPlus, NimBLE, SSD1306, miniz vendored).
+2. Skompiluj jawnie i wgraj ten build (z katalogu repo; biblioteki: TinyGPSPlus,
+   NimBLE, SSD1306, miniz vendored):
+   ```powershell
+   arduino-cli compile --fqbn "<FQBN>" --output-dir build/szusownik firmware/Szusownik
+   arduino-cli upload -p COM7 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
+   ```
 3. Od razu po wgraniu odpal monitor w osobnym oknie przez `monitor_COM7.cmd`
    z katalogu repo (nie blokuje wywołania):
    `Start-Process -FilePath "<repo>\monitor_COM7.cmd"`
    żeby widać było logi od startu urządzenia.
 
-Uwagi: `arduino-cli monitor` odpalone przez agenta w tle (bez TTY) wychodzi
+Uwagi: `arduino-cli upload` bez `--input-dir` potrafi użyć przeterminowanego
+cache build i wgrać starą binarkę, ignorując zmianę w nagłówku (`config.h`,
+`log.h`). Dlatego zawsze kompiluj jawnie do `--output-dir` i wgrywaj ten katalog.
+
+`arduino-cli monitor` odpalone przez agenta w tle (bez TTY) wychodzi
 natychmiast z pustym logiem — dlatego używamy `monitor_COM7.cmd`, który działa
 poprawnie. Joby/processy w tle (`Start-Job`, `Start-Process` z samym monitorem)
 nie przetrwają do kolejnego wywołania `bash` — ale okno konsoli z `.cmd`
@@ -113,9 +121,10 @@ Kolejność:
 
 1. Ustal adres IP: `arduino-cli board list` (albo `http://hud-rekaw.local/`).
 2. Sprawdź, że urządzenie odpowiada: `curl.exe http://<ip>/`.
-3. `arduino-cli upload` (espota):
+3. Skompiluj jawnie, potem `arduino-cli upload` (espota):
    ```powershell
-   arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
+   arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --output-dir build/hudrekaw firmware/HudRekaw
+   arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --input-dir build/hudrekaw --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
    ```
    To potrafi się wysypać po `Authenticating...OK` błędem
    `No response from device`. Wtedy użyj kroku 4.

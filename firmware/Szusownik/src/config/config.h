@@ -54,6 +54,23 @@ static const float SZ_HYST_KMH = 3.0f;
 // napis jest urywany w środku nazwy, bez wiszącego "->".
 #define SZ_HUD_ROUTE_CHARS 10
 
+// Trasa nawigacyjna: maksymalna częstość przeliczania bieżącego odcinka.
+// Pełny przebieg po punktach trasy (O(pointCount), double sqrt) jest kosztowny,
+// a odcinek zmienia się wolno — liczymy go najwyżej raz na ten interwał.
+// Odległość do końca trasy (wykrycie dotarcia) jest O(1) i sprawdzana osobno,
+// nie rzadziej niż SZ_ROUTE_ARRIVAL_MS — rzadsze próbkowanie przy dużej
+// prędkości mogłoby przeskoczyć promień ROUTE_ARRIVAL_M i zgubić dotarcie.
+#define SZ_ROUTE_UPDATE_MS 3000UL
+#define SZ_ROUTE_ARRIVAL_MS 1000UL
+
+// Przekazywanie trasy do HudRekaw po ESP-NOW: minimalny odstęp między oknami
+// wysyłki (burst = do HUD_ROUTE_MAX_CYCLES cykli chunków `R`). Odbiornik
+// potwierdza odbiór kolejnym heartbeatem (co HUD_HEARTBEAT_MS = 3 s), więc bez
+// potwierdzenia ponawiamy rzadko — inaczej burst restartował się natychmiast po
+// każdym heartbeacie i radio nadawało non-stop (dogrzewanie). 9 s = 3 heartbeaty.
+// Szczegóły: docs/hud-rekaw.md §3.
+#define SZ_HUD_ROUTE_RESEND_MS 9000UL
+
 // Detekcja zjazdu (port ZigZag z web/src/lib/runs.ts): histereza zwrotu
 // wysokości, stała czasowa fuzji baro+GPS i twarda granica przerwy.
 #define SZ_RUN_REVERSAL_M 5.0f
@@ -64,12 +81,25 @@ static const float SZ_HYST_KMH = 3.0f;
 // INFO = zdarzenia (fix, SD, BLE, health, boot) + cykl transferu BLE;
 // DEBUG = status okresowy, per-probka GNSS, diagnostyka UBX/INFO/BLE.
 // Wszystko ponizej progu jest wycinane kompilacyjnie (src/config/log.h).
-#define SZ_LOG_LEVEL 2
+#define SZ_LOG_LEVEL 3
 
 // Linia statusu SYS (DEBUG) i progi ostrzezen.
 #define SZ_STATUS_MS 5000UL          // okres linii SYS: GNSS/SD/loop/heap/termika/BLE
 #define SZ_SD_SYNC_WARN_MS 100UL     // wolny flush (fsync) -> WARN
 #define SZ_LOOP_STALL_WARN_MS 200UL  // dluzsza iteracja petli -> WARN (pierwsza w oknie)
+
+// Pętla główna: minimalny czas oddany CPU między iteracjami. Bez tego loop()
+// jest busy-spinem — CPU tkwi na 100%, nie wchodzi w idle/DFS i grzeje SoC
+// (a radia BLE/ESP-NOW są włączone przez cały czas). 3 ms nie rusza żadnego
+// interwału (najszybszy to GNSS 10 Hz = 100 ms; BLE ma własny pacing 4 ms).
+#define SZ_LOOP_IDLE_MS 3
+
+// Stały zegar CPU. ESP32-S3 obsługuje 240/160/80/40/20 MHz — 200 MHz NIE
+// istnieje (setCpuFrequencyMhz(200) kończy się błędem i zostawia 240). 160 MHz
+// zmniejsza moc dynamiczną, a zapas na deflate w transferze BLE zostaje.
+// Ustawiane raz w setup(), PRZED inicjalizacją peryferiów, żeby UART/I2C/LEDC
+// wystartowały z docelowym zegarem.
+#define SZ_CPU_FREQ_MHZ 160
 
 // FIFO: przy mniej niż tyle wolnego miejsca kasuj najstarsze pliki CSV.
 #define SZ_SD_MIN_FREE_BYTES (4UL * 1024UL * 1024UL)

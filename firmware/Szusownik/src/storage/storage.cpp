@@ -129,8 +129,12 @@ uint32_t Storage::countCsv() const {
     File f = root.openNextFile();
     if (!f) break;
     if (!f.isDirectory()) {
+      // Plik widoczny dla PWA = CSV z plikiem .meta. Zamiast robić SD.exists()
+      // na każdym CSV (osobny odczyt katalogu, przy wielu plikach blokuje pętlę
+      // setki ms — a na starcie transferu zjadało to timeout ACK), liczymy
+      // pliki ".meta" w jednym przebiegu. Każdy .meta należy do CSV.
       String n = String(f.name());
-      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n)) count++;
+      if (n.endsWith(SZ_CSV_META_SUFFIX)) count++;
     }
     f.close();
   }

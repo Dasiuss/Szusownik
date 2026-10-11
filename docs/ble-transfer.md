@@ -405,6 +405,16 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   oknie startu, a potem sprawdzając STATUS co ~250 ms w trakcie odbioru ramek
   (firmware przerywa bez end markera).
   PWA nie bramkuje tego po wersji firmware.
+- **Skan SD nie może zjadać zegara ACK na starcie transferu** (2026-10-11): przy
+  `START_FILE` firmware woła `refreshInfo()`, które liczy widoczne pliki
+  (`countCsv`). Wersja licząca `SD.exists()` na każdym CSV trwała przy kilkunastu
+  plikach ~0,7-0,9 s — dłużej niż `SZ_BLE_ACK_TIMEOUT_MS` (500 ms). Skutek: tuż
+  po starcie „ack timeout, replay od 0" zjadał jedną retransmisję (limit 3), a
+  pętla notowała stall. Pierwszy (mały) plik przechodził, kolejne kończyły się
+  `err:ack-timeout` albo STOP-em PWA — „1 z 10 plików". Poprawki: (1)
+  `lastProgressMs_` ustawiane **po** `refreshInfo()` w `startStream`, (2)
+  `countCsv` liczy pliki `.meta` w jednym przebiegu katalogu (bez `SD.exists`
+  per plik). Na sprzęcie: kilkanaście plików pod rząd `replay=0 ackTimeout=0`.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw

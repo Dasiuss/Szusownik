@@ -174,6 +174,18 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   (roadmapa).
 - Diagnostyka: linia statusu SYS co 5 s (poziom DEBUG) niesie `die=..C air=..C`
   (die z SoC, air z BME280) — do oceny termiki wnętrza obudowy.
+- **Ograniczanie grzania:** poza transferem BLE pętla główna oddaje CPU na
+  `SZ_LOOP_IDLE_MS` (3 ms) na końcu `loop()` — bez tego była busy-spinem (100%
+  CPU, brak wejścia w idle/DFS); 3 ms nie rusza żadnego interwału (najszybszy to
+  GNSS 10 Hz = 100 ms). **W trakcie transferu BLE delay jest pomijany**
+  (`if (!ble.busy())`), żeby pompa NOTIFY kręciła się dokładnie jak w zamrożonym
+  profilu (pacing 4 ms). Stały zegar CPU to `SZ_CPU_FREQ_MHZ` = 160 MHz
+  (ESP32-S3 wspiera 240/160/80/40/20 — 200 nie istnieje); ustawiany raz w
+  `setup()`, przed peryferiami. Wcześniejsze „wycofanie" 160 MHz było
+  błędną diagnozą: transfer psuł skan SD w `refreshInfo`/`countCsv` (patrz
+  `docs/ble-transfer.md`), który zawodził też na 240 MHz.
+- Linia statusu SYS (DEBUG) ma bufor 512 B (`src/config/log.h`), żeby nie ucinać
+  ogona z `loop=`/`die=`/`air=`; przy 256 B te pola ginęły.
 
 ## 10. Otwarte punkty
 
@@ -224,11 +236,18 @@ jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik
   CLEAR). `BleFiles` składa porcje w staging i waliduje CRC w pętli głównej;
   INFO niesie `routeCrc`/`routePoints`, STATUS `route ok ...` / `route err ...`.
 - Szusownik przekazuje trasę dalej do HudRekaw po ESP-NOW: odbiera heartbeat `H`,
-  a gdy odbiornik jest dostępny i ma inną wersję, wysyła chunki `R` (patrz
+  a gdy odbiornik jest dostępny i ma inną wersję, wysyła chunki `R`. Bez
+  potwierdzenia ponawia rzadko — jedno okno wysyłki co najwyżej raz na
+  `SZ_HUD_ROUTE_RESEND_MS` (9 s) — żeby radio nie nadawało non-stop (patrz
   `docs/hud-rekaw.md`).
 - Z GNSS liczy **indeks bieżącego odcinka trasy** i dokłada go do pakietów `S`/`L`
-  (`segmentIndex`, `HUD_SEGMENT_NONE` bez trasy). Odległość do końca ≤
-  `ROUTE_ARRIVAL_M` (30 m) **czyści trasę lokalnie** (pusty blob; zniknie też z
+  (`segmentIndex`, `HUD_SEGMENT_NONE` bez trasy). Decyzja o odcinku to pełny
+  przebieg po punktach trasy (O(`pointCount`), `double sqrt`), więc liczymy ją co
+  najwyżej raz na `SZ_ROUTE_UPDATE_MS` (**3 s**), a między przeliczeniami pakiet
+  niesie ostatni znany odcinek. Odległość do końca ≤ `ROUTE_ARRIVAL_M` (30 m) jest
+  O(1), więc sprawdzana jest osobno, co najwyżej raz na `SZ_ROUTE_ARRIVAL_MS`
+  (**1 s**) — rzadsze próbkowanie przy dużej prędkości mogłoby przeskoczyć promień
+  dotarcia. Wykryte dotarcie **czyści trasę lokalnie** (pusty blob; zniknie też z
   HudRekaw). Bez powiadamiania PWA — PWA ma własną logikę dotarcia.
 - **Kroki trasy na OLED Szusownika**: dolna linia pokazuje kolejne odcinki od
   bieżącego (`segmentIndex`), łączone `->` i skracane — szczegóły

@@ -36,6 +36,11 @@ static bool arrivalCleared = false;
 // Ostatni znany odcinek trasy — zamrazany przy chwilowym braku fixa, żeby dolna
 // linia OLED nie migotała i pokazywała ostatni znany stan.
 static uint8_t routeSegmentNow = HUD_SEGMENT_NONE;
+// Decyzja o bieżącym odcinku to pełny przebieg po punktach trasy (O(pointCount),
+// double sqrt) — liczymy ją rzadko (SZ_ROUTE_UPDATE_MS), nie co iterację.
+static unsigned long nextRouteMs = 0;
+// Osobny, krótszy licznik na sprawdzenie dotarcia (odległość do końca, O(1)).
+static unsigned long nextArrivalMs = 0;
 
 // Statystyki dnia (reset przy restarcie = "max dnia od włączenia").
 static float maxDayKmh = 0.0f;
@@ -81,13 +86,17 @@ static const char* resetReasonName(esp_reset_reason_t r) {
 }
 
 void setup() {
+  // Zegar CPU ustawiamy PRZED Serial i peryferiami: UART/I2C/LEDC mają wtedy
+  // docelowy zegar od startu (patrz config.h).
+  setCpuFrequencyMhz(SZ_CPU_FREQ_MHZ);
   Serial.begin(115200);
   unsigned long t0 = millis();
   while (!Serial && millis() - t0 < 1500) {
   }
   SZ_LOGIF("Szusownik %s proto=%s", SZ_FW_VERSION, SZ_WIRE_PROTO);
-  SZ_LOGIF("BOOT reset=%s heap=%lu psram=%lu", resetReasonName(esp_reset_reason()),
-           (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getFreePsram());
+  SZ_LOGIF("BOOT reset=%s cpu=%luMHz heap=%lu psram=%lu", resetReasonName(esp_reset_reason()),
+           (unsigned long)getCpuFrequencyMhz(), (unsigned long)ESP.getFreeHeap(),
+           (unsigned long)ESP.getFreePsram());
 
   gnss.begin(9600);  // NEO-M8N default; reszta (rate/baud/zapis) w gnss.maintain()
   if (!storage.begin()) {
@@ -302,17 +311,31 @@ void loop() {
     hudLink.setRoute(ble.routeRaw(), ble.routeRawLen(), routeVersion);
     arrivalCleared = false;
     routeSegmentNow = HUD_SEGMENT_NONE;  // nowa trasa: brak znanego odcinka
+    nextRouteMs = 0;                     // nowa trasa: przelicz od razu
+    nextArrivalMs = 0;
   }
-  uint8_t segmentIndex = HUD_SEGMENT_NONE;
-  if (activeRoute.valid && fix) {
-    const double lat = gnss.lat();
-    const double lon = gnss.lon();
-    segmentIndex = routeSegmentIndex(activeRoute, lat, lon);
-    routeSegmentNow = segmentIndex;  // zamrazany, gdy fix zniknie
-    if (!arrivalCleared && routeDistanceToEndM(activeRoute, lat, lon) <= ROUTE_ARRIVAL_M) {
+
+  // Dotarcie: odległość do końca trasy jest O(1) — sprawdzamy ją co najwyżej raz
+  // na SZ_ROUTE_ARRIVAL_MS. Rzadsze próbkowanie mogłoby przy dużej prędkości
+  // przeskoczyć cały promień ROUTE_ARRIVAL_M (~60 m okna) i zgubić dotarcie.
+  if (activeRoute.valid && fix && !arrivalCleared && now >= nextArrivalMs) {
+    nextArrivalMs = now + SZ_ROUTE_ARRIVAL_MS;
+    if (routeDistanceToEndM(activeRoute, gnss.lat(), gnss.lon()) <= ROUTE_ARRIVAL_M) {
       arrivalCleared = true;
       ble.clearRoute();  // trasa znika też z HudRekaw (przez ESP-NOW)
     }
+  }
+
+  // Bieżący odcinek: pełny przebieg po punktach trasy liczymy co najwyżej raz na
+  // SZ_ROUTE_UPDATE_MS (odcinek zmienia się wolno, a liczenie w każdej iteracji
+  // dogrzewało SoC). Między przeliczeniami pakiet niesie ostatni znany odcinek.
+  uint8_t segmentIndex = HUD_SEGMENT_NONE;
+  if (activeRoute.valid && fix) {
+    if (now >= nextRouteMs) {
+      nextRouteMs = now + SZ_ROUTE_UPDATE_MS;
+      routeSegmentNow = routeSegmentIndex(activeRoute, gnss.lat(), gnss.lon());
+    }
+    segmentIndex = routeSegmentNow;
   }
   if (!activeRoute.valid) routeSegmentNow = HUD_SEGMENT_NONE;
 
@@ -327,4 +350,10 @@ void loop() {
   hudIn.lonE7 = static_cast<int32_t>(lround(gnss.lon() * 1e7));
   hudIn.segmentIndex = segmentIndex;
   hudLink.tick(now, hudIn, ble.busy());
+
+  // Oddaj CPU na chwilę, ale NIE w trakcie transferu BLE: profil BLE jest
+  // zamrożony (spacing NOTIFY 4 ms), więc pompa musi kręcić się bez sztucznego
+  // opóźnienia. Poza transferem delay wpuszcza idle/DFS i ogranicza grzanie
+  // SoC; 3 ms nie rusza żadnego interwału (najszybszy to GNSS 10 Hz = 100 ms).
+  if (!ble.busy()) delay(SZ_LOOP_IDLE_MS);
 }

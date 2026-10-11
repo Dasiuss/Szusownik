@@ -758,12 +758,26 @@ export class SzusownikBle {
     let cursor = since;
     for (let page = 0; page < LIST_PAGE_LIMIT; page++) {
       const echo = listEcho(cursor);
-      await this.writeCtrl(`${SZ_CMD_LIST}${cursor}`);
-      // Czekamy na echo NASZEGO kursora. Bez tego pollStatus zwróciłby poprzednią
-      // odpowiedź `list ...` (identyczny prefiks), a `last` nie posunąłby kursora.
-      const status = await this.pollStatus(new RegExp(`^list ${escapeRegex(echo)}( |$)`));
-      if (status.startsWith(SZ_ST_ERR)) throw new Error(`Błąd listowania plików: ${status}`);
-      const entries = parseListStatus(status, echo);
+      const want = new RegExp(`^list ${escapeRegex(echo)}( |$)`);
+      let status = "";
+      let entries: FileMeta[] | null = null;
+      // Firmware odpowiada na LIST po skanie katalogu SD (setki ms) i pod presją
+      // może odpowiedzieć po naszym timeoucie — wtedy pollStatus zwraca STARY
+      // status (inny kursor). Ponawiamy żądanie, zamiast rzucać fałszywy błąd
+      // formatu. Trwałe błędy firmware (err:) i tak przerywają od razu.
+      const LIST_ATTEMPTS = 3;
+      for (let attempt = 0; attempt < LIST_ATTEMPTS; attempt++) {
+        await this.writeCtrl(`${SZ_CMD_LIST}${cursor}`);
+        status = await this.pollStatus(want);
+        if (status.startsWith(SZ_ST_ERR)) throw new Error(`Błąd listowania plików: ${status}`);
+        if (want.test(status)) {
+          entries = parseListStatus(status, echo);
+          break;
+        }
+      }
+      if (entries === null) {
+        throw new Error(`Brak odpowiedzi na LIST:${cursor} (ostatni status: ${status})`);
+      }
       if (entries.length === 0) return out; // pusta lista = nic nowego
       for (const entry of entries) out.push(entry);
       // Nazwy są rosnące i muszą posuwać kursor, inaczej pętla nieskończona.

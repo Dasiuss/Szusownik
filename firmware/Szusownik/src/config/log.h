@@ -31,7 +31,9 @@ inline void szLogLine(char lvl, const __FlashStringHelper* s) {
 }
 inline void szLogLinef(char lvl, const char* fmt, ...) {
   szLogPrefix(lvl);
-  char b[256];
+  // 512 B: linia statusu SYS jest dluzsza niz 256 B i bez tego ucinalaby
+  // ogon (loop=/die=/air=). Stos petli ma zapas (domyslnie 8 KB).
+  char b[512];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(b, sizeof(b), fmt, ap);

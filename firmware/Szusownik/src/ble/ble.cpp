@@ -277,8 +277,9 @@ void BleFiles::handleCommand(const String& cmd) {
     setStatus(msg);
   } else if (cmd.startsWith(SZ_CMD_ROTATE)) {
     // Żądanie sync: zamknij bieżący plik, żeby transfer czytał kompletny plik.
+    // Bez refreshInfo(): close() nie zmienia widoczności plików, a skan SD
+    // (~0,8 s) opóźniał odpowiedź na LIST i psuł listowanie w PWA.
     if (storage_) storage_->rotateForSync();
-    refreshInfo();
     setStatus(SZ_ST_OK);
   } else if (cmd.startsWith(SZ_CMD_DRYRUN)) {
     String name = cmd.substring((unsigned int)strlen(SZ_CMD_DRYRUN));
@@ -509,10 +510,12 @@ bool BleFiles::startStream(const String& name) {
   replaying_ = false;
   replays_ = 0;
   ackTimeouts_ = 0;
-  lastProgressMs_ = millis();
   lastNotifyMs_ = 0;
+  // Bez refreshInfo(): to pełny skan katalogu SD (~0,8 s), a PWA nie czyta INFO
+  // w trakcie transferu, a fileCount się przy nim nie zmienia. Zegar ACK startuje
+  // od razu.
+  lastProgressMs_ = millis();
   transferring_ = true;
-  refreshInfo();
   setStatus(SZ_ST_STREAMING + name);
   SZ_LOGIF("BLE START name=%s raw=%lu", name.c_str(), (unsigned long)storage_->readSize());
   return true;
