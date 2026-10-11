@@ -939,7 +939,7 @@ export default function MapView() {
           <button className="map-clear-route" type="button" onClick={clearRoute}>Wyczyść</button>
           <div className={`map-route-sync map-route-sync-${device.routeSync}`}>
             {device.routeSync === "sending" && <span>Wysyłam trasę na urządzenie…</span>}
-            {device.routeSync === "sent" && <span>Trasa na urządzeniu</span>}
+            {/* Sukces celowo bez komunikatu: domyślnie zakładamy, że trasa dotarła. */}
             {device.routeSync === "error" && <span>{device.routeSyncError ?? "Nie udało się wysłać trasy"}</span>}
             {device.routeSync === "offline" && (
               <>
