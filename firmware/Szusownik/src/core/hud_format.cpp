@@ -65,4 +65,13 @@ void formatRouteLabel(const char* in, char* out, size_t n) {
   out[outLen] = '\0';
 }
 
+void formatMaxPair(char* out, size_t n, float maxRunKmh, float maxDayKmh) {
+  if (!out || n == 0) return;
+  char run[8];
+  char day[8];
+  formatUint(run, sizeof(run), maxRunKmh, 999);
+  formatUint(day, sizeof(day), maxDayKmh, 999);
+  snprintf(out, n, "%s / %s", run, day);
+}
+
 }  // namespace core

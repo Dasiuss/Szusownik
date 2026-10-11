@@ -20,10 +20,12 @@
 </head>
 <body>
 <h1>Szusownik — makieta OLED SSD1306 128×64 (skala 5×)</h1>
-<p>Dwie kolumny (prawa przesunięta o 2 znaki). Lewa: MAX ZJAZDU (hero) i DYSTANS z
-większą wartością. Prawa: czas, SPEED/SPD, MAX DNIA, WYSOKOSC (z fuzji baro+GPS).
-Jednostki bez spacji (12.3km, 2013m). Trasa = jedna linia na dole, nazwy jedna po
-drugiej. ASCII (bez polskich znaków).</p>
+<p>Dwie kolumny (prawa przesunięta o 2 znaki). Bez trasy: lewa MAX ZJAZDU (hero) i
+DYSTANS z większą wartością, prawa czas/SPEED/MAX DNIA/WYSOKOSC. Z trasą: para
+maksimów zwija się do „MAX  zjazd / dzien" (bohater, size 2), DYSTANS i prawa
+kolumna maleją do size 1, a dolna linia (size 2, bez separatora) pokazuje kolejne
+odcinki od bieżącego, łączone ASCII „-&gt;". Jednostki bez spacji (12.3km, 2013m).
+ASCII (bez polskich znaków).</p>
 
 <div class="row">
 
@@ -52,28 +54,24 @@ drugiej. ASCII (bez polskich znaków).</p>
 
   <!-- ===== Wersja 2: z trasą ===== -->
   <div class="panel">
-    <h2>2. Z trasą — jedna linia na dole</h2>
+    <h2>2. Z trasą — jedna linia na dole (size 2)</h2>
     <svg width="640" height="320" viewBox="0 0 128 64">
       <!-- kolumna lewa -->
-      <text class="lbl" x="1" y="6" font-size="8" textLength="60" lengthAdjust="spacingAndGlyphs">MAX ZJAZDU</text>
-      <text class="val" x="1" y="21" font-size="16" textLength="36" lengthAdjust="spacingAndGlyphs">145</text>
+      <text class="lbl" x="1" y="6" font-size="8" textLength="18" lengthAdjust="spacingAndGlyphs">MAX</text>
+      <text class="val" x="1" y="22" font-size="16" textLength="84" lengthAdjust="spacingAndGlyphs">60 / 80</text>
       <text class="lbl" x="1" y="30" font-size="8" textLength="42" lengthAdjust="spacingAndGlyphs">DYSTANS</text>
-      <text class="val" x="1" y="44" font-size="16" textLength="48" lengthAdjust="spacingAndGlyphs">12.3</text>
-      <text class="val" x="49" y="44" font-size="8" textLength="12" lengthAdjust="spacingAndGlyphs">km</text>
+      <text class="val" x="1" y="38" font-size="8" textLength="36" lengthAdjust="spacingAndGlyphs">12.3km</text>
       <!-- kolumna prawa -->
       <text class="val" x="97" y="6" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">14:23</text>
       <text class="lbl" x="76" y="14" font-size="8" textLength="36" lengthAdjust="spacingAndGlyphs">SPD 12</text>
-      <text class="lbl" x="76" y="22" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">MAX DNIA</text>
-      <text class="val" x="76" y="30" font-size="8" textLength="18" lengthAdjust="spacingAndGlyphs">145</text>
-      <text class="lbl" x="76" y="38" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">WYSOKOSC</text>
-      <text class="val" x="76" y="46" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">2013m</text>
-      <!-- linia trasy -->
-      <line x1="0" y1="55" x2="128" y2="55" stroke="#2f5f5a" stroke-width="1"/>
-      <text class="nav" x="1" y="62" font-size="8" textLength="84" lengthAdjust="spacingAndGlyphs">&gt;11 &gt;8 &gt;Wycia1</text>
+      <text class="lbl" x="76" y="30" font-size="8" textLength="48" lengthAdjust="spacingAndGlyphs">WYSOKOSC</text>
+      <text class="val" x="76" y="38" font-size="8" textLength="30" lengthAdjust="spacingAndGlyphs">2013m</text>
+      <!-- linia trasy: size 2, bez separatora -->
+      <text class="nav" x="1" y="62" font-size="16" textLength="120" lengthAdjust="spacingAndGlyphs">11-&gt;5-&gt;gro</text>
     </svg>
-    <div class="caption">Trasa → dolna linia (odstęp nad nią). Hero 16 px, SPD w jednej
-    linii, żeby zrobić miejsce. Strzałki w realnym fontem GFX są ASCII (<code>&gt;</code>/<code>&lt;</code>),
-    bo wbudowany font nie ma glifu „→".</div>
+    <div class="caption">Trasa → dolna linia rozmiaru 2 (bez separatora, kolejne
+    odcinki od bieżącego, nadmiar urywany bez wiszącego „-&gt;"). Para „60 / 80" =
+    max zjazdu / max dnia; DYSTANS i prawa kolumna maleją do size 1.</div>
   </div>
 
   <!-- ===== Wersja 3: brak fixa ===== -->

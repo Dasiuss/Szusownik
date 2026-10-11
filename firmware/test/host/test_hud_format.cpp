@@ -55,3 +55,13 @@ TEST_CASE("hud_format: skrót nazwy trasy (<=6 pełna, >=7 -> 3+.+2)") {
   formatRouteLabel(nullptr, b, sizeof b);
   REQUIRE(std::string(b) == "");
 }
+
+TEST_CASE("hud_format: para max (zjazd / dzien)") {
+  char b[16];
+  formatMaxPair(b, sizeof b, 60.0f, 80.0f);
+  REQUIRE(std::string(b) == "60 / 80");
+  formatMaxPair(b, sizeof b, 1500.0f, 42.4f);  // clamp 999, zaokraglenie
+  REQUIRE(std::string(b) == "999 / 42");
+  formatMaxPair(b, sizeof b, 0.0f, 0.0f);
+  REQUIRE(std::string(b) == "0 / 0");
+}

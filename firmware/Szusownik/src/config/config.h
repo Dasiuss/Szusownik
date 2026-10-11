@@ -49,9 +49,10 @@ static const float SZ_HYST_KMH = 3.0f;
 // HUD: strefa czasowa (minuty) dla wyświetlanego czasu lokalnego (UTC+offset).
 #define SZ_HUD_TZ_OFFSET_MIN 60
 
-// HUD: pojemność dolnej linii trasy. Font size 1 (6 px/znak) od x=1 zostawia
-// miejsce na 21 znaków przy szerokości 128 px. Dłuższy napis jest urywany.
-#define SZ_HUD_ROUTE_CHARS 21
+// HUD: pojemność dolnej linii trasy. W trybie trasy napis jest rozmiaru 2
+// (12 px/znak) od x=1 — mieści się 10 znaków przy szerokości 128 px. Dłuższy
+// napis jest urywany w środku nazwy, bez wiszącego "->".
+#define SZ_HUD_ROUTE_CHARS 10
 
 // Detekcja zjazdu (port ZigZag z web/src/lib/runs.ts): histereza zwrotu
 // wysokości, stała czasowa fuzji baro+GPS i twarda granica przerwy.

@@ -2,11 +2,12 @@
 #include <Arduino.h>
 
 // HUD SSD1306 128x64 (I2C GPIO8/9). Jeden autonomiczny ekran statystyk:
-//  - lewa kolumna: MAX ZJAZDU (hero) + DYSTANS (wartosc wieksza),
-//  - prawa kolumna: czas lokalny (bez etykiety), SPEED/SPD, MAX DNIA, WYSOKOSC.
-// Gdy PWA wysle trase (roadmapa) dolna linia pokazuje kolejne odcinki
-// (trasy/wyciagi) od biezacego, laczone "->"; bez trasy caly ekran to
-// statystyki. Bez mapy, bitmap i animacji.
+//  - bez trasy: lewa kolumna MAX ZJAZDU (hero) + DYSTANS, prawa czas lokalny
+//    (bez etykiety), SPEED, MAX DNIA, WYSOKOSC;
+//  - z trasa (PWA wyslala trase): "MAX" = para zjazd / dzien (bohater, size 2),
+//    DYSTANS i prawa kolumna (czas, SPD/NO FIX, WYSOKOSC) schodza do size 1, a
+//    dolna linia (size 2, bez separatora) pokazuje kolejne odcinki od biezacego,
+//    laczone "->". Bez trasy caly ekran to statystyki. Bez mapy, bitmap i animacji.
 //
 // Font Adafruit GFX jest ASCII: brak polskich znakow ("WYSOKOSC"). Nazwy
 // odcinkow skraca core::formatRouteLabel (<=6 znakow, dluzsze 3+'.'+2).

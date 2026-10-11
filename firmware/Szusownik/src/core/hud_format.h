@@ -24,4 +24,8 @@ void formatMeters(char* out, size_t n, float meters);
 // -> "Gai.gl").
 void formatRouteLabel(const char* in, char* out, size_t n);
 
+// Para maksimów na jedną linię: "zjazd / dzien", oba clamp 999
+// (np. "60 / 80"). Używana w trybie trasy zamiast osobnych MAX ZJAZDU/MAX DNIA.
+void formatMaxPair(char* out, size_t n, float maxRunKmh, float maxDayKmh);
+
 }  // namespace core

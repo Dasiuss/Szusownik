@@ -32,11 +32,11 @@ ma przycisku — tylko GPIO0=BOOT). Ekran czyta się **na postoju i na wyciągu*
 
 Dwie kolumny, etykieta nad wartością. Font Adafruit GFX jest **ASCII** — brak
 polskich znaków (`WYSOKOSC`) i brak glifu strzałki (linia trasy używa ASCII
-`<`/`>`).
+`->`).
 
 ```text
-x=0..63    kolumna lewa  (MAX ZJAZDU hero + DYSTANS)
-x=76..127  kolumna prawa (czas, SPEED/SPD, MAX DNIA, WYSOKOSC)
+x=0..63    kolumna lewa  (MAX/MAX ZJAZDU hero + DYSTANS)
+x=76..127  kolumna prawa (czas, SPEED/SPD, MAX DNIA/MAX, WYSOKOSC)
 ```
 
 ### 3.1 Bez trasy (pełny ekran)
@@ -60,21 +60,19 @@ DYSTANS                 12
 ### 3.2 Z trasą
 
 ```text
-MAX ZJAZDU              14:23
- 1 4 5                  SPD 12
-DYSTANS                 MAX DNIA
-1 2 . 3 km             145
-                        WYSOKOSC
-                        2013m
-      (odstęp)
-────────────────────────────────
-1->Gai.gl
+MAX                     14:23
+60 / 80                SPD 12
+DYSTANS                WYSOKOSC
+12.3km                 2013m
+
+11->5->gro
 ```
 
-- Gdy `HudData.routeLine != nullptr` (trasa z PWA): hero maleje do rozmiaru 2,
-  `SPEED` + wartość zwijają się do jednej linii `SPD n` (co daje odstęp nad
-  dolną linią), a dolna linia (separator `y=55`, tekst `y=56`, font 1, `x=1`)
-  pokazuje **kolejne odcinki od bieżącego**.
+- Gdy `HudData.routeLine != nullptr` (trasa z PWA): para maksimów zwija się do
+  jednej pozycji `MAX <zjazd> / <dzien>` (etykieta `MAX`, wartość rozmiar 2),
+  `DYSTANS` oraz cała prawa kolumna (czas, `SPD n`/`NO FIX`, `WYSOKOSC`) maleją
+  do rozmiaru 1, a dolna linia (`x=1`, `y=48`, rozmiar 2, **bez separatora**)
+  pokazuje **kolejne odcinki od bieżącego** (zostaje ~8 px odstępu nad nią).
 - Linię buduje `Szusownik.ino` przez `core::routeFormatLine(activeRoute, start, …)`.
   `start` = bieżący `segmentIndex`; przy chwilowym braku fixa zostaje ostatni
   znany odcinek (ekran nie migocze), a świeżo odebrana trasa bez fixa startuje od
@@ -82,8 +80,9 @@ DYSTANS                 MAX DNIA
 - Etykiety łączone są ASCII `->`. `core::formatRouteLabel`: nazwy **≤ 6 znaków**
   bez zmian, **≥ 7** → pierwsze 3 + `.` + ostatnie 2 (np. `Gaislachkogl` →
   `Gai.gl`).
-- Mieści się `SZ_HUD_ROUTE_CHARS` (21) znaków; nadmiar jest urywany w środku
-  nazwy, bez wiszącego `->`.
+- Napis trasy mieści `SZ_HUD_ROUTE_CHARS` (**10**) znaków (font size 2, 12 px/znak,
+  `x=1`); nadmiar jest urywany w środku nazwy, bez wiszącego `->`.
+- Parę maksimów składa `core::formatMaxPair` (`zjazd / dzien`, clamp 999).
 - **Bez kierunków skrętów**: blob trasy (`protocol/route-v1.json`) niesie dla
   odcinka tylko etykietę, typ (`piste`/`lift`) i zakres dystansu. Strzałki
   kierunku wymagałyby rozszerzenia protokołu i PWA (poza zakresem).
@@ -99,15 +98,16 @@ wartości pokazują ostatni znany stan.
 
 | Pole | Źródło | Format | Uwagi |
 | --- | --- | --- | --- |
-| MAX ZJAZDU (hero) | `RunTracker::displayMaxKmh()` | `%d`, clamp 999 | live w zjeździe, zamrożony na wyciągu |
+| MAX / MAX ZJAZDU (hero) | `RunTracker::displayMaxKmh()` | `%d`, clamp 999 | live w zjeździe, zamrożony na wyciągu; z trasą w parze `zjazd / dzien` |
 | DYSTANS | `totalKm` (haversine, od włączenia) | `%.1f` + `km` | jednostka bez spacji |
 | czas | UTC z GNSS + `SZ_HUD_TZ_OFFSET_MIN` | `HH:MM` | brak UTC => `--:--` |
 | SPEED | `gnss.speedKmh()` | `%d`, clamp 999 | zawsze bieżąca |
-| MAX DNIA | `maxDayKmh` (od włączenia) | `%d`, clamp 999 | reset przy starcie |
+| MAX DNIA / MAX (dzien) | `maxDayKmh` (od włączenia) | `%d`, clamp 999 | reset przy starcie; z trasą w parze z max zjazdu |
 | WYSOKOSC | `RunTracker::altitudeM()` (fuzja baro+GPS) | `%dm` | wygładzona, m n.p.m. |
 
-Formatowanie liczb i czasu mieszka w czystym `src/core/hud_format.*` (testy
-hostowe). Renderowanie pozycji jest w `src/hud/hud.cpp` (manualne).
+Formatowanie liczb i czasu mieszka w czystym `src/core/hud_format.*` (`formatLocalHm`,
+`formatUint`, `formatTenthsKm`, `formatMeters`, `formatRouteLabel`, `formatMaxPair`;
+testy hostowe). Renderowanie pozycji jest w `src/hud/hud.cpp` (manualne).
 
 ## 5. Hero „max zjazdu" — port ZigZag z PWA
 
@@ -145,11 +145,13 @@ spójne z numeracją zjazdów w PWA.
 
 - Hostowe (Catch2): `firmware/test/host/test_run_tracker.cpp` (hero live/zamrożony,
   brak fixa, przerwa 1 h, wysokość z fuzji), `test_hud_format.cpp` (czas z
-  offsetem, clampy, dystans/wysokość, skrót nazwy odcinka) i `test_route.cpp`
+  offsetem, clampy, dystans/wysokość, skrót nazwy odcinka, para max
+  `zjazd / dzien`) i `test_route.cpp`
   (dekod bloba, indeks odcinka, dotarcie, linia kroków od bieżącego z urywaniem
   bez wiszącego `->`). Runner:
   `powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1`.
 - Render OLED, realny GNSS, baro i odczyt kątem oka — **manualne** (`docs/testy.md`).
 - Testy akceptacyjne (manualne): brak fixa (`NO FIX` w slocie SPEED), czas
   `--:--` przed pierwszym fixem, hero zamrożony na wyciągu i live w zjeździe,
-  dystans/wysokość po clampach, dolna linia trasy (kolejne odcinki od bieżącego).
+  dystans/wysokość po clampach, dolna linia trasy (kolejne odcinki od bieżącego,
+  font 2, bez separatora, para `MAX zjazd / dzien`).
