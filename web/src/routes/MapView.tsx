@@ -8,6 +8,7 @@ import { getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import { findRoute, snapToPiste, snapToRoute, trimRoute, type RouteResult } from "../lib/mapRouting.ts";
 import { encodeRoute } from "../lib/routeTransfer.ts";
+import { routeSyncNotice } from "../lib/routeSyncNotice.ts";
 import {
   AERIALWAY_LABELS,
   DIFFICULTY_COLORS,
@@ -415,6 +416,13 @@ export default function MapView() {
       return true;
     });
   }, [route]);
+
+  const syncNotice = routeSyncNotice({
+    deviceState: device.state,
+    routeSync: device.routeSync,
+    routeSyncError: device.routeSyncError,
+    deviceError: device.error,
+  });
 
   useEffect(() => {
     mapDataRef.current = mapData;
@@ -937,15 +945,10 @@ export default function MapView() {
             ))}
           </div>
           <button className="map-clear-route" type="button" onClick={clearRoute}>Wyczyść</button>
-          <div className={`map-route-sync map-route-sync-${device.routeSync}`}>
-            {device.routeSync === "sending" && <span>Wysyłam trasę na urządzenie…</span>}
-            {/* Sukces celowo bez komunikatu: domyślnie zakładamy, że trasa dotarła. */}
-            {device.routeSync === "error" && <span>{device.routeSyncError ?? "Nie udało się wysłać trasy"}</span>}
-            {device.routeSync === "offline" && (
-              <>
-                <span>Połącz, aby wysłać trasę na urządzenie</span>
-                <button className="map-route-connect" type="button" onClick={() => void device.connectAndCheck()}>Połącz</button>
-              </>
+          <div className={`map-route-sync${syncNotice ? ` map-route-sync-${syncNotice.tone}` : ""}`} role="status">
+            {syncNotice && <span>{syncNotice.text}</span>}
+            {syncNotice?.retry && (
+              <button className="map-route-connect" type="button" onClick={() => void device.connectAndCheck()}>Połącz</button>
             )}
           </div>
         </section>

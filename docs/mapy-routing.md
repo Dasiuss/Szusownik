@@ -347,10 +347,14 @@ Wyznaczona trasa jest też kodowana (`web/src/lib/routeTransfer.ts`, SSOT
 także po każdym `trimRoute` w nawigacji (~5 s) — więc urządzenie trzyma aktualny,
 przycięty odcinek. `clearRoute` wysyła `CLEAR`, a po ponownym połączeniu PWA
 porównuje wersję trasy urządzenia z własną i dosyła raz tylko przy różnicy
-(restart Szusownika nie wymaga ponownego planowania). Panel trasy pokazuje tylko
-postęp („Wysyłam trasę na urządzenie…"), błąd wysyłki oraz — bez połączenia —
-status „Połącz, aby wysłać trasę na urządzenie" z przyciskiem. Udana wysyłka nie
-ma komunikatu: domyślnie zakładamy, że trasa dotarła.
+(restart Szusownika nie wymaga ponownego planowania). Wiersz stanu w panelu trasy
+runda się z `web/src/lib/routeSyncNotice.ts` i pokazuje kolejno: „Łączę z
+urządzeniem…" (w trakcie próby połączenia przycisk „Połącz" jest schowany),
+„Połączono, sprawdzam urządzenie…", „Wysyłam trasę na urządzenie…", a bez
+połączenia „Połącz, aby wysłać trasę na urządzenie" z przyciskiem. Nieudane
+łączenie pokazuje powód zamiast ciszy, z „Połącz" do ponowienia. Udana wysyłka
+nie ma komunikatu: domyślnie zakładamy, że trasa dotarła — dzięki temu automatyczne
+dosyłki (np. `trimRoute` w nawigacji) nie migają komunikatem.
 
 Ciche zerwanie łącza (urządzenie wyłączone albo poza zasięgiem, bez „Rozłącz"
 z PWA) jest wykrywane po `gattserverdisconnected`: `SzusownikBle` zgłasza je
