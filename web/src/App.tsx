@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Icon } from "./components/Icon.tsx";
 import { ensureLocalData, ensureRouteMatchingBackfill } from "./lib/data.ts";
-import { loadCachedSkiData, loadSkiData } from "./lib/mapData.ts";
+import { MAP_MODE, loadCachedSkiData, loadSkiData } from "./lib/mapData.ts";
 import { DeviceProvider } from "./lib/device.tsx";
 
 export default function App() {
@@ -19,7 +19,7 @@ export default function App() {
       setReady(true);
       // Odświeżenie cache w tle; jeśli OSM dotarło dopiero teraz, dorabiamy
       // dopasowanie raz. Odświeżenie istniejącego cache nie przelicza zjazdów.
-      void loadSkiData()
+      void loadSkiData(MAP_MODE)
         .then(() => ensureRouteMatchingBackfill())
         .catch(() => undefined);
     } catch (caught) {

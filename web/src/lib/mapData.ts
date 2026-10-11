@@ -5,6 +5,26 @@ export const SOLDEN_CENTER: Position = [10.977123714520985, 46.95802633395613];
 export const ROUTE_SNAP_RADIUS_M = 100;
 export const MAP_DATA_TTL_MS = 8 * 24 * 60 * 60 * 1000;
 
+// ---------------------------------------------------------------------------
+// HACK (testy Wrocławian, do usunięcia): przełącznik regionu PWA.
+// "road" = dolna połowa Wojszyc (fixture `web/public/overpass-wroclaw.json`,
+// kopia `scripts/data/overpass-wroclaw.json`), "ski" = powrót do Sölden.
+// Aby wrócić do Sölden: ustaw "ski" i skasuj plik fixture.
+// ---------------------------------------------------------------------------
+export type MapMode = "ski" | "road";
+export const MAP_MODE: MapMode = "road";
+
+// Dolna połowa bboxu z `scripts/build-map.mjs` (profil wroclaw:
+// 51.0450,17.0250,51.0725,17.0560), żeby trasa mieściła się w mapie HudRekaw.
+export const ROAD_BOUNDS: [number, number, number, number] = [17.025, 51.045, 17.056, 51.05875];
+export const ROAD_CENTER: Position = [17.0405, 51.051875];
+const ROAD_FIXTURE_FILE = "overpass-wroclaw.json";
+const ROAD_FIXTURE_URL = `${import.meta.env.BASE_URL}${ROAD_FIXTURE_FILE}`;
+
+export const ACTIVE_BOUNDS: [number, number, number, number] = MAP_MODE === "road" ? ROAD_BOUNDS : SOLDEN_BOUNDS;
+export const ACTIVE_CENTER: Position = MAP_MODE === "road" ? ROAD_CENTER : SOLDEN_CENTER;
+export const HOME_COORDINATES: Position = MAP_MODE === "road" ? ROAD_CENTER : [11.0095, 46.9726];
+
 export const DIFFICULTY_COLORS: Record<string, string> = {
   novice: "#22c55e",
   easy: "#60a5fa",
@@ -27,6 +47,26 @@ export const AERIALWAY_LABELS: Record<string, string> = {
   mixed_lift: "gondola+krzesełka",
   zip_line: "tyrolka",
 };
+
+// HACK (testy Wrocław): klasy dróg OSM routowalne w trybie "road". Zgodne z
+// ROAD_CLASSES w `scripts/build-map.mjs`. Trudność mapujemy na istniejące nazwy
+// trudności tras, celowo BEZ "advanced"/"expert", żeby router nie naliczał kary
+// za czarne trasy.
+const ROAD_CLASSES = [
+  "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified",
+  "residential", "living_street", "service", "road",
+  "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",
+];
+const ROAD_DIFFICULTY_NAME: Record<string, string> = {
+  motorway: "intermediate", trunk: "intermediate", primary: "intermediate",
+  secondary: "easy",
+  tertiary: "novice", unclassified: "novice", residential: "novice", living_street: "novice",
+  service: "unknown", road: "unknown",
+};
+
+function roadDifficultyName(highway: string): string {
+  return ROAD_DIFFICULTY_NAME[highway.replace(/_link$/, "")] ?? "unknown";
+}
 
 export interface SkiProperties {
   uid: string;
@@ -186,7 +226,58 @@ function normalizeElement(element: OverpassElement, routeKind: "piste" | "lift",
   };
 }
 
-export function normalizeSkiData(elements: OverpassElement[], stale: boolean, savedAt: string): SkiData {
+// HACK (testy Wrocław): droga OSM jako linia routowalna. Reużywa kształt trasy
+// (`routeKind: "piste"`), więc warstwy mapy, snapowanie i transfer trasy działają
+// bez zmian.
+function normalizeRoadElement(element: OverpassElement): SkiFeature | null {
+  const tags = element.tags ?? {};
+  const highway = (tags.highway ?? "").split(";")[0].trim();
+  if (!ROAD_CLASSES.includes(highway)) return null;
+  const coordinates = lineGeometry(element);
+  if (coordinates.length < 2) return null;
+  const difficulty = roadDifficultyName(highway);
+  const uid = `${element.type}/${element.id}`;
+  return {
+    type: "Feature",
+    id: uid,
+    properties: {
+      uid,
+      label: tags.name ?? tags.ref ?? "",
+      name: tags.name ?? "",
+      ref: tags.ref ?? "",
+      difficulty,
+      difficultyColor: DIFFICULTY_COLORS[difficulty],
+      pisteType: "road",
+      grooming: "",
+      warning: false,
+      site: null,
+      aerialway: "",
+      openingHours: tags.opening_hours ?? "",
+      routeKind: "piste",
+    },
+    geometry: { type: "LineString", coordinates },
+  };
+}
+
+export function normalizeSkiData(elements: OverpassElement[], stale: boolean, savedAt: string, mode: MapMode = "ski"): SkiData {
+  if (mode === "road") {
+    const roads: SkiFeature[] = [];
+    const seenRoads = new Set<string>();
+    for (const element of elements) {
+      const feature = normalizeRoadElement(element);
+      if (!feature || seenRoads.has(feature.id)) continue;
+      seenRoads.add(feature.id);
+      roads.push(feature);
+    }
+    return {
+      pistes: { type: "FeatureCollection", features: roads },
+      lifts: { type: "FeatureCollection", features: [] },
+      lines: roads.filter((feature): feature is SkiLineFeature => feature.geometry.type === "LineString"),
+      stale,
+      savedAt,
+    };
+  }
+
   const pistes: SkiFeature[] = [];
   const lifts: SkiFeature[] = [];
   const seen = new Set<string>();
@@ -272,7 +363,15 @@ function overpassQuery(): string {
 );out body geom;`;
 }
 
-async function fetchElements(): Promise<OverpassElement[]> {
+async function fetchElements(mode: MapMode = "ski"): Promise<OverpassElement[]> {
+  if (mode === "road") {
+    // HACK (testy Wrocław): fixture zamiast Overpass — deterministycznie i bez 5xx.
+    const response = await fetch(ROAD_FIXTURE_URL);
+    if (!response.ok) throw new Error(`Fixture dróg: HTTP ${response.status}`);
+    const payload = (await response.json()) as OverpassResponse;
+    if (!Array.isArray(payload.elements)) throw new Error("Fixture dróg: brak danych");
+    return payload.elements;
+  }
   const response = await fetch(OVERPASS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -286,8 +385,24 @@ async function fetchElements(): Promise<OverpassElement[]> {
 
 // Współbieżne wywołania (boot PWA i mini-mapa) dzielą jedno zapytanie Overpass.
 let inflightLoad: Promise<SkiData> | null = null;
+// HACK (testy Wrocław): fixture dróg trzymamy raz w pamięci (bez cache sieciowego).
+let roadLoad: Promise<SkiData> | null = null;
 
-export async function loadSkiData(): Promise<SkiData> {
+export async function loadSkiData(mode: MapMode = "ski"): Promise<SkiData> {
+  if (mode === "road") {
+    if (!roadLoad) {
+      roadLoad = (async () => {
+        const elements = await fetchElements("road");
+        matchingSkiData = normalizeSkiData(elements, false, new Date().toISOString(), "road");
+        return matchingSkiData;
+      })().catch((error: unknown) => {
+        roadLoad = null;
+        throw error;
+      });
+    }
+    return roadLoad;
+  }
+
   const cached = readCache();
   if (cached && Date.now() - Date.parse(cached.savedAt) < MAP_DATA_TTL_MS) {
     matchingSkiData = normalizeSkiData(cached.elements, false, cached.savedAt);
