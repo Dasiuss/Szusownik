@@ -376,6 +376,14 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   (`commitRoute`). Tożsamość trasy = CRC32; PWA wysyła po każdej zmianie geometrii
   i dosyła raz po reconnect. Nie mieszamy tego z kanałem komend CTRL ani z
   zamrożonym profilem ramek plików — to osobny kanał.
+- **Ciche zerwanie łącza po `gattserverdisconnected`** (2026-10-11):
+  `SzusownikBle` nasłuchuje zdarzenia, zeruje charakterystyki i woła
+  `onDisconnected`; operacje GATT przechodzą przez bramkę `requireLink()`
+  (`server.connected` + obecna charakterystyka trasy), która rzuca
+  `DeviceDisconnectedError`. `DeviceProvider` wraca wtedy do stanu rozłączonego,
+  więc panel trasy pokazuje podpowiedź offline z przyciskiem, a nie surowy
+  `DOMException` z Web Bluetooth. Jawny `disconnect()` z PWA tego zdarzenia nie
+  wysyła — nie udajemy awarii łącza.
 - **Widoczność plików przez `.meta`** (2026-09-26): `countCsv`/`listCsv` listują
   wyłącznie CSV z plikiem towarzyszącym `<nazwa>.csv.meta`, który powstaje po
   potwierdzonym ruchu (`docs/wymagania-ESP.md` §7). Pliki postojowe są ukryte, więc

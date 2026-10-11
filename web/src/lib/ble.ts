@@ -146,6 +146,19 @@ export class FileGoneError extends Error {
   }
 }
 
+/**
+ * Łącze GATT padło (urządzenie wyłączone, poza zasięgiem, zerwane przez
+ * system). Operacje Web Bluetooth rzucają wtedy DOMException-em o surowym
+ * brzmieniu — opakowujemy to we własny typ, żeby warstwa UI mogła pokazać
+ * podpowiedź offline zamiast technicznego komunikatu.
+ */
+export class DeviceDisconnectedError extends Error {
+  constructor(message = "Urządzenie jest rozłączone") {
+    super(message);
+    this.name = "DeviceDisconnectedError";
+  }
+}
+
 /** Musi zgadzać się z firmware (protokół). */
 const LIST_PAGE_MAX = SZ_BLE_LIST_MAX;
 /** Zabezpieczenie przed zapętleniem listowania przy błędnym firmware. */
@@ -225,6 +238,9 @@ function dvBytes(v: DataView): Uint8Array {
 }
 
 export class SzusownikBle {
+  /** Wołane, gdy łącze padnie samo (np. urządzenie zostanie wyłączone). */
+  onDisconnected: (() => void) | null = null;
+
   private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private ctrl: BluetoothRemoteGATTCharacteristic | null = null;
@@ -233,6 +249,23 @@ export class SzusownikBle {
   private data: BluetoothRemoteGATTCharacteristic | null = null;
   private stat: BluetoothRemoteGATTCharacteristic | null = null;
   private settingsLock: Promise<unknown> = Promise.resolve();
+  private detached = false;
+
+  /** Czy łącze GATT jest aktywne. `false` po cichym zerwaniu (gattserverdisconnected). */
+  get connected(): boolean {
+    return !this.detached && this.server?.connected !== false && this.route !== null;
+  }
+
+  private readonly handleGattDisconnected = () => {
+    this.detached = true;
+    this.server = null;
+    this.route = null;
+    this.info = null;
+    this.ctrl = null;
+    this.data = null;
+    this.stat = null;
+    this.onDisconnected?.();
+  };
 
   async connect(): Promise<DeviceInfo> {
     if (!navigator.bluetooth) {
@@ -246,7 +279,9 @@ export class SzusownikBle {
   }
 
   private async connectToDevice(device: BluetoothDevice): Promise<DeviceInfo> {
+    this.detached = false;
     this.device = device;
+    device.addEventListener("gattserverdisconnected", this.handleGattDisconnected);
     this.server = (await device.gatt?.connect()) ?? null;
     if (!this.server) throw new Error("Brak połączenia GATT");
     const svc = await this.server.getPrimaryService(SZ_UUID_SVC);
@@ -272,6 +307,8 @@ export class SzusownikBle {
   }
 
   disconnect() {
+    this.detached = true;
+    this.device?.removeEventListener("gattserverdisconnected", this.handleGattDisconnected);
     try {
       this.server?.disconnect();
     } catch {
@@ -282,7 +319,13 @@ export class SzusownikBle {
     this.route = null;
   }
 
+  /** Twarda bariera przed dotknięciem GATT po zerwaniu łącza. */
+  private requireLink(): void {
+    if (!this.connected) throw new DeviceDisconnectedError();
+  }
+
   private async writeCtrl(cmd: string): Promise<void> {
+    this.requireLink();
     await this.ctrl!.writeValueWithResponse(new TextEncoder().encode(cmd));
   }
 
@@ -301,6 +344,7 @@ export class SzusownikBle {
   ] as const;
 
   async readInfo(): Promise<DeviceInfo> {
+    this.requireLink();
     const v = await this.info!.readValue();
     const bytes = dvBytes(v);
     const text = new TextDecoder().decode(bytes);
@@ -323,6 +367,7 @@ export class SzusownikBle {
   }
 
   private async readStatus(): Promise<string> {
+    this.requireLink();
     const v = await this.stat!.readValue();
     return new TextDecoder().decode(dvBytes(v));
   }
@@ -337,6 +382,7 @@ export class SzusownikBle {
    * ("route ok ..." / "route err ...").
    */
   async sendRoute(bytes: Uint8Array): Promise<string> {
+    this.requireLink();
     if (!this.route) throw new Error("Brak charakterystyki trasy w urządzeniu");
     const total = bytes.length;
     let chunk = ROUTE_BLE_CHUNK;
@@ -352,7 +398,8 @@ export class SzusownikBle {
         await this.route.writeValueWithResponse(frame);
         offset += take;
       } catch (error) {
-        if (take <= 16) throw error;
+        // Zerwane łącze nie jest "za dużym zapisem" — nie ma czego zmniejszać.
+        if (error instanceof DeviceDisconnectedError || take <= 16) throw error;
         chunk = Math.max(16, Math.floor(take / 2));
       }
     }

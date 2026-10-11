@@ -101,6 +101,11 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
 
   let status = "ok";
   let streaming = false;
+  let linked = true;
+
+  const disconnected = () => {
+    throw new Error("GATT Server is disconnected. Cannot perform GATT operations.");
+  };
 
   class Characteristic {
     value: DataView | null = null;
@@ -108,6 +113,7 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
     constructor(readonly uuid: string) {}
     async startNotifications() {}
     async readValue(): Promise<DataView> {
+      if (!linked) disconnected();
       if (this.uuid === "3f9a0002-7c4e-4b2a-9e11-000000000002") {
         return toDV(encoder.encode(JSON.stringify(config.info)));
       }
@@ -117,6 +123,7 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
       return toDV(this.value ? new Uint8Array(this.value.buffer, this.value.byteOffset, this.value.byteLength) : new Uint8Array(0));
     }
     async writeValueWithResponse(bytes: Uint8Array): Promise<void> {
+      if (!linked) disconnected();
       if (this.uuid === "3f9a0006-7c4e-4b2a-9e11-000000000006") {
         // Trasa: e2e sprawdza przepływ UI, więc wystarczy potwierdzenie.
         status = "route ok crc=00000000 points=0";
@@ -180,14 +187,41 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
     getCharacteristic: async (uuid: string) => characteristics.get(uuid)!,
   };
   const server = {
+    connected: true,
     getPrimaryService: async () => service,
-    disconnect: () => {},
+    disconnect: () => {
+      linked = false;
+      server.connected = false;
+    },
   };
+  const disconnectListeners = new Set<() => void>();
   const device = {
-    gatt: { connect: async () => server, disconnect: () => {} },
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    gatt: {
+      connect: async () => {
+        linked = true;
+        server.connected = true;
+        return server;
+      },
+      disconnect: () => server.disconnect(),
+    },
+    addEventListener: (type: string, listener: () => void) => {
+      if (type === "gattserverdisconnected") disconnectListeners.add(listener);
+    },
+    removeEventListener: (type: string, listener: () => void) => {
+      if (type === "gattserverdisconnected") disconnectListeners.delete(listener);
+    },
   };
+
+  // Ciche zerwanie łącza (urządzenie wyłączone/poza zasięgiem): PWA dowiaduje
+  // się o nim wyłącznie z tego zdarzenia. `disconnect()` z PWA go nie wysyła.
+  Object.defineProperty(window, "__szDisconnectGatt", {
+    value: () => {
+      linked = false;
+      server.connected = false;
+      for (const listener of [...disconnectListeners]) listener();
+    },
+    configurable: true,
+  });
 
   Object.defineProperty(navigator, "bluetooth", {
     value: { requestDevice: async () => device, getDevices: async () => [] },

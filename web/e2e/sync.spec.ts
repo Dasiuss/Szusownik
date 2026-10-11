@@ -57,3 +57,17 @@ test("po połączeniu ustawienia dźwięku są odblokowane", async ({ page }) =>
   await expect(page.getByText("Zapisuje się automatycznie")).toBeVisible();
   await expect(page.getByText("Suwaki pojawią się po połączeniu z urządzeniem.")).toHaveCount(0);
 });
+
+test("ciche zerwanie łącza wraca do stanu rozłączonego", async ({ page }) => {
+  const name = "20261003_140000.csv";
+  await page.addInitScript(deviceInitScript, buildDeviceConfig(name, todayCsv()));
+  await page.goto("./#/urzadzenie");
+  await page.getByRole("button", { name: /^Połącz$/ }).click();
+  await expect(page.getByText("Połączenie aktywne")).toBeVisible();
+
+  // Urządzenie znika bez „Rozłącz" — jak przy wyłączeniu albo utracie zasięgu.
+  await page.evaluate(() => (window as unknown as { __szDisconnectGatt: () => void }).__szDisconnectGatt());
+
+  await expect(page.getByText("Połączenie aktywne")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Połącz urządzenie" })).toBeVisible();
+});

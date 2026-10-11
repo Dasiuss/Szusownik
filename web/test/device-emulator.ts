@@ -133,6 +133,9 @@ class FakeCharacteristic {
   }
 
   async writeValueWithResponse(bytes: Uint8Array): Promise<void> {
+    if (!this.emulator.linked) {
+      throw new Error("GATT Server is disconnected. Cannot perform GATT operations.");
+    }
     if (this.uuid === SZ_UUID_ROUTE) {
       this.emulator.writeRoute(bytes);
       return;
@@ -158,13 +161,18 @@ class FakeCharacteristic {
 export class DeviceEmulator {
   readonly device: {
     gatt: { connect: () => Promise<unknown>; disconnect: () => void };
-    addEventListener: () => void;
-    removeEventListener: () => void;
+    addEventListener: (type: string, listener: () => void) => void;
+    removeEventListener: (type: string, listener: () => void) => void;
   };
   private readonly service: { getCharacteristic: (uuid: string) => Promise<FakeCharacteristic> };
-  private readonly server: { getPrimaryService: (uuid: string) => Promise<unknown>; disconnect: () => void };
+  private readonly server: {
+    connected: boolean;
+    getPrimaryService: (uuid: string) => Promise<unknown>;
+    disconnect: () => void;
+  };
   private readonly characteristics = new Map<string, FakeCharacteristic>();
   private readonly dataChar: FakeCharacteristic;
+  private readonly disconnectListeners = new Set<() => void>();
 
   private status = SZ_ST_OK;
   private transfer: Transfer | null = null;
@@ -206,17 +214,39 @@ export class DeviceEmulator {
       },
     };
     this.server = {
+      connected: true,
       getPrimaryService: async (uuid: string) => {
         if (uuid !== SZ_UUID_SVC) throw new Error(`Nieznana usługa ${uuid}`);
         return this.service;
       },
-      disconnect: () => {},
+      disconnect: () => {
+        this.server.connected = false;
+      },
     };
     this.device = {
       gatt: { connect: async () => this.server, disconnect: () => {} },
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (type: string, listener: () => void) => {
+        if (type === "gattserverdisconnected") this.disconnectListeners.add(listener);
+      },
+      removeEventListener: (type: string, listener: () => void) => {
+        if (type === "gattserverdisconnected") this.disconnectListeners.delete(listener);
+      },
     };
+  }
+
+  /** Czy łącze GATT jest aktywne (odpowiednik `BluetoothRemoteGATTServer.connected`). */
+  get linked(): boolean {
+    return this.server.connected;
+  }
+
+  /**
+   * Symuluje ciche zerwanie łącza (urządzenie wyłączone/poza zasięgiem):
+   * `connected=false` + zdarzenie `gattserverdisconnected`, dokładnie jak
+   * przeglądarka. `disconnect()` z PWA tego zdarzenia nie wysyła.
+   */
+  disconnectGatt(): void {
+    this.server.connected = false;
+    for (const listener of [...this.disconnectListeners]) listener();
   }
 
   /** Wszystkie komendy CTRL odebrane od PWA (diagnostyka/aseracje). */

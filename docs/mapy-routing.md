@@ -347,9 +347,17 @@ Wyznaczona trasa jest też kodowana (`web/src/lib/routeTransfer.ts`, SSOT
 także po każdym `trimRoute` w nawigacji (~5 s) — więc urządzenie trzyma aktualny,
 przycięty odcinek. `clearRoute` wysyła `CLEAR`, a po ponownym połączeniu PWA
 porównuje wersję trasy urządzenia z własną i dosyła raz tylko przy różnicy
-(restart Szusownika nie wymaga ponownego planowania). Bez połączenia w panelu
-trasy pokazuje się status „Połącz, aby wysłać trasę na urządzenie". Dalsza droga
-trasy (Szusownik -> HudRekaw) i rysowanie są w `docs/hud-rekaw.md`.
+(restart Szusownika nie wymaga ponownego planowania). Panel trasy pokazuje tylko
+postęp („Wysyłam trasę na urządzenie…"), błąd wysyłki oraz — bez połączenia —
+status „Połącz, aby wysłać trasę na urządzenie" z przyciskiem. Udana wysyłka nie
+ma komunikatu: domyślnie zakładamy, że trasa dotarła.
+
+Ciche zerwanie łącza (urządzenie wyłączone albo poza zasięgiem, bez „Rozłącz"
+z PWA) jest wykrywane po `gattserverdisconnected`: `SzusownikBle` zgłasza je
+przez `onDisconnected`, `DeviceProvider` wraca do stanu rozłączonego, a brak
+łącza wyprzedza dotknięcie GATT (`DeviceDisconnectedError`) — panel trasy
+pokazuje wtedy podpowiedź offline z przyciskiem, a nie surowy błąd Web Bluetooth.
+Dalsza droga trasy (Szusownik -> HudRekaw) i rysowanie są w `docs/hud-rekaw.md`.
 
 Karta zaznaczonej trasy pokazuje `opening_hours`, `grooming`, długość oraz bezwzględną różnicę
 między najniższą i najwyższą próbką geometrii z DEM. Ma również przycisk

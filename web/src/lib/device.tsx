@@ -3,6 +3,7 @@ import { materializeAll } from "./data.ts";
 import { db } from "./db.ts";
 import { emptyRouteBlob } from "./routeTransfer.ts";
 import {
+  DeviceDisconnectedError,
   SzusownikBle,
   type DeviceInfo,
   type FileMeta,
@@ -82,14 +83,33 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   }
 
   function disconnect() {
-    clearIdleTimer();
     bleRef.current?.disconnect();
+    forgetConnection();
+  }
+
+  // Ciche zerwanie łącza: urządzenie zniknęło (wyłączone, poza zasięgiem) bez
+  // „Rozłącz" z PWA. Stan wraca do rozłączonego, a panel trasy dostaje
+  // podpowiedź offline zamiast surowego błędu GATT.
+  function forgetConnection() {
+    clearIdleTimer();
     bleRef.current = null;
     infoRef.current = null;
     setInfo(null);
     setPendingFiles([]);
     setProgress(null);
     setState("disconnected");
+  }
+
+  function handleDrop() {
+    forgetConnection();
+    void flushRoute();
+  }
+
+  /** Podpina nasłuch zerwania łącza, zanim klient zdąży się połączyć. */
+  function newClient(): SzusownikBle {
+    const client = new SzusownikBle();
+    client.onDisconnected = handleDrop;
+    return client;
   }
 
   function armIdleTimer() {
@@ -161,8 +181,15 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setRouteSync("sent");
       }
     } catch (caught) {
-      setRouteSyncError(errorMessage(caught));
-      setRouteSync("error");
+      if (caught instanceof DeviceDisconnectedError) {
+        // Łącze padło w trakcie wysyłki (zdarzenie mogło jeszcze nie dojść).
+        forgetConnection();
+        setRouteSyncError(null);
+        setRouteSync("offline");
+      } else {
+        setRouteSyncError(errorMessage(caught));
+        setRouteSync("error");
+      }
     } finally {
       routeSendingRef.current = false;
       if (routeDirtyRef.current) void flushRoute();
@@ -173,7 +200,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     disconnect();
     setError(null);
     setState("connecting");
-    const client = new SzusownikBle();
+    const client = newClient();
     try {
       const connectedInfo = await client.connect();
       await finishConnection(client, connectedInfo);
@@ -188,7 +215,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   async function tryReconnect() {
     if (reconnectAttempted.current) return;
     reconnectAttempted.current = true;
-    const client = new SzusownikBle();
+    const client = newClient();
     try {
       const connectedInfo = await client.reconnect();
       if (!connectedInfo) return;

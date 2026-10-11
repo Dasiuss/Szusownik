@@ -5,7 +5,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DeviceEmulator, installFakeBluetooth } from "../../test/device-emulator.ts";
-import { SzusownikBle } from "./ble.ts";
+import { DeviceDisconnectedError, SzusownikBle } from "./ble.ts";
 import { db } from "./db.ts";
 import type { Position } from "./mapData.ts";
 import type { RouteResult } from "./mapRouting.ts";
@@ -87,5 +87,40 @@ describe("wysyłka trasy przez BLE", () => {
     corrupted[corrupted.length - 1] = (corrupted[corrupted.length - 1] + 1) & 0xff; // psuje CRC
     const status = await ble.sendRoute(corrupted);
     expect(status.startsWith("route err ")).toBe(true);
+  });
+
+  it("ciche zerwanie łącza zgłasza onDisconnected i blokuje wysyłkę trasy", async () => {
+    const emulator = new DeviceEmulator({ files: [] });
+    installFakeBluetooth(emulator);
+    const ble = new SzusownikBle();
+    let dropped = 0;
+    ble.onDisconnected = () => {
+      dropped += 1;
+    };
+    await ble.connect();
+    expect(ble.connected).toBe(true);
+
+    // To samo, co robi przeglądarka, gdy urządzenie zniknie z zasięgu.
+    emulator.disconnectGatt();
+
+    expect(dropped).toBe(1);
+    expect(ble.connected).toBe(false);
+    // Zamiast surowego DOMException z GATT — własny typ, który UI mapuje na offline.
+    await expect(ble.sendRoute(encodeRoute(sampleRoute()).bytes)).rejects.toBeInstanceOf(DeviceDisconnectedError);
+    await expect(ble.readInfo()).rejects.toBeInstanceOf(DeviceDisconnectedError);
+  });
+
+  it("jawne Rozłącz nie udaje awarii łącza (brak zdarzenia)", async () => {
+    const emulator = new DeviceEmulator({ files: [] });
+    installFakeBluetooth(emulator);
+    const ble = new SzusownikBle();
+    let dropped = 0;
+    ble.onDisconnected = () => {
+      dropped += 1;
+    };
+    await ble.connect();
+    ble.disconnect();
+    expect(dropped).toBe(0);
+    expect(ble.connected).toBe(false);
   });
 });
