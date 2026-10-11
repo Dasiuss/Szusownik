@@ -415,15 +415,15 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `lastProgressMs_` ustawiane **po** `refreshInfo()` w `startStream`, (2)
   `countCsv` liczy pliki `.meta` w jednym przebiegu katalogu (bez `SD.exists`
   per plik). Na sprzęcie: kilkanaście plików pod rząd `replay=0 ackTimeout=0`.
-- **`listCsv`/`countCsv` bez otwierania plików** (2026-10-11): iteracja katalogu
-  przez `openNextFile()`/`SD.open()` otwiera **każdy** wpis, a na tej karcie
-  każda operacja na pliku trwa dziesiątki–setki ms → skan ~O(n²). Przy
-  kilkudziesięciu plikach `LIST` trwał ~1,6 s (z `SD.exists` ~4 s) i przekraczał
-  timeout w PWA („raz działa, raz nie"), a pętla notowała `loop stall` ~1,7 s.
-  Teraz iterujemy przez `opendir`/`readdir` (bez otwierania plików), a rozmiar
-  pobieramy tylko dla wybranych (≤ `SZ_BLE_LIST_MAX`) przez `stat()`. PWA ma
-  też osobny, dłuższy timeout listowania (`LIST_TIMEOUT_MS`) i ponawia `LIST`
-  przy braku echa.
+- **`listCsv` jednym przebiegiem katalogu, bez `SD.exists()`** (2026-10-11):
+  `SD.exists()` na każdym CSV dawał ~4 s (na tej karcie każda operacja na pliku
+  to dziesiątki–setki ms), co przekraczało timeout `LIST` w PWA („raz działa,
+  raz nie"). Teraz jeden przebieg `openNextFile()`: zbieramy rozmiary CSV > since
+  i nazwy widocznych CSV (`.meta`) do buforów w RAM, łączymy po przebiegu. Skan
+  ~1,6 s przy kilkudziesięciu plikach — mieści się w timeoutcie PWA (4 s).
+  Uwaga: tańsze `opendir`/`readdir` **nie działa** na tym VFS (zwraca NULL →
+  pusta lista), więc `openNextFile` zostaje. PWA ma osobny, dłuższy timeout
+  listowania (`LIST_TIMEOUT_MS`) i ponawia `LIST` przy braku echa.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw
