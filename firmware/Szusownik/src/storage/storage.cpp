@@ -113,13 +113,6 @@ void Storage::ensureMeta() {
   SZ_LOGIF("SD meta %s", metaPath.c_str());
 }
 
-// Czy istnieje plik towarzyszący .meta (decyduje o widoczności CSV w liście).
-static bool csvHasMeta(const String& csvName) {
-  String p = csvName;
-  if (!p.startsWith("/")) p = "/" + p;
-  return SD.exists(p + SZ_CSV_META_SUFFIX);
-}
-
 uint32_t Storage::countCsv() const {
   if (!ready_) return 0;
   uint32_t count = 0;
@@ -144,22 +137,52 @@ uint32_t Storage::countCsv() const {
 
 uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const {
   if (!ready_ || maxCount == 0) return 0;
-  uint32_t count = 0;
+  // Skan katalogu SD na tej karcie jest bardzo wolny (~O(n^2) — kolejne
+  // openNextFile/istnienie pliku kosztuje dziesiątki–setki ms), a SD.exists() na
+  // każdym CSV dawało ~4 s i przekraczało timeout LIST w PWA. Dlatego JEDEN
+  // przebieg katalogu: zbieramy rozmiary CSV > since oraz nazwy widocznych CSV
+  // (pliki .meta), a łączymy dopiero potem — bez SD.exists() i drugiego skanu.
+  static const size_t kCap = 200;  // zapas; karta FIFO trzyma dużo mniej
+  static char s_csvName[kCap][sizeof(out[0].name)];
+  static char s_metaName[kCap][sizeof(out[0].name)];
+  static uint32_t s_csvSize[kCap];
+  size_t csvCount = 0, metaCount = 0;
   File root = SD.open("/");
   if (!root) return 0;
+  const size_t suffixLen = strlen(SZ_CSV_META_SUFFIX);
   while (true) {
     File f = root.openNextFile();
     if (!f) break;
     if (!f.isDirectory()) {
       String n = String(f.name());
-      if ((n.endsWith(".csv") || n.endsWith(".CSV")) && csvHasMeta(n) && n > since) {
-        // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
-        count = (uint32_t)core::listInsert(out, count, maxCount, n.c_str(), (unsigned long)f.size());
+      if (n.endsWith(SZ_CSV_META_SUFFIX)) {
+        String csv = n.substring(0, n.length() - suffixLen);
+        if (csv > since && metaCount < kCap) {
+          strncpy(s_metaName[metaCount], csv.c_str(), sizeof(s_metaName[0]) - 1);
+          s_metaName[metaCount][sizeof(s_metaName[0]) - 1] = '\0';
+          metaCount++;
+        }
+      } else if ((n.endsWith(".csv") || n.endsWith(".CSV")) && n > since && csvCount < kCap) {
+        strncpy(s_csvName[csvCount], n.c_str(), sizeof(s_csvName[0]) - 1);
+        s_csvName[csvCount][sizeof(s_csvName[0]) - 1] = '\0';
+        s_csvSize[csvCount] = (uint32_t)f.size();
+        csvCount++;
       }
     }
     f.close();
   }
   root.close();
+
+  uint32_t count = 0;
+  for (size_t i = 0; i < csvCount; i++) {
+    for (size_t j = 0; j < metaCount; j++) {
+      if (strcmp(s_csvName[i], s_metaName[j]) == 0) {
+        // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
+        count = (uint32_t)core::listInsert(out, count, maxCount, s_csvName[i], s_csvSize[i]);
+        break;
+      }
+    }
+  }
   return count;
 }
 

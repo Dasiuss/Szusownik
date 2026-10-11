@@ -54,6 +54,9 @@ const TRANSFER_START_TIMEOUT_MS = 4000;
 const TRANSFER_DONE_TIMEOUT_MS = 5000;
 const SETTINGS_TIMEOUT_MS = 2000;
 const SETTINGS_POLL_MS = 50;
+// Listowanie skanuje katalog SD na urządzeniu (na tej karcie setki ms–sekundy),
+// więc dajemy mu większy zapas niż ustawieniom.
+const LIST_TIMEOUT_MS = 4000;
 
 export interface FileMeta {
   name: string;
@@ -409,8 +412,8 @@ export class SzusownikBle {
   // Firmware konsumuje komendy w poll() w głównej pętli i dopiero wtedy
   // nadpisuje STATUS, więc odczyt zaraz po writeCtrl może zwrócić odpowiedź
   // poprzedniej komendy. Czekamy na status pasujący do wzorca danej komendy.
-  private async pollStatus(pattern: RegExp): Promise<string> {
-    const deadline = Date.now() + SETTINGS_TIMEOUT_MS;
+  private async pollStatus(pattern: RegExp, timeoutMs: number = SETTINGS_TIMEOUT_MS): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
     let status = "";
     for (;;) {
       status = await this.readStatus();
@@ -768,7 +771,7 @@ export class SzusownikBle {
       const LIST_ATTEMPTS = 3;
       for (let attempt = 0; attempt < LIST_ATTEMPTS; attempt++) {
         await this.writeCtrl(`${SZ_CMD_LIST}${cursor}`);
-        status = await this.pollStatus(want);
+        status = await this.pollStatus(want, LIST_TIMEOUT_MS);
         if (status.startsWith(SZ_ST_ERR)) throw new Error(`Błąd listowania plików: ${status}`);
         if (want.test(status)) {
           entries = parseListStatus(status, echo);

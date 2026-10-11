@@ -55,6 +55,7 @@ static char g_ctrlQ[SZ_CTRL_Q_SLOTS][SZ_CTRL_Q_LEN];
 static uint16_t g_ctrlQLen[SZ_CTRL_Q_SLOTS];
 static uint16_t g_ctrlHead = 0;  // producent: task hosta NimBLE
 static uint16_t g_ctrlTail = 0;  // konsument: pętla główna
+static volatile uint32_t g_ctrlDrops = 0;  // komendy zgubione przy pełnej kolejce
 
 class SzCtrlCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
@@ -68,6 +69,8 @@ class SzCtrlCallbacks : public NimBLECharacteristicCallbacks {
       g_ctrlQ[g_ctrlHead][v.length()] = '\0';
       g_ctrlQLen[g_ctrlHead] = (uint16_t)v.length();
       g_ctrlHead = next;
+    } else {
+      g_ctrlDrops++;
     }
     portEXIT_CRITICAL(&g_ctrlMux);
   }
@@ -261,7 +264,10 @@ void BleFiles::handleCommand(const String& cmd) {
     String since = cmd.substring((unsigned int)strlen(SZ_CMD_LIST));
     since.trim();
     StorageEntry entries[SZ_BLE_LIST_MAX];
+    uint32_t t0 = millis();
     uint32_t n = storage_ ? storage_->listCsv(since, SZ_BLE_LIST_MAX, entries) : 0;
+    SZ_LOGDF("BLE LIST since='%s' n=%lu scan=%lums", since.c_str(), (unsigned long)n,
+             (unsigned long)(millis() - t0));
     // Echo kursora: PWA czeka na status z DOKŁADNIE swoim `since`. Bez tego
     // pollStatus łapie poprzednią odpowiedź `list ...` (ten sam prefiks) i lista
     // "nie posuwa kursora" (ostatnia nazwa nie rośnie). "0" jest mniejsze od
@@ -379,6 +385,10 @@ void BleFiles::poll() {
     } else {
       SZ_LOGIF("BLE disconn reason=%d", g_discReason);
     }
+  }
+  if (g_ctrlDrops) {
+    SZ_LOGWF("BLE CTRL kolejka pelna, zgubiono=%lu komend", (unsigned long)g_ctrlDrops);
+    g_ctrlDrops = 0;
   }
   // Konsumuj komendy z kolejki onWrite (patrz SzCtrlCallbacks). Nie czytamy
   // chrCtrl->getValue() tutaj — to wyścig ze setValue() w tasku hosta NimBLE.
