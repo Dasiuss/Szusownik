@@ -9,19 +9,28 @@
 // HUD_LINK_CHANNEL) + odbiór ESP-NOW od Szusownika. Tryb ekranu pochodzi
 // wyłącznie z pakietu `L` (bajt mode).
 //
-// Dodatkowo odbiornik nadaje okresowy heartbeat (`H`) z wersją trzymanej trasy
-// (CRC32 bloba) i odbiera trasę chunkami (`R`). Szusownik dzięki temu wie, że
-// odbiornik jest dostępny i czy potrzebuje nowej trasy (SSOT: route-v1.json).
+// Szusownik nadaje unicastem do MAC-a Huda (adres zapisany w NVS Szusownika),
+// więc dwa zestawy na stoku się nie mieszają. Hud uznaje się za sparowanego,
+// gdy dostanie od Szusownika pakiet inny niż prośba o parowanie — czyli unicast
+// (`S`/`L`/`R`), bo broadcastem leci wyłącznie prośba o parowanie `P`.
+// Na prośbę `P` odpowiadamy raz pakietem `Q` (Szusownik bierze nasz MAC
+// z metadanych ESP-NOW) — odpowiadamy, gdy nie jesteśmy sparowani, albo gdy
+// prosi nasz własny Szusownik.
+//
+// Po złożeniu i walidacji trasy (`R`, CRC32 bloba) wysyłamy jawne potwierdzenie
+// `K` z CRC trzymanego bloba — to zastępuje dawny heartbeat. Dostępność Huda
+// Szusownik widzi z ACK-a unicastu.
 class Link {
  public:
   void begin();
   void poll();
 
-  void handlePacket(const uint8_t* data, uint8_t len);
+  void handlePacket(const uint8_t* mac, const uint8_t* data, uint8_t len);
 
   bool espNowReady() const { return espNowReady_; }
   bool wifiConnected() const { return wifiConnected_; }
   int channel() const { return channel_; }
+  bool paired() const { return peerPaired_; }
 
   bool telemetryValid() const { return telemetryValid_; }
   bool locationValid() const { return locationValid_; }
@@ -44,10 +53,12 @@ class Link {
 
  private:
   void startEspNow();
+  void ensurePeer(const uint8_t* mac);
   void useFallbackChannel();
   void wifiStartNext();
   void serviceWifi();
-  void sendHeartbeat(unsigned long nowMs);
+  void sendPairResponse();
+  void sendRouteConfirm();
   void applyRouteChunk(const HudRouteChunk& chunk);
   void commitRoute();
 
@@ -67,9 +78,16 @@ class Link {
   unsigned long wifiAttemptStart_ = 0;
   int channel_ = HUD_LINK_CHANNEL;
 
-  // Heartbeat.
-  uint8_t heartbeatSeq_ = 0;
-  unsigned long lastHeartbeatMs_ = 0;
+  // Parowanie z Szusownikiem. `peerMac_`/`peerPaired_` trzymamy w RAM (bez
+  // zapisu we flashu) — po restarcie Hud znów nasłuchuje pierwszego unicastu.
+  uint8_t peerMac_[6] = {0};
+  volatile bool peerPaired_ = false;
+  volatile bool peerAddPending_ = false;
+  uint8_t pairSender_[6] = {0};
+  volatile bool pairReplyPending_ = false;
+  uint8_t pairSeq_ = 0;
+  uint8_t confirmSeq_ = 0;
+  volatile bool confirmPending_ = false;
 
   // Trasa: bufor składania chunków + zatwierdzona trasa.
   uint8_t routeStage_[ROUTE_MAX_BLOB];

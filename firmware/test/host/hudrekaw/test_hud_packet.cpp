@@ -66,18 +66,38 @@ TEST_CASE("HudRekaw: klampowanie kata i fisheye") {
   REQUIRE(l.fisheye == 500);  // 65535 -> clamp do max
 }
 
-TEST_CASE("HudRekaw: heartbeat (kodowanie)") {
+TEST_CASE("HudRekaw: prosba o parowanie (dekodowanie)") {
+  const uint8_t packet[2] = {'P', 6};
+  HudPairRequest req;
+  REQUIRE(decodeHudPairRequest(packet, sizeof(packet), req) == HUD_PKT_PAIR_REQ_SIZE);
+  REQUIRE(req.seq == 6);
+  REQUIRE(decodeHudPairRequest(packet, 1, req) == 0);
+  const uint8_t wrong[2] = {'Q', 6};
+  REQUIRE(decodeHudPairRequest(wrong, sizeof(wrong), req) == 0);
+}
+
+TEST_CASE("HudRekaw: odpowiedz na parowanie (kodowanie)") {
+  uint8_t out[2] = {0};
+  REQUIRE(encodeHudPairResponse(out, sizeof(out), 3) == HUD_PKT_PAIR_RESP_SIZE);
+  REQUIRE(out[0] == static_cast<uint8_t>(HUD_PKT_PAIR_RESP));
+  REQUIRE(out[1] == 3);
+  REQUIRE(encodeHudPairResponse(out, 1, 3) == 0);
+}
+
+TEST_CASE("HudRekaw: potwierdzenie trasy (kodowanie)") {
   uint8_t out[8] = {0};
-  REQUIRE(encodeHudHeartbeat(out, sizeof(out), 5, 0x11223344u, true) == HUD_PKT_HEARTBEAT_SIZE);
-  REQUIRE(out[0] == static_cast<uint8_t>(HUD_PKT_HEARTBEAT));
+  REQUIRE(encodeHudRouteConfirm(out, sizeof(out), 5, 0x11223344u, true) ==
+          HUD_PKT_ROUTE_CONFIRM_SIZE);
+  REQUIRE(out[0] == static_cast<uint8_t>(HUD_PKT_ROUTE_CONFIRM));
   REQUIRE(out[1] == 5);
   REQUIRE(out[2] == 0x44);
   REQUIRE(out[3] == 0x33);
   REQUIRE(out[4] == 0x22);
   REQUIRE(out[5] == 0x11);
   REQUIRE(out[6] == 0x01);
-  REQUIRE(encodeHudHeartbeat(out, sizeof(out), 0, 0, false) == HUD_PKT_HEARTBEAT_SIZE);
+  REQUIRE(encodeHudRouteConfirm(out, sizeof(out), 0, 0, false) == HUD_PKT_ROUTE_CONFIRM_SIZE);
   REQUIRE(out[6] == 0x00);
+  REQUIRE(encodeHudRouteConfirm(out, 4, 0, 0, false) == 0);
 }
 
 TEST_CASE("HudRekaw: chunk trasy (dekodowanie)") {
@@ -97,4 +117,18 @@ TEST_CASE("HudRekaw: chunk trasy (dekodowanie)") {
   uint8_t wrong[10] = {0x53, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   REQUIRE(decodeHudRouteChunk(wrong, sizeof(wrong), chunk) == 0);
   REQUIRE(decodeHudRouteChunk(packet, 4, chunk) == 0);
+}
+
+TEST_CASE("HudRekaw: regula odpowiedzi na parowanie") {
+  const uint8_t own[6] = {1, 2, 3, 4, 5, 6};
+  const uint8_t other[6] = {9, 9, 9, 9, 9, 9};
+
+  // Niesparowany odpowiada kazdemu.
+  REQUIRE(hudShouldAnswerPair(false, nullptr, own));
+  REQUIRE(hudShouldAnswerPair(false, other, own));
+  // Sparowany odpowiada tylko swojemu Szusownikowi.
+  REQUIRE(hudShouldAnswerPair(true, own, own));
+  REQUIRE_FALSE(hudShouldAnswerPair(true, own, other));
+  REQUIRE_FALSE(hudShouldAnswerPair(true, nullptr, own));
+  REQUIRE_FALSE(hudShouldAnswerPair(false, nullptr, nullptr));
 }

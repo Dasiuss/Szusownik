@@ -31,10 +31,21 @@ struct HudLocation {
 size_t decodeHudTelemetry(const uint8_t* in, size_t len, HudTelemetry& out);
 size_t decodeHudLocation(const uint8_t* in, size_t len, HudLocation& out);
 
-// Heartbeat wysyłany przez HudRekaw do Szusownika: wersja trzymanej trasy
-// (CRC32 bloba) + flaga "ma trasę". Szusownik dzięki temu wie, że odbiornik
-// jest dostępny i czy potrzebuje nowej trasy.
-size_t encodeHudHeartbeat(uint8_t* out, size_t outLen, uint8_t seq, uint32_t crc, bool hasRoute);
+// Prośba o parowanie od Szusownika (broadcast). Odpowiadamy pakietem `Q`.
+struct HudPairRequest {
+  uint8_t seq = 0;
+};
+
+size_t decodeHudPairRequest(const uint8_t* in, size_t len, HudPairRequest& out);
+
+// Odpowiedź na parowanie (HudRekaw -> Szusownik). Szusownik bierze MAC nadawcy
+// z metadanych ESP-NOW, więc pakiet niesie tylko sekwencję.
+size_t encodeHudPairResponse(uint8_t* out, size_t outLen, uint8_t seq);
+
+// Potwierdzenie trzymanej trasy (HudRekaw -> Szusownik): CRC32 bloba + flaga
+// "ma trasę". Wysyłane po odebraniu i zwalidowaniu całej trasy; zastępuje dawny
+// heartbeat. Tożsamością jest sam CRC32 (obejmuje też CLEAR).
+size_t encodeHudRouteConfirm(uint8_t* out, size_t outLen, uint8_t seq, uint32_t crc, bool hasRoute);
 
 // Chunk trasy odebrany od Szusownika (payload wskazuje w buforze wejściowym).
 struct HudRouteChunk {
@@ -48,3 +59,9 @@ struct HudRouteChunk {
 };
 
 size_t decodeHudRouteChunk(const uint8_t* in, size_t len, HudRouteChunk& out);
+
+// Czy odpowiedzieć na prośbę o parowanie od nadawcy o MAC `senderMac`.
+// Hud odpowiada, gdy nie jest jeszcze sparowany ALBO gdy nadawca to jego
+// Szusownik (pozwala sparować ponownie po wyczyszczeniu MAC-a w Szusowniku
+// bez restartu Huda — obcy Szusownik nadal nie przejmie Huda).
+bool hudShouldAnswerPair(bool paired, const uint8_t* peerMac, const uint8_t* senderMac);

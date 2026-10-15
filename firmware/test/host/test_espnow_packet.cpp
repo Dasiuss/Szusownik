@@ -111,17 +111,72 @@ TEST_CASE("HUD: prog trybu 30 km/h") {
   REQUIRE(hudModeForSpeed(80.0f) == HUD_MODE_STATS);
 }
 
-TEST_CASE("HUD: heartbeat (dekodowanie)") {
-  const uint8_t packet[8] = {'H', 4, 0x44, 0x33, 0x22, 0x11, 0x01, 0};
-  HudHeartbeat heartbeat;
-  REQUIRE(decodeHudHeartbeat(packet, sizeof(packet), heartbeat) == HUD_PKT_HEARTBEAT_SIZE);
-  REQUIRE(heartbeat.seq == 4);
-  REQUIRE(heartbeat.crc == 0x11223344u);
-  REQUIRE(heartbeat.hasRoute == true);
-  REQUIRE(decodeHudHeartbeat(packet, 4, heartbeat) == 0);
+TEST_CASE("HUD: okres okna nadawania") {
+  // Bez potwierdzonego lacza nadajemy rzadko (backoff), niezaleznie od trybu.
+  REQUIRE(hudWindowPeriodMs(false, HUD_MODE_STATS) == HUD_SEND_BACKOFF_MS);
+  REQUIRE(hudWindowPeriodMs(false, HUD_MODE_MAP) == HUD_SEND_BACKOFF_MS);
+  // Z potwierdzonym laczem okres zalezy od trybu.
+  REQUIRE(hudWindowPeriodMs(true, HUD_MODE_STATS) == HUD_SEND_TELEMETRY_MS);
+  REQUIRE(hudWindowPeriodMs(true, HUD_MODE_MAP) == HUD_SEND_LOCATION_MS);
+}
+
+TEST_CASE("HUD: prosba o parowanie (kodowanie)") {
+  uint8_t out[4] = {0};
+  REQUIRE(encodeHudPairRequest(out, sizeof(out), 9) == HUD_PKT_PAIR_REQ_SIZE);
+  REQUIRE(out[0] == static_cast<uint8_t>(HUD_PKT_PAIR_REQ));
+  REQUIRE(out[1] == 9);
+  REQUIRE(encodeHudPairRequest(out, 1, 9) == 0);
+}
+
+TEST_CASE("HUD: odpowiedz na parowanie (dekodowanie)") {
+  const uint8_t packet[2] = {'Q', 5};
+  HudPairResponse resp;
+  REQUIRE(decodeHudPairResponse(packet, sizeof(packet), resp) == HUD_PKT_PAIR_RESP_SIZE);
+  REQUIRE(resp.seq == 5);
+  REQUIRE(decodeHudPairResponse(packet, 1, resp) == 0);
+  const uint8_t wrong[2] = {'P', 5};
+  REQUIRE(decodeHudPairResponse(wrong, sizeof(wrong), resp) == 0);
+}
+
+TEST_CASE("HUD: potwierdzenie trasy (dekodowanie)") {
+  const uint8_t packet[8] = {'K', 4, 0x44, 0x33, 0x22, 0x11, 0x01, 0};
+  HudRouteConfirm confirm;
+  REQUIRE(decodeHudRouteConfirm(packet, sizeof(packet), confirm) == HUD_PKT_ROUTE_CONFIRM_SIZE);
+  REQUIRE(confirm.seq == 4);
+  REQUIRE(confirm.crc == 0x11223344u);
+  REQUIRE(confirm.hasRoute == true);
+  REQUIRE(decodeHudRouteConfirm(packet, 4, confirm) == 0);
 
   const uint8_t wrong[8] = {'S', 0, 0, 0, 0, 0, 0, 0};
-  REQUIRE(decodeHudHeartbeat(wrong, sizeof(wrong), heartbeat) == 0);
+  REQUIRE(decodeHudRouteConfirm(wrong, sizeof(wrong), confirm) == 0);
+}
+
+TEST_CASE("HUD: liczba chunkow i dlugosc chunku (ochrona przed podmiana trasy)") {
+  // Pusty blob nie ma chunkow.
+  REQUIRE(hudRouteChunkCount(0) == 0);
+  REQUIRE(hudRouteChunkLen(0, 0) == 0);
+  // Dokladne wielokrotnosci i reszta.
+  REQUIRE(hudRouteChunkCount(200) == 1);
+  REQUIRE(hudRouteChunkCount(201) == 2);
+  REQUIRE(hudRouteChunkCount(2500) == 13);  // ROUTE_MAX_BLOB
+  REQUIRE(hudRouteChunkLen(2500, 0) == 200);
+  REQUIRE(hudRouteChunkLen(2500, 12) == 100);
+  REQUIRE(hudRouteChunkLen(201, 1) == 1);
+  // Krotka trasa po dlugiej: chunki poza zakresem sa puste (brak zawiniecia).
+  REQUIRE(hudRouteChunkLen(20, 1) == 0);
+  REQUIRE(hudRouteChunkLen(200, 1) == 0);
+  REQUIRE(hudRouteChunkLen(20, 255) == 0);
+}
+
+TEST_CASE("HUD: potwierdzenie trasy tylko od sparowanego Huda") {
+  const uint8_t peer[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+  const uint8_t same[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+  const uint8_t other[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+  REQUIRE(hudConfirmFromPeer(same, peer, true));
+  REQUIRE_FALSE(hudConfirmFromPeer(other, peer, true));
+  // Bez sparowanego MAC-a nie ma czego potwierdzac.
+  REQUIRE_FALSE(hudConfirmFromPeer(same, peer, false));
+  REQUIRE_FALSE(hudConfirmFromPeer(nullptr, peer, true));
 }
 
 TEST_CASE("HUD: chunk trasy (kodowanie)") {

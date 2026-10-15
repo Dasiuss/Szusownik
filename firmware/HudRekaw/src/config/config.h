@@ -52,7 +52,10 @@ static const int16_t ROUTE_LINE_THICKNESS = 4;
 // Czas i budżety (ms).
 static const unsigned long NET_ATTEMPT_TIMEOUT_MS = 12000;
 static const unsigned long NET_SEARCH_INTERVAL_MS = 30000;
-static const unsigned long LINK_TIMEOUT_MS = 3000;
+// Czas, po którym łącze z Szusownikiem uznajemy za nieaktualne. Wspólna stała
+// z SSOT protokołu (HUD_LINK_TIMEOUT_MS = 11 s): Szusownik w mapie nadaje `L`
+// tylko co 5 s, a przy braku ACK przechodzi w backoff 3 s — musi się zmieścić.
+static const unsigned long LINK_TIMEOUT_MS = HUD_LINK_TIMEOUT_MS;
 static const unsigned long RENDER_MIN_INTERVAL_MS = 50;
 
 // Martwa strefa przerysowania mapy: rysujemy dopiero, gdy rower przesunął się

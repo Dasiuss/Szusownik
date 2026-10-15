@@ -184,6 +184,14 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   `setup()`, przed peryferiami. Wcześniejsze „wycofanie" 160 MHz było
   błędną diagnozą: transfer psuł skan SD w `refreshInfo`/`countCsv` (patrz
   `docs/ble-transfer.md`), który zawodził też na 240 MHz.
+- **Statystyki per epoka, nie per iteracja:** dystans dnia (haversine,
+  `TinyGPSPlus::distanceBetween` — 8 transcendentalnych `double`) i max dnia
+  liczy się raz na nową próbkę GNSS (w bloku `consumeNewSample()`), a nie co
+  iterację pętli; miary zmieniają się dopiero na nowej epoce.
+- **Reklamowanie BLE:** interwał `SZ_BLE_ADV_INTERVAL` = 1600 (NimBLE, jednostka
+  0.625 ms → 1 s) zamiast domyślnego „fast" 20–30 ms. Adv trwa tylko, gdy telefon
+  nie jest połączony, więc rzadsze reklamowanie ogranicza grzanie (bez wpływu na
+  zamrożony profil transferu); kosztem jest dłuższe wykrywanie w PWA (do ~1 s).
 - Linia statusu SYS (DEBUG) ma bufor 512 B (`src/config/log.h`), żeby nie ucinać
   ogona z `loop=`/`die=`/`air=`; przy 256 B te pola ginęły.
 
@@ -214,17 +222,30 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   `flush` SD, pomiar czasu i maks. przerwy pętli (loop stall), `FreeHeap`/
   `MinFreeHeap`/`FreePSram`, reset reason (`esp_reset_reason()`), statystyki
   retransmisji BLE, licznik nieudanych odczytów barometru.
-- Reguły dla kolejnych sesji: `AGENTS.md` pkt 14.
+- Reguły dla kolejnych sesji: `AGENTS.md` (sekcja „Zasady pracy").
 
 ## 12. Link HUD (ESP-NOW)
 
 Szusownik nadaje też podgląd do osobnego odbiornika **HudRekaw** (ESP8266 + ST7789)
-przez **ESP-NOW** na stałym kanale `HUD_LINK_CHANNEL` (1), broadcast — bez
-asocjacji WiFi. Pakiet `S` (statystyki, 1 s) idzie w ruchu, `L` (pozycja + tryb,
-5 s) na postoju; tryb przełącza próg `HUD_STATS_ABOVE_KMH` (5 km/h). WiFi/ESP-NOW
-dzieli radio z BLE, więc w trakcie transferu pliku (`BleFiles::busy()`) wysyłka
-jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik:
-`docs/hud-rekaw.md`, reguła `AGENTS.md` pkt 18.
+przez **ESP-NOW** na stałym kanale `HUD_LINK_CHANNEL` (1) — bez asocjacji WiFi.
+Pakiety `'S'` (telemetria, 1 s w ruchu) i `'L'` (pozycja + tryb, 5 s na postoju)
+idą **unicastem** do MAC-a Huda zapisanego w NVS Szusownika; broadcast (`'P'` —
+prośba o parowanie) leci tylko w trybie parowania. Tryb przełącza próg
+`HUD_STATS_ABOVE_KMH` (30 km/h). Radio Szusownika jest **domyślnie wyłączone**
+(oszczędzanie SoC) — Szusownik otwiera je na krótkie okno na czas wysyłki
+zaległych pakietów i gasi po sprzętowym ACK-u unicastu; gdy łącze nie jest
+potwierdzone (brak niedawnego ACK), nadaje nie częściej niż
+`HUD_SEND_BACKOFF_MS` (3 s). WiFi/ESP-NOW dzieli radio z BLE, więc w trakcie
+transferu pliku (`BleFiles::busy()`) radio jest **zamknięte**, a po transferze
+wznawia od razu. Parowanie z PWA (CTRL `PAIR`, wynik `paired` / `err:pair-none` /
+`err:pair-multi`, w trakcie transferu `err:busy`; MAC w INFO jako `peerMac`
+**przed** STATUS-em wyniku) opisano w `docs/hud-rekaw.md` §3. Zdarzenia z
+callbacków ESP-NOW (odbiór `'Q'`/`'K'`, wynik wysyłki) trafiają do pętli głównej
+przez pierścień chroniony spinlockiem — stan gry zmienia tylko `tick()`; czas dla
+niego jest liczony na miejscu wywołania (skan SD `refreshInfo` potrafi opóźnić
+pętlę).
+Protokół (SSOT `protocol/hud-espnow-v1.json`), odbiornik i wersja firmware
+(`1.9.0-hud-espnow`): `docs/hud-rekaw.md`; reguły pracy — `AGENTS.md`.
 
 ## 13. Tryb nawigacji (trasa)
 
@@ -235,12 +256,18 @@ jest **wstrzymana**. Protokół (SSOT `protocol/hud-espnow-v1.json`) i odbiornik
 - Szusownik trzyma trasę **tylko w RAM** (start z kanonicznym pustym blobem =
   CLEAR). `BleFiles` składa porcje w staging i waliduje CRC w pętli głównej;
   INFO niesie `routeCrc`/`routePoints`, STATUS `route ok ...` / `route err ...`.
-- Szusownik przekazuje trasę dalej do HudRekaw po ESP-NOW: odbiera heartbeat `H`,
-  a gdy odbiornik jest dostępny i ma inną wersję, wysyła chunki `R`. Bez
+- Szusownik przekazuje trasę dalej do HudRekaw po ESP-NOW: gdy odbiornik jest
+  dostępny (niedawny ACK), a Szusownik nie ma od niego potwierdzenia tej samej
+  wersji trasy, wysyła chunki `'R'`
+  (chunk trasy). Potwierdzeniem dostarczenia jest jawny pakiet `'K'`
+  (potwierdzenie trasy) z CRC złożonego bloba (Hud wysyła go też od razu po
+  przypisaniu go unicastem, więc po restarcie Huda trasa wraca na ekran). Bez
   potwierdzenia ponawia rzadko — jedno okno wysyłki co najwyżej raz na
-  `SZ_HUD_ROUTE_RESEND_MS` (9 s) — żeby radio nie nadawało non-stop (patrz
-  `docs/hud-rekaw.md`).
-- Z GNSS liczy **indeks bieżącego odcinka trasy** i dokłada go do pakietów `S`/`L`
+  `SZ_HUD_ROUTE_RESEND_MS` (9 s), do
+  `HUD_ROUTE_MAX_CYCLES` cykli — żeby radio nie nadawało non-stop (podmiana trasy
+  w trakcie wysyłki przerywa burst i przelicza chunki; patrz `docs/hud-rekaw.md`).
+- Z GNSS liczy **indeks bieżącego odcinka trasy** i dokłada go do pakietów `'S'`
+  (telemetria)/`'L'` (pozycja + tryb)
   (`segmentIndex`, `HUD_SEGMENT_NONE` bez trasy). Decyzja o odcinku to pełny
   przebieg po punktach trasy (O(`pointCount`), `double sqrt`), więc liczymy ją co
   najwyżej raz na `SZ_ROUTE_UPDATE_MS` (**3 s**), a między przeliczeniami pakiet

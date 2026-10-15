@@ -66,6 +66,10 @@ najnowszej wersji firmware i PWA. Dlatego:
 7. Wyniki niepotwierdzone sprzętowo oznaczaj jako niepotwierdzone.
 8. Nie sprawdzaj statusu GitHub Actions po wypchnięciu i nie wspominaj, że tego
    nie zrobiłeś(-aś) — build weryfikuje użytkownik.
+9. W rozmowie z użytkownikiem nigdy nie nazywaj pakietów protokołu samą literą.
+   Zawsze dopisz, co to za pakiet, np. `'Q' (odpowiedź na parowanie)` zamiast
+   samo „pakiet Q". Użytkownik nie pamięta liter — litera bez opisu jest dla
+   niego bezużyteczna.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

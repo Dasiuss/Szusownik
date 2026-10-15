@@ -231,6 +231,35 @@ describe("typy błędów", () => {
   });
 });
 
+describe("parowanie HUD", () => {
+  it("powtórne parowanie zwraca świeży wynik, nie poprzedni", async () => {
+    const emulator = new DeviceEmulator({ files: [], peerMac: "AA:BB:CC:DD:EE:FF" });
+    useEmulator(emulator);
+
+    const ble = new SzusownikBle();
+    const info = await ble.connect();
+    expect(info.peerMac).toBe("");
+
+    expect(await ble.pairHud()).toBe("paired AA:BB:CC:DD:EE:FF");
+    expect((await ble.readInfo()).peerMac).toBe("AA:BB:CC:DD:EE:FF");
+
+    // Drugie parowanie bez Huda w zasięgu: stary "paired ..." nie może wygrać —
+    // PWA czeka na STATUS inny niż sprzed parowania.
+    emulator.setPairDevices(0);
+    expect(await ble.pairHud()).toBe("err:pair-none");
+    expect((await ble.readInfo()).peerMac).toBe("");
+  });
+
+  it("zgłasza wiele Hudów jako err:pair-multi", async () => {
+    const emulator = new DeviceEmulator({ files: [], pairDevices: 2 });
+    useEmulator(emulator);
+
+    const ble = new SzusownikBle();
+    await ble.connect();
+    expect(await ble.pairHud()).toBe("err:pair-multi");
+  });
+});
+
 describe("ustawienia urządzenia", () => {
   it("SET* zwracają wartości po clamp i odświeżają INFO", async () => {
     const emulator = new DeviceEmulator({ files: [] });

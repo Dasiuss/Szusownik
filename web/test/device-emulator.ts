@@ -25,6 +25,7 @@ import {
   SZ_CMD_ACK,
   SZ_CMD_LIST,
   SZ_CMD_NACK,
+  SZ_CMD_PAIR,
   SZ_CMD_ROTATE,
   SZ_CMD_SETFREQ_LONG,
   SZ_CMD_SETFREQ_SHORT,
@@ -39,12 +40,16 @@ import {
   SZ_CMD_STOP,
   SZ_ERR_BUSY,
   SZ_ERR_OPEN,
+  SZ_ERR_PAIR_MULTI,
+  SZ_ERR_PAIR_NONE,
   SZ_ERR_READ,
   SZ_FREQ_LONG_DEFAULT,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_ST_DONE,
   SZ_ST_LIST,
   SZ_ST_OK,
+  SZ_ST_PAIRED,
+  SZ_ST_PAIR_WAIT,
   SZ_ST_STREAMING,
   SZ_UUID_CTRL,
   SZ_UUID_DATA,
@@ -76,6 +81,10 @@ export interface EmulatorOptions {
   failOpen?: string[];
   /** Po ilu ramkach przerwać transfer `err:read <nazwa>` (błąd przejściowy). */
   readErrorAfterFrames?: { name: string; frames: number };
+  /** Ile HudRekaw odpowiedziało na PAIR: 0 = brak, 1 = jeden, ≥2 = kilka. */
+  pairDevices?: number;
+  /** MAC, który emulator przypisze przy udanym parowaniu. */
+  peerMac?: string;
 }
 
 const textEncoder = new TextEncoder();
@@ -198,9 +207,14 @@ export class DeviceEmulator {
   private routeCrc = 0;
   private routePoints = 0;
 
+  // Sparowany HudRekaw: MAC w INFO (`peerMac`), jak w prawdziwym Szusowniku.
+  private peerMac = "";
+  private pairDevices: number;
+
   readonly commands: string[] = [];
 
   constructor(private readonly options: EmulatorOptions) {
+    this.pairDevices = options.pairDevices ?? 1;
     for (const uuid of [SZ_UUID_INFO, SZ_UUID_CTRL, SZ_UUID_DATA, SZ_UUID_STAT, SZ_UUID_ROUTE]) {
       this.characteristics.set(uuid, new FakeCharacteristic(uuid, this));
     }
@@ -270,6 +284,7 @@ export class DeviceEmulator {
       fileCount: this.visibleFiles().length,
       routeCrc: this.routeCrc,
       routePoints: this.routePoints,
+      peerMac: this.peerMac,
       volLow: this.volLow,
       volHigh: this.volHigh,
       freqShort: this.freqShort,
@@ -333,7 +348,43 @@ export class DeviceEmulator {
     } else if (command.startsWith(SZ_CMD_SETMINBEEP)) {
       this.minBeepKmh = this.clamp(Number(command.slice(SZ_CMD_SETMINBEEP.length)), 60, 120);
       this.setStatus(`beep min=${this.minBeepKmh}`);
+    } else if (command.startsWith(SZ_CMD_PAIR)) {
+      this.startPair();
     }
+  }
+
+  /** Ile HudRekaw „odpowie" na kolejne PAIR (0/1/≥2) — do testów wyniku. */
+  setPairDevices(count: number): void {
+    this.pairDevices = count;
+  }
+
+  /**
+   * Parowanie jest konsumowane w pętli głównej, nie w callbacku zapisu: wynik
+   * pojawia się po faktycznym starcie. Najpierw STATUS `pair wait`, dopiero po
+   * chwili rezultat — dzięki temu czytelny jest test na odczyt starego wyniku.
+   */
+  private startPair(): void {
+    setTimeout(() => {
+      if (this.transfer) {
+        // Radio HUD jest zamknięte na czas transferu — firmware odrzuca.
+        this.setStatus(SZ_ERR_BUSY);
+        return;
+      }
+      this.setStatus(SZ_ST_PAIR_WAIT);
+      // Jak firmware: PAIR czyści poprzednie przypisanie, zanim zbierze odpowiedzi.
+      this.peerMac = "";
+      setTimeout(() => {
+        if (this.pairDevices === 0) {
+          this.peerMac = "";
+          this.setStatus(SZ_ERR_PAIR_NONE);
+        } else if (this.pairDevices > 1) {
+          this.setStatus(SZ_ERR_PAIR_MULTI);
+        } else {
+          this.peerMac = this.options.peerMac ?? "AA:BB:CC:DD:EE:FF";
+          this.setStatus(`${SZ_ST_PAIRED} ${this.peerMac}`);
+        }
+      }, 5);
+    }, 0);
   }
 
   /** Odbiór binarnego bloba trasy: ramki [offset u16, totalLen u16, payload...]. */

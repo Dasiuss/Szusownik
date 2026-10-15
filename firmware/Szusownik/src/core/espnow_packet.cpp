@@ -67,14 +67,28 @@ size_t encodeHudLocation(uint8_t* out, size_t outLen, uint8_t seq, const HudLoca
   return HUD_PKT_LOCATION_SIZE;
 }
 
-size_t decodeHudHeartbeat(const uint8_t* in, size_t len, HudHeartbeat& out) {
-  if (in == nullptr || len < HUD_PKT_HEARTBEAT_SIZE) return 0;
-  if (in[0] != static_cast<uint8_t>(HUD_PKT_HEARTBEAT)) return 0;
+size_t encodeHudPairRequest(uint8_t* out, size_t outLen, uint8_t seq) {
+  if (out == nullptr || outLen < HUD_PKT_PAIR_REQ_SIZE) return 0;
+  out[0] = static_cast<uint8_t>(HUD_PKT_PAIR_REQ);
+  out[1] = seq;
+  return HUD_PKT_PAIR_REQ_SIZE;
+}
+
+size_t decodeHudPairResponse(const uint8_t* in, size_t len, HudPairResponse& out) {
+  if (in == nullptr || len < HUD_PKT_PAIR_RESP_SIZE) return 0;
+  if (in[0] != static_cast<uint8_t>(HUD_PKT_PAIR_RESP)) return 0;
+  out.seq = in[1];
+  return HUD_PKT_PAIR_RESP_SIZE;
+}
+
+size_t decodeHudRouteConfirm(const uint8_t* in, size_t len, HudRouteConfirm& out) {
+  if (in == nullptr || len < HUD_PKT_ROUTE_CONFIRM_SIZE) return 0;
+  if (in[0] != static_cast<uint8_t>(HUD_PKT_ROUTE_CONFIRM)) return 0;
   out.seq = in[1];
   out.crc = static_cast<uint32_t>(in[2]) | (static_cast<uint32_t>(in[3]) << 8) |
             (static_cast<uint32_t>(in[4]) << 16) | (static_cast<uint32_t>(in[5]) << 24);
   out.hasRoute = (in[6] & 0x01) != 0;
-  return HUD_PKT_HEARTBEAT_SIZE;
+  return HUD_PKT_ROUTE_CONFIRM_SIZE;
 }
 
 size_t encodeHudRouteChunk(uint8_t* out, size_t outLen, uint8_t seq, uint8_t chunkIndex,
@@ -104,4 +118,27 @@ uint16_t hudTenthsKm(float km) {
 uint8_t hudModeForSpeed(float kmh) {
   return kmh > HUD_STATS_ABOVE_KMH ? static_cast<uint8_t>(HUD_MODE_STATS)
                                    : static_cast<uint8_t>(HUD_MODE_MAP);
+}
+
+uint8_t hudRouteChunkCount(uint16_t len) {
+  if (len == 0) return 0;
+  return static_cast<uint8_t>((static_cast<uint32_t>(len) + HUD_ROUTE_CHUNK_BYTES - 1) /
+                              HUD_ROUTE_CHUNK_BYTES);
+}
+
+uint16_t hudRouteChunkLen(uint16_t len, uint8_t chunkIndex) {
+  const uint32_t offset = static_cast<uint32_t>(chunkIndex) * HUD_ROUTE_CHUNK_BYTES;
+  if (offset >= len) return 0;
+  const uint32_t remaining = static_cast<uint32_t>(len) - offset;
+  return static_cast<uint16_t>(remaining > HUD_ROUTE_CHUNK_BYTES ? HUD_ROUTE_CHUNK_BYTES : remaining);
+}
+
+bool hudConfirmFromPeer(const uint8_t* mac, const uint8_t* peerMac, bool peerValid) {
+  if (!peerValid || mac == nullptr || peerMac == nullptr) return false;
+  return memcmp(mac, peerMac, 6) == 0;
+}
+
+unsigned long hudWindowPeriodMs(bool peerLinked, uint8_t mode) {
+  if (!peerLinked) return HUD_SEND_BACKOFF_MS;
+  return mode == HUD_MODE_MAP ? HUD_SEND_LOCATION_MS : HUD_SEND_TELEMETRY_MS;
 }

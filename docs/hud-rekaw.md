@@ -8,6 +8,13 @@ pobiera plików — to wyłącznie wyświetlacz.
 > (`hud_receiver`) do tego repo jako rozwiązanie docelowe. DisplayTest zostaje
 > jako archiwum i nie jest dalej rozwijany.
 
+> **Status sprzętowy: zmiany protokołu ESP-NOW (unicast, parowanie
+> `'P'`/`'Q'`, potwierdzenie trasy `'K'`, okna radia z backoffem) NIE zostały
+> jeszcze potwierdzone na sprzęcie** — brak testu na realnym ESP32-S3 + ESP8266.
+> Niepotwierdzone jest m.in. to, czy ESP8266 odbiera niezaszyfrowany unicast bez
+> dodania nadawcy do listy peerów (wg dokumentacji ESP-NOW tak, ale nie
+> zweryfikowano tego na sprzęcie).
+
 ## 1. Sprzęt
 
 - Moduł: **ESP-12F / NodeMCU ESP8266**, flash **4 MB**.
@@ -30,7 +37,14 @@ Podświetlenie jest włączane w `setup()` (`Display::begin`). Układ pinów jes
 
 ESP-NOW nie ma asocjacji — oba radia muszą być na tym samym kanale. Schemat:
 
-- Szusownik zawsze nadaje na **kanale `HUD_LINK_CHANNEL` (1)**, broadcast.
+- Oba radia pracują na **kanale `HUD_LINK_CHANNEL` (1)**. Pakiety `'S'`
+  (telemetria), `'L'` (pozycja + tryb), `'R'` (chunk trasy) i `'K'`
+  (potwierdzenie trasy) idą **unicastem** do MAC-a Huda zapisanego w NVS
+  Szusownika. **`'P'` (prośba o parowanie) jest jedynym broadcastem** i leci
+  wyłącznie w trybie parowania.
+- Radio Szusownika jest **domyślnie wyłączone** (oszczędzanie SoC). Szusownik
+  otwiera je na krótkie okno tylko na czas wysyłki zaległych pakietów i gasi po
+  sprzętowym ACK-u unicastu (albo po marginesie `HUD_TX_ACK_GRACE_MS`).
 - HudRekaw próbuje sieci z `secrets.h`. Gdy żadnej nie ma w zasięgu, wiąże
   radio na `HUD_LINK_CHANNEL` (`wifi_set_channel`) i co 30 s ponawia skan.
 - Gdy HudRekaw **połączy się z routerem**, przechodzi na kanał routera. Jeśli
@@ -56,7 +70,7 @@ Zmiana protokołu: edytuj JSON, uruchom `node scripts/gen-hud-protocol.mjs`
 (albo `npm run gen:hud-protocol` w `web/`). Test
 `web/src/lib/hudProtocol.test.ts` pilnuje, że oba pliki są aktualne.
 
-### Pakiet `S` — telemetria, 13 B
+### Pakiet `'S'` (telemetria) — 14 B, Szusownik -> HudRekaw, unicast
 
 | Bajt | Znaczenie |
 | --- | --- |
@@ -68,12 +82,13 @@ Zmiana protokołu: edytuj JSON, uruchom `node scripts/gen-hud-protocol.mjs`
 | 8..9 | remaining/REM uint16 LE (na razie stałe 0) |
 | 10..11 | total/TOT uint16 LE |
 | 12 | flagi: bit0 = frame |
+| 13 | segmentIndex uint8: bieżący odcinek trasy, `HUD_SEGMENT_NONE` = brak |
 
 **TOT jest w jednostkach `km × HUD_TOT_SCALE` (×10)**, czyli km z jednym
 miejscem po przecinku (np. `1234` → `123.4 km`). Odbiornik formatuje to przez
 `hudFormatTenthsKm` (`src/core/hud_format`).
 
-### Pakiet `L` — pozycja, 16 B
+### Pakiet `'L'` (pozycja + tryb) — 17 B, Szusownik -> HudRekaw, unicast
 
 | Bajt | Znaczenie |
 | --- | --- |
@@ -87,22 +102,44 @@ miejscem po przecinku (np. `1234` → `123.4 km`). Odbiornik formatuje to przez
 | 14..15 | fisheye uint16 LE (klamp 100..500) |
 | 16 | segmentIndex uint8: bieżący odcinek trasy, `HUD_SEGMENT_NONE` = brak |
 
-Tryb ekranu odbiornik poznaje **wyłącznie z pakietu `L`** (bajt `mode`).
+Tryb ekranu odbiornik poznaje **wyłącznie z pakietu `'L'`** (pozycja + tryb), z bajtu `mode`.
 
-### Pakiet `H` — heartbeat, 8 B (HudRekaw -> Szusownik)
+### Pakiet `'P'` (prośba o parowanie) — 2 B, Szusownik -> broadcast
 
 | Bajt | Znaczenie |
 | --- | --- |
-| 0 | `H` |
+| 0 | `P` |
 | 1 | sekwencja uint8 |
-| 2..5 | routeCrc uint32 LE (CRC32 trzymanej trasy) |
+
+Jedyny pakiet nadawany **broadcastem** i tylko w trybie parowania (gdy Szusownik
+nie zna MAC-a Huda).
+
+### Pakiet `'Q'` (odpowiedź na parowanie) — 2 B, HudRekaw -> Szusownik, unicast
+
+| Bajt | Znaczenie |
+| --- | --- |
+| 0 | `Q` |
+| 1 | sekwencja uint8 |
+
+MAC Huda Szusownik bierze z metadanych ESP-NOW (adres nadawcy ramki), nie z
+treści pakietu.
+
+### Pakiet `'K'` (potwierdzenie trasy) — 8 B, HudRekaw -> Szusownik, unicast
+
+| Bajt | Znaczenie |
+| --- | --- |
+| 0 | `K` |
+| 1 | sekwencja uint8 |
+| 2..5 | routeCrc uint32 LE (CRC32 trzymanego bloba) |
 | 6 | flagi: bit0 = ma trasę |
 | 7 | zarezerwowane (0) |
 
-HudRekaw nadaje `H` co `HUD_HEARTBEAT_MS` (3 s). Szusownik traktuje odbiornik jako
-dostępny, gdy heartbeat dotarł w ciągu `HUD_HEARTBEAT_TIMEOUT_MS` (10 s).
+Wysyłany po złożeniu i walidacji całej trasy oraz **od razu po tym, jak Hud
+uzna się za sparowanego** (żeby Szusownik poznał, jaką trasę Hud trzyma — po
+restarcie Huda jest pusta). Zastąpił dawny heartbeat `'H'`: obecność Huda
+wykrywa teraz sprzętowy ACK ESP-NOW dla unicastu.
 
-### Pakiet `R` — chunk trasy, 10 B nagłówka + do 200 B (Szusownik -> HudRekaw)
+### Pakiet `'R'` (chunk trasy) — 10 B nagłówka + do 200 B, Szusownik -> HudRekaw, unicast
 
 | Bajt | Znaczenie |
 | --- | --- |
@@ -115,18 +152,61 @@ dostępny, gdy heartbeat dotarł w ciągu `HUD_HEARTBEAT_TIMEOUT_MS` (10 s).
 | 10.. | payload (do `HUD_ROUTE_CHUNK_BYTES` = 200 B) |
 
 Szusownik dzieli blob trasy (SSOT `protocol/route-v1.json`) na chunki i wysyła je
-tylko, gdy odbiornik jest dostępny i zgłasza inną wersję (`routeCrc`). HudRekaw
-składa chunki, waliduje CRC całości i zapamiętuje trasę w RAM. Pusty blob
-(pointCount=0) = CLEAR.
+tylko, gdy odbiornik jest dostępny (niedawny ACK) i zgłasza inną wersję
+(`routeCrc`). HudRekaw składa chunki, waliduje CRC całości, zapamiętuje trasę w
+RAM i odpowiada pakietem `'K'` (potwierdzenie trasy). Pusty blob (pointCount=0) =
+CLEAR.
 
 Bez potwierdzenia Szusownik ponawia wysyłkę **rzadko, nie non-stop**: jedno okno
 (burst = do `HUD_ROUTE_MAX_CYCLES` cykli chunków) startuje co najwyżej raz na
-`SZ_HUD_ROUTE_RESEND_MS` (**9 s** = 3 heartbeaty), a nowa trasa (`setRoute`)
-wysyła się od razu, z pominięciem progu. Potwierdzeniem dostarczenia jest
-zgodność `routeCrc` z CRC trzymanego bloba w kolejnym heartbeacie `H` — wtedy
-wysyłka się zatrzymuje. Tożsamością jest sam CRC32, także dla pustej trasy
-(CLEAR): flaga `hasRoute` jest dla niej fałszywa, więc **nie** bramkuje
-potwierdzenia.
+`SZ_HUD_ROUTE_RESEND_MS` (**9 s**), a nowa trasa (`setRoute`) wysyła się od razu,
+z pominięciem progu. Każdy chunk czeka na sprzętowy ACK najwyżej
+`HUD_ROUTE_CHUNK_ACK_TIMEOUT_MS` (250 ms); jego brak przerywa transfer. Po
+wysłaniu całego burstu Szusownik czeka na `'K'` (potwierdzenie trasy) przez
+`HUD_ROUTE_CONFIRM_TIMEOUT_MS` (1 s) i w razie braku powtarza cykl (do
+`HUD_ROUTE_MAX_CYCLES` = 3). Bramką potwierdzenia jest zgodność `routeCrc` z CRC
+trzymanego bloba; tożsamością jest sam CRC32, także dla pustej trasy (CLEAR):
+flaga `hasRoute` jest dla niej fałszywa, więc **nie** bramkuje potwierdzenia.
+`'K'` liczy się tylko od **sparowanego** Huda (porównanie MAC-a nadawcy), więc po
+przypisaniu innego odbiornika stary CRC nie zablokuje wysyłki.
+
+Podmiana trasy w trakcie wysyłki (`setRoute`, np. na krótszą albo CLEAR) przerywa
+bieżący burst i przelicza liczbę chunków — dalej leci już nowy blob, a długość
+chunku jest zawsze brana z aktualnej trasy (żadnego odczytu poza bloba).
+
+### Parowanie (z PWA)
+
+W PWA (Ustawienia → „HUD (HudRekaw)") jest przycisk **„Paruj"**. PWA wysyła do
+Szusownika komendę CTRL `PAIR`; Szusownik czyści zapisany MAC w NVS i przez
+`HUD_PAIR_COLLECT_MS` (0,6 s) nadaje `'P'` (prośba o parowanie) co
+`HUD_PAIR_REQ_MS` (200 ms), zbierając odpowiedzi `'Q'` (odpowiedź na parowanie),
+deduplikowane po MAC nadawcy. Wynik jest raportowany do PWA przez STATUS:
+
+- dokładnie jeden -> MAC zapisany w NVS i natychmiastowy unicast (żeby Hud
+  oznaczył się jako sparowany), STATUS `paired <MAC>`,
+- zero -> STATUS `err:pair-none`,
+- więcej niż jeden -> nie parujemy, STATUS `err:pair-multi`.
+
+Szusownik od razu po odebraniu `PAIR` ustawia STATUS `pair wait` (początek
+parowania), a MAC trafia do INFO (`peerMac`) **przed** STATUS-em wyniku — PWA
+czyta INFO zaraz po STATUS-ie, więc przy odwrotnej kolejności pokazałaby stary
+`peerMac`. PWA uznaje wynik dopiero, gdy STATUS różni się od tego sprzed
+parowania (dzięki temu powtórne „Paruj" nie zwraca poprzedniego wyniku), a
+przycisk jest zablokowany, gdy trwa transfer pliku. W trakcie transferu firmware
+odpowiada `err:busy` — wtedy radio HUD jest zamknięte (transfer ma priorytet), a
+parowanie wykonałoby się dopiero po nim. W NVS Szusownika jest zawsze najwyżej
+jeden MAC.
+
+HudRekaw **nie trzyma MAC-a w NVS**: po starcie jest niesparowany i uznaje się za
+sparowanego, gdy dostanie od Szusownika pakiet inny niż `'P'` (prośba o
+parowanie), czyli unicast `'S'` (telemetria), `'L'` (pozycja + tryb) lub `'R'`
+(chunk trasy) — zapamiętując wtedy nadawcę w RAM i **od razu wysyłając `'K'`
+(potwierdzenie trasy)** ze swoim aktualnym stanem trasy. Na `'P'` (prośba o
+parowanie) odpowiada `'Q'` (odpowiedź na parowanie), gdy jest niesparowany
+**albo** gdy `'P'` (prośba o parowanie) przyszło od jego Szusownika — to pozwala
+sparować ponownie po wyczyszczeniu MAC-a w Szusowniku bez restartu Huda, a obcy
+Szusownik nadal nie przejmie Huda. Reguła jest czystą funkcją
+`hudShouldAnswerPair()` w `src/core/hud_packet`.
 
 ## 4. Reguła trybu i częstotliwość wysyłki
 
@@ -139,22 +219,64 @@ Wysyłka jest zależna od trybu (żadnych zbędnych pakietów):
 
 | Tryb | Pakiety okresowe |
 | --- | --- |
-| statystyki | `S` co `HUD_SEND_TELEMETRY_MS` (1 s) |
-| mapa | `L` co `HUD_SEND_LOCATION_MS` (5 s), tylko gdy jest pozycja |
+| statystyki | `'S'` (telemetria) co `HUD_SEND_TELEMETRY_MS` (1 s) |
+| mapa | `'L'` (pozycja + tryb) co `HUD_SEND_LOCATION_MS` (5 s), tylko gdy jest pozycja |
 
-**Zmiana trybu** wysyła natychmiast jeden `L` z nowym `mode` (także przy
-wejściu w statystyki), bo tylko `L` przenosi tryb. W mapie pozycją jest ostatnia
-znana (żeby ekran nie gasł przy chwilowej utracie fixa).
+**Zmiana trybu** wysyła natychmiast jeden `'L'` (pozycja + tryb) z nowym `mode`
+(także przy wejściu w statystyki), bo tylko `'L'` (pozycja + tryb) niesie tryb. W
+mapie pozycją jest ostatnia znana (żeby ekran nie gasł przy chwilowej utracie
+fixa).
+
+### Okna radia i backoff
+
+Radio Szusownika jest **domyślnie wyłączone** — używamy wariantu „light"
+(`esp_wifi_stop()` / `esp_wifi_start()`): sterownik WiFi zostaje zainicjowany,
+gaśnie tylko PHY. Zmierzony koszt przełączenia na realnym ESP32-S3 to ~1,45 ms
+(OFF) + ~2,73 ms (ON) ≈ 4,2 ms na cykl, bez wycieków heapy. Szusownik otwiera
+radio tylko na czas wysyłki i gasi je po sprzętowym ACK-u unicastu (albo po
+`HUD_TX_ACK_GRACE_MS` jako margines).
+
+- Okres okien zależy od trybu: w statystykach `'S'` (telemetria) co
+  `HUD_SEND_TELEMETRY_MS` (1 s), w mapie `'L'` (pozycja + tryb) co
+  `HUD_SEND_LOCATION_MS` (5 s).
+- Gdy łącze **nie jest potwierdzone** (brak niedawnego ACK), Szusownik nadaje nie
+  częściej niż `HUD_SEND_BACKOFF_MS` (3 s).
+- Obecność Huda wykrywamy **wyłącznie po sprzętowym ACK-u ESP-NOW** dla unicastu
+  (send callback, `ESP_NOW_SEND_SUCCESS`). Łącze uznajemy za aktualne, gdy ACK
+  był w ciągu `HUD_LINK_TIMEOUT_MS` (11 s).
 
 Pola realne: speed, TOT, MAX (max dnia), navAngle (kurs), lat/lon/heading.
 Pola stałe na razie: REM `0`, zoom `HUD_LOCATION_ZOOM` (1), fisheye
 `HUD_FISHEYE` (220).
 
+### Zdarzenia z callbacków ESP-NOW (synchronizacja)
+
+Callback odbioru i wysyłki ESP-NOW działają w tasku WiFi, obok pętli głównej.
+Zamiast dzielić z nimi stan, Szusownik **przekazuje zdarzenia do pętli głównej**:
+
+- odbiór (`'Q'` — odpowiedź na parowanie, `'K'` — potwierdzenie trasy) trafia do
+  małego pierścienia (`HudLink::rxQ_`, 8 slotów) chronionego spinlockiem
+  (`portMUX_TYPE`); licznik odpowiedzi na `'P'` (prośba o parowanie) i stan
+  potwierdzenia trasy zmienia wyłącznie `tick()`, po opróżnieniu pierścienia.
+  Spóźniona odpowiedź `'Q'` poza oknem parowania jest ignorowana.
+- z callbacku wysyłki pętla czyta tylko licznik wysyłek i znacznik błędu
+  (akcesory pod tym samym spinlockiem) oraz czas ostatniego ACK-a.
+
+`volatile` samo nie synchronizuje między rdzeniami, więc wszystkie wspólne pola
+przechodzą przez sekcję krytyczną albo przez pierścień zdarzeń.
+
+Znacznik czasu dla `tick()` bierzemy **na miejscu wywołania** (świeży `millis()`),
+bo od początku `loop()` do `tick()` może wystąpić blokujący skan katalogu SD
+(`refreshInfo` po wyczyszczeniu MAC-a przy parowaniu). Ze starym czasem okno
+zbierania odpowiedzi na `'P'` startowałoby z przeszłości i domykało się po
+pierwszej prośbie.
+
 ### Współistnienie z BLE
 
 WiFi/ESP-NOW dzieli radio z BLE. W trakcie transferu pliku (`BleFiles::busy()`)
-Szusownik **wstrzymuje** wysyłkę ESP-NOW, żeby nie zabierać pasma sprawdzonemu
-profilowi BLE (`docs/ble-transfer.md`). Po zakończeniu transferu wysyłka wraca.
+Szusownik **zamyka radio** i wstrzymuje wysyłkę ESP-NOW, żeby nie zabierać pasma
+sprawdzonemu profilowi BLE (`docs/ble-transfer.md`). Po zakończeniu transferu
+wznawia od razu (bez czekania na koniec okresu).
 
 ## 5. Mapa
 
@@ -183,7 +305,8 @@ Przerysowanie ma **martwą strefę**: odpala się dopiero, gdy rower przesunął
 o `MAP_REDRAW_MOVE_M` (5 m) względem **ostatnio narysowanej** pozycji albo kurs
 zmienił się o `MAP_REDRAW_BEARING_DEG` (8°, z zawijaniem 0/360). Zmiana trybu,
 zoomu lub fisheye wymusza rysunek niezależnie od progu. Dzięki temu przy postoju
-(i szumie GNSS) ekran nie miga — tryb mapy jest aktywny tylko ≤5 km/h.
+(i szumie GNSS) ekran nie miga — tryb mapy jest aktywny do `HUD_STATS_ABOVE_KMH`
+(30 km/h).
 Logika progu jest czysta (`mapShouldRedraw` w `src/core/map_math`) i pokryta
 testami hostowymi (`firmware/test/host/hudrekaw/test_map_math.cpp`).
 
@@ -194,12 +317,12 @@ jawnie podać `--profile wroclaw`.
 Bufor kandydatów labeli (`gLabelCandidates`) jest **statyczny** — nigdy lokalny.
 ESP8266 ma tylko 4 KB stosu zadania `loop()` (`CONT_STACKSIZE`), a tablica
 `MAP_MAX_CANDIDATES` (220 × ~20 B ≈ 4,4 KB) na stosie przepełnia go i resetuje
-urządzenie przy pierwszej ramce `L` (objaw: mapa mignie i wraca ekran statystyk,
+urządzenie przy pierwszej ramce `'L'` (pozycja + tryb) (objaw: mapa mignie i wraca ekran statystyk,
 a podgląd pokazuje `last packet: never`).
 
 ### Tryb nawigacji (trasa na mapie)
 
-Gdy Szusownik przekazał trasę (pakiety `R`), odbiornik rysuje ją **na wierzchu**
+Gdy Szusownik przekazał trasę (pakiety `'R'` — chunk trasy), odbiornik rysuje ją **na wierzchu**
 mapy jako grubą jasnofioletową linię (`COLOR_ROUTE`, grubość
 `ROUTE_LINE_THICKNESS`), bez zmiany
 obecnej orientacji mapy (nadal wg najbliższej trasy zjazdowej). Punkty trasy są w
@@ -208,12 +331,17 @@ metrach względem origin trasy; odbiornik przesuwa je do układu własnej mapy
 
 Na dole ekranu pojawiają się **bieżący + 2 następne odcinki trasy**
 (`HUD_SEGMENTS_SHOWN`), z bieżącym w kolorze trasy. `segmentIndex` przychodzi z
-pakietów `S`/`L` (liczy go Szusownik z GNSS), więc lista działa zarówno na mapie
-(≤30 km/h), jak i na ekranie statystyk (>30 km/h). Ekran statystyk przy aktywnej
-trasie rezerwuje dolny pas: wiersz `TOT` przesuwa się wyżej, a nazwy odcinków
-zajmują dolną krawędź. Trasa trzymana jest **tylko w RAM** (brak zapisu we flashu);
-po restarcie odbiornik zgłasza heartbeat z pustą trasą i Szusownik dosyła ją
-ponownie. Zmiana trasy wymusza przerysowanie mapy (`routeCrc` w martwej strefie)
+pakietów `'S'` (telemetria) i `'L'` (pozycja + tryb) (liczy go Szusownik z GNSS),
+więc lista działa zarówno na
+mapie (≤30 km/h), jak i na ekranie statystyk (>30 km/h). Ekran statystyk przy
+aktywnej trasie rezerwuje dolny pas: wiersz `TOT` przesuwa się wyżej, a nazwy
+odcinków zajmują dolną krawędź. Trasa trzymana jest **tylko w RAM** (brak zapisu
+we flashu). Po restarcie odbiornik ma pustą trasę i nie zna jeszcze Szusownika;
+gdy Szusownik przypisze go unicastem, Hud od razu zgłasza pakietem `'K'`
+(potwierdzenie trasy) swój aktualny stan (pusty blob), więc CRC się nie zgadza
+i Szusownik dosyła trasę ponownie. Potwierdzeniem dostarczenia jest jawny pakiet
+`'K'` (potwierdzenie trasy) — patrz §3 — a nie heartbeat.
+Zmiana trasy wymusza przerysowanie mapy (`routeCrc` w martwej strefie)
 i unieważnienie layoutu statystyk.
 
 Nazwy odcinków trasy i nazwy wgrane w mapę flash są czystym ASCII. Zarówno PWA
@@ -248,7 +376,8 @@ Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,
 ## 7. Struktura modułów
 
 - `src/config/` — piny, kolory, stałe, `hud_protocol.h` (generowany).
-- `src/core/` — czysta logika bez Arduino (dekodowanie pakietów, matematyka
+- `src/core/` — czysta logika bez Arduino (dekodowanie pakietów, reguła
+  parowania `hudShouldAnswerPair`, matematyka
   mapy, format TOT); pokryta testami hostowymi.
 - `src/display/` — ST7789: layout statystyk (przyrostowo) i rysowanie mapy.
 - `src/link/` — hybryda WiFi + odbiór ESP-NOW + stan łącza.
@@ -259,17 +388,20 @@ Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,
 
 - Hostowe (Catch2): `firmware/test/host/hudrekaw/test_*.cpp` —
   `powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1`
-  (buduje też testy Szusownika).
+  (buduje też testy Szusownika). Reguła parowania Huda
+  (`hudShouldAnswerPair`) ma test w `test_hud_packet.cpp`.
 - Kontrakt protokołu: `web/src/lib/hudProtocol.test.ts` (`npm test` w `web/`).
 - Render, realne ESP-NOW, WiFi i OTA pozostają manualne (`docs/testy.md`).
 
 ## 9. Ograniczenia
 
-- Telemetria `S` i pozycja `L` nadal są pojedynczym, niepotwierdzonym broadcastem
-  (jak w DisplayTest) — kolejny pakiet i tak nadchodzi w następnym okresie. Trasa
-  `R` ma mocniejszą ochronę: chunki z indeksem i CRC całości, ponawiane w oknach
-  co najwyżej raz na `SZ_HUD_ROUTE_RESEND_MS`, a potwierdzeniem dostarczenia jest
-  zgodność `routeCrc` w kolejnym `H` (sam CRC32 — obejmuje też CLEAR).
+- Telemetria `'S'` i pozycja `'L'` to pojedynczy unicast potwierdzony tylko
+  sprzętowym ACK-iem link-layer (bez retransmisji na poziomie aplikacji) —
+  kolejny pakiet i tak nadchodzi w następnym okresie, więc brak ACK nie zatrzymuje
+  nadawania (łącze przechodzi tylko w backoff `HUD_SEND_BACKOFF_MS`). Trasa `'R'`
+  ma mocniejszą ochronę: chunki z indeksem i CRC całości, a potwierdzeniem
+  dostarczenia jest jawny pakiet `'K'` z CRC trzymanego bloba (ponawianie w
+  oknach, max `HUD_ROUTE_MAX_CYCLES` cykli; sam CRC32 — obejmuje też CLEAR).
 - Utrata fixa w trybie mapy nie czyści ekranu — rysowana jest ostatnia pozycja.
 - Przy połączeniu z routerem HudRekaw zmienia kanał i traci łączność z
   Szusownikiem (kanał 1). Docelowo oba urządzenia są poza zasięgiem routera.

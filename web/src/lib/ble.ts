@@ -18,6 +18,7 @@ import {
   SZ_CMD_ACK,
   SZ_CMD_LIST,
   SZ_CMD_NACK,
+  SZ_CMD_PAIR,
   SZ_CMD_ROTATE,
   SZ_CMD_SETFREQ_LONG,
   SZ_CMD_SETFREQ_SHORT,
@@ -57,6 +58,9 @@ const SETTINGS_POLL_MS = 50;
 // Listowanie skanuje katalog SD na urządzeniu (na tej karcie setki ms–sekundy),
 // więc dajemy mu większy zapas niż ustawieniom.
 const LIST_TIMEOUT_MS = 4000;
+// Parowanie HUD: Szusownik zbiera odpowiedzi Huda przez HUD_PAIR_COLLECT_MS
+// (0,6 s) plus zapas na BLE/INFO.
+const PAIR_TIMEOUT_MS = 5000;
 
 export interface FileMeta {
   name: string;
@@ -68,6 +72,8 @@ export interface DeviceInfo {
   fileCount: number;
   routeCrc: number;
   routePoints: number;
+  /** MAC sparowanego HudRekaw ("" gdy nie sparowano). */
+  peerMac: string;
   volLow: number;
   volHigh: number;
   freqShort: number;
@@ -366,6 +372,7 @@ export class SzusownikBle {
         throw new Error(`Brak pola ${field} w INFO urządzenia`);
       }
     }
+    if (typeof info.peerMac !== "string") info.peerMac = "";
     return info;
   }
 
@@ -423,17 +430,43 @@ export class SzusownikBle {
     }
   }
 
-  private settingStatus(cmd: string, pattern: RegExp): Promise<string> {
-    const run = async () => {
-      await this.writeCtrl(cmd);
-      return this.pollStatus(pattern);
-    };
+  // Jak pollStatus, ale ignoruje STATUS sprzed wysłania komendy: liczy się
+  // dopiero odpowiedź, która różni się od `baseline` (firmware najpierw
+  // sygnalizuje początek operacji). Bez tego powtórne parowanie zwracałoby
+  // poprzedni wynik, bo stary "paired ..."/"err:pair-*" też pasuje do wzorca.
+  private async pollStatusChanged(
+    pattern: RegExp,
+    timeoutMs: number,
+    baseline: string,
+  ): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    let status = baseline;
+    let started = false;
+    for (;;) {
+      status = await this.readStatus();
+      if (!started && status !== baseline) started = true;
+      if (started && (pattern.test(status) || status.startsWith(SZ_ST_ERR))) return status;
+      if (Date.now() >= deadline) return status;
+      await new Promise((resolve) => setTimeout(resolve, SETTINGS_POLL_MS));
+    }
+  }
+
+  // Serializuje komendy ustawień: STATUS jest na urządzeniu jeden, więc
+  // równoległe operacje nadpisywałyby sobie wynik.
+  private queued<T>(run: () => Promise<T>): Promise<T> {
     const result = this.settingsLock.then(run, run);
     this.settingsLock = result.then(
       () => undefined,
       () => undefined,
     );
     return result;
+  }
+
+  private settingStatus(cmd: string, pattern: RegExp): Promise<string> {
+    return this.queued(async () => {
+      await this.writeCtrl(cmd);
+      return this.pollStatus(pattern);
+    });
   }
 
   // Statusy transferu niosą nazwę pliku (`streaming <nazwa>`, `done <nazwa> ...`,
@@ -455,6 +488,24 @@ export class SzusownikBle {
     // err:read = urządzenie nie potrafi odczytać pliku (np. zła karta/nośnik).
     // Błąd przejściowy: plik zostaje na karcie, ponawiamy przy następnym sync.
     return new Error(`Urządzenie przerwało transfer (${status})`);
+  }
+
+  /**
+   * Parowanie HUD: PWA → Szusownik (PAIR; czyści zapisany MAC i nadaje prośbę
+   * o parowanie po ESP-NOW) → HudRekaw odpowiada. Parowanie trwa ~0,6 s, więc
+   * dajemy większy timeout niż ustawieniom. Zwraca STATUS urządzenia
+   * ("paired <MAC>" / "err:pair-none" / "err:pair-multi" / "err:busy").
+   *
+   * Wchodzi w settingsLock (STATUS jest jeden) i czeka na odpowiedź INNĄ niż
+   * status sprzed parowania — firmware sygnalizuje początek statusem "pair wait".
+   */
+  async pairHud(): Promise<string> {
+    this.requireLink();
+    return this.queued(async () => {
+      const baseline = await this.readStatus();
+      await this.writeCtrl(SZ_CMD_PAIR);
+      return this.pollStatusChanged(/^paired |^err:pair/, PAIR_TIMEOUT_MS, baseline);
+    });
   }
 
   private static parseVolume(status: string): Volume {

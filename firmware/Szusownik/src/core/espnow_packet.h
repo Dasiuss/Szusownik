@@ -32,16 +32,33 @@ struct HudLocation {
 size_t encodeHudTelemetry(uint8_t* out, size_t outLen, uint8_t seq, const HudTelemetry& t);
 size_t encodeHudLocation(uint8_t* out, size_t outLen, uint8_t seq, const HudLocation& loc);
 
-// Heartbeat odbiornika (HudRekaw -> Szusownik): niesie wersję trzymanej trasy
-// (CRC32 bloba) i flagę "ma trasę". Szusownik wysyła trasę tylko, gdy wersje
-// się różnią — to jednocześnie wykrywanie dostępności odbiornika.
-struct HudHeartbeat {
+// Prośba o parowanie (Szusownik -> broadcast). Jedyne użycie broadcastu: Szusownik
+// nie zna jeszcze MAC-a Huda. Odpowiedzią jest `Q` (HudRekaw -> Szusownik), a MAC
+// Huda Szusownik bierze z metadanych ESP-NOW (src_addr), nie z treści pakietu.
+struct HudPairRequest {
+  uint8_t seq = 0;
+};
+
+size_t encodeHudPairRequest(uint8_t* out, size_t outLen, uint8_t seq);
+
+// Odpowiedź Huda na prośbę o parowanie.
+struct HudPairResponse {
+  uint8_t seq = 0;
+};
+
+size_t decodeHudPairResponse(const uint8_t* in, size_t len, HudPairResponse& out);
+
+// Potwierdzenie trasy (HudRekaw -> Szusownik): niesie wersję trzymanej trasy
+// (CRC32 bloba) i flagę "ma trasę". Zastępuje dawny heartbeat — Szusownik
+// przestaje ponawiać wysyłkę, gdy CRC się zgadza (tożsamością jest sam CRC32,
+// także dla CLEAR). Dostępność odbiornika daje sprzętowy ACK unicastu.
+struct HudRouteConfirm {
   uint8_t seq = 0;
   uint32_t crc = 0;
   bool hasRoute = false;
 };
 
-size_t decodeHudHeartbeat(const uint8_t* in, size_t len, HudHeartbeat& out);
+size_t decodeHudRouteConfirm(const uint8_t* in, size_t len, HudRouteConfirm& out);
 
 // Chunk trasy (Szusownik -> HudRekaw): nagłówek 10 B + do HUD_ROUTE_CHUNK_BYTES
 // bajtów bloba. HudRekaw składa po chunkIndex i waliduje CRC całości.
@@ -53,3 +70,21 @@ size_t encodeHudRouteChunk(uint8_t* out, size_t outLen, uint8_t seq, uint8_t chu
 uint16_t hudTenthsKm(float km);
 // Tryb HUD wg prędkości: > HUD_STATS_ABOVE_KMH -> statystyki, inaczej mapa.
 uint8_t hudModeForSpeed(float kmh);
+
+// Liczba chunków trasy dla bloba długości `len` (0 dla pustego bloba).
+uint8_t hudRouteChunkCount(uint16_t len);
+// Długość danych w chunku `chunkIndex` albo 0, gdy indeks jest poza zakresem.
+// Chroni przed niedomiarowym `len - offset` (i odczytem poza bloba), gdy trasa
+// w trakcie wysyłki zostanie zastąpiona krótszą.
+uint16_t hudRouteChunkLen(uint16_t len, uint8_t chunkIndex);
+
+// Czy pakiet `K` (potwierdzenie trasy) pochodzi od sparowanego Huda. Potwierdzenie
+// bez sparowanego MAC-a albo z obcego MAC-a jest ignorowane — inaczej po
+// sparowaniu innego HudRekaw stary CRC zablokowałby wysyłkę bieżącej trasy.
+bool hudConfirmFromPeer(const uint8_t* mac, const uint8_t* peerMac, bool peerValid);
+
+// Okres między oknami nadawania (ms). Gdy łącze nie jest potwierdzone (brak
+// niedawnego ACK), nadajemy rzadko (HUD_SEND_BACKOFF_MS), żeby nie grzać radia
+// w poszukiwaniu nieobecnego Huda. Przy potwierdzonym łączu okres zależy od
+// trybu: statystyki `S` co HUD_SEND_TELEMETRY_MS, mapa `L` co HUD_SEND_LOCATION_MS.
+unsigned long hudWindowPeriodMs(bool peerLinked, uint8_t mode);

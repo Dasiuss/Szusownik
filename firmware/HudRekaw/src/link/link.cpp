@@ -9,11 +9,9 @@
 namespace {
 
 Link* gLink = nullptr;
-const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 void onEspNowRecv(uint8_t* mac, uint8_t* data, uint8_t len) {
-  (void)mac;
-  if (gLink != nullptr) gLink->handlePacket(data, len);
+  if (gLink != nullptr) gLink->handlePacket(mac, data, len);
 }
 
 }  // namespace
@@ -40,15 +38,44 @@ void Link::startEspNow() {
   }
   esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
   esp_now_register_recv_cb(onEspNowRecv);
-  // Peer broadcast, żeby móc nadawać heartbeat do Szusownika (kanał 1).
-  esp_now_add_peer(const_cast<uint8_t*>(kBroadcast), ESP_NOW_ROLE_COMBO, HUD_LINK_CHANNEL,
-                   nullptr, 0);
   espNowReady_ = true;
   Serial.printf("[%s] ESP-NOW ready (receiver), ch=%d\n", HUDREKAW_VERSION, HUD_LINK_CHANNEL);
 }
 
-void Link::handlePacket(const uint8_t* data, uint8_t len) {
-  if (data == nullptr || len < 3) return;
+void Link::ensurePeer(const uint8_t* mac) {
+  if (!espNowReady_ || mac == nullptr) return;
+  if (esp_now_is_peer_exist(const_cast<uint8_t*>(mac))) return;
+  esp_now_add_peer(const_cast<uint8_t*>(mac), ESP_NOW_ROLE_COMBO, HUD_LINK_CHANNEL, nullptr, 0);
+}
+
+void Link::handlePacket(const uint8_t* mac, const uint8_t* data, uint8_t len) {
+  if (data == nullptr || len < 2) return;
+
+  if (data[0] == static_cast<uint8_t>(HUD_PKT_PAIR_REQ)) {
+    // Prośba o parowanie (jedyne użycie broadcastu). Odpowiadamy, gdy nie mamy
+    // swojego Szusownika albo gdy prosi ten, z którym już jesteśmy — patrz
+    // hudShouldAnswerPair. Odpowiedź wysyłamy z poll() (nie z callbacku WiFi).
+    HudPairRequest req;
+    if (decodeHudPairRequest(data, len, req) == 0 || mac == nullptr) return;
+    const uint8_t* known = peerPaired_ ? peerMac_ : nullptr;
+    if (hudShouldAnswerPair(peerPaired_, known, mac)) {
+      memcpy(pairSender_, mac, 6);
+      pairReplyPending_ = true;
+    }
+    return;
+  }
+
+  // Każdy inny pakiet jest unicastem od Szusownika — to znaczy, że jesteśmy
+  // sparowani z jego MAC-em.
+  if (mac != nullptr && (!peerPaired_ || memcmp(peerMac_, mac, 6) != 0)) {
+    memcpy(peerMac_, mac, 6);
+    peerPaired_ = true;
+    peerAddPending_ = true;
+    // Zgłoś Szusownikowi, jaką trasę teraz trzymamy. Po naszym restarcie jest
+    // pusta (brak NVS), więc Szusownik zobaczy niezgodny CRC i dosyła trasę —
+    // bez tego myślałby, że jest potwierdzona, i trasa zniknęłaby z ekranu.
+    confirmPending_ = true;
+  }
 
   if (data[0] == static_cast<uint8_t>(HUD_PKT_TELEMETRY)) {
     HudTelemetry decoded;
@@ -132,14 +159,24 @@ void Link::commitRoute() {
                 route_.pointCount, route_.segmentCount);
 }
 
-void Link::sendHeartbeat(unsigned long nowMs) {
+void Link::sendPairResponse() {
+  pairReplyPending_ = false;
   if (!espNowReady_) return;
-  if (nowMs - lastHeartbeatMs_ < HUD_HEARTBEAT_MS) return;
-  lastHeartbeatMs_ = nowMs;
-  uint8_t packet[HUD_PKT_HEARTBEAT_SIZE];
-  const size_t len =
-      encodeHudHeartbeat(packet, sizeof(packet), heartbeatSeq_++, routeCrc_, routeHasRoute_);
-  if (len) esp_now_send(const_cast<uint8_t*>(kBroadcast), packet, len);
+  ensurePeer(pairSender_);
+  uint8_t packet[HUD_PKT_PAIR_RESP_SIZE];
+  if (encodeHudPairResponse(packet, sizeof(packet), pairSeq_++)) {
+    esp_now_send(pairSender_, packet, HUD_PKT_PAIR_RESP_SIZE);
+  }
+}
+
+void Link::sendRouteConfirm() {
+  confirmPending_ = false;
+  if (!espNowReady_ || !peerPaired_) return;
+  ensurePeer(peerMac_);
+  uint8_t packet[HUD_PKT_ROUTE_CONFIRM_SIZE];
+  if (encodeHudRouteConfirm(packet, sizeof(packet), confirmSeq_++, routeCrc_, routeHasRoute_)) {
+    esp_now_send(peerMac_, packet, HUD_PKT_ROUTE_CONFIRM_SIZE);
+  }
 }
 
 void Link::useFallbackChannel() {
@@ -164,8 +201,16 @@ void Link::wifiStartNext() {
 }
 
 void Link::poll() {
-  if (routeCommitPending_) commitRoute();
-  sendHeartbeat(millis());
+  if (routeCommitPending_) {
+    commitRoute();
+    confirmPending_ = true;  // potwierdzamy Szusownikowi CRC trzymanej trasy
+  }
+  if (peerAddPending_) {
+    peerAddPending_ = false;
+    ensurePeer(peerMac_);
+  }
+  if (pairReplyPending_) sendPairResponse();
+  if (confirmPending_) sendRouteConfirm();
 
   if (wifiConnected_) {
     if (WiFi.status() != WL_CONNECTED) {

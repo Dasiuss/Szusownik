@@ -5,7 +5,7 @@
 // Szusownik v1 — stałe konfiguracyjne. SSOT decyzji: docs/koncepcja.md,
 // docs/wymagania-ESP.md, docs/ble-transfer.md, docs/jakosc-danych.md.
 
-#define SZ_FW_VERSION "1.8.0-hud-espnow"
+#define SZ_FW_VERSION "1.9.0-hud-espnow"
 // SZ_WIRE_PROTO, SZ_CSV_HEADER i SZ_CSV_META_SUFFIX są w protocol.h.
 
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
@@ -64,10 +64,11 @@ static const float SZ_HYST_KMH = 3.0f;
 #define SZ_ROUTE_ARRIVAL_MS 1000UL
 
 // Przekazywanie trasy do HudRekaw po ESP-NOW: minimalny odstęp między oknami
-// wysyłki (burst = do HUD_ROUTE_MAX_CYCLES cykli chunków `R`). Odbiornik
-// potwierdza odbiór kolejnym heartbeatem (co HUD_HEARTBEAT_MS = 3 s), więc bez
-// potwierdzenia ponawiamy rzadko — inaczej burst restartował się natychmiast po
-// każdym heartbeacie i radio nadawało non-stop (dogrzewanie). 9 s = 3 heartbeaty.
+// wysyłki trasy. Okno = burst chunków `R` (każdy następny po ACK poprzedniego)
+// zakończony oczekiwaniem na jawne potwierdzenie `K` z CRC, do
+// HUD_ROUTE_MAX_CYCLES prób (patrz protocol/hud-espnow-v1.json). Po nieudanym
+// oknie czekamy — Hud zgłosi inną wersję trasy, ale bez tego progu burst
+// restartowałby się natychmiast i radio nadawało non-stop (dogrzewanie).
 // Szczegóły: docs/hud-rekaw.md §3.
 #define SZ_HUD_ROUTE_RESEND_MS 9000UL
 
@@ -112,4 +113,11 @@ static const float SZ_HYST_KMH = 3.0f;
 // BLE — profil ZAMROŻONY (docs/ble-transfer.md). Wszystkie stałe protokołu
 // (ramki, okno, ACK, UUID, nazwa) są w protocol.h — zmiana tylko po benchmarku
 // na rzeczywistym ESP32 + Androidzie.
+
+// BLE: interwał reklamowania (NimBLE, jednostka 0.625 ms). Domyślny „fast" to
+// 0x20-0x30 (20-30 ms); 1600 = 1 s. Adv trwa tylko wtedy, gdy telefon nie jest
+// połączony, więc rzadsze reklamowanie ogranicza grzanie bez dotykania
+// zamrożonego profilu transferu (docs/ble-transfer.md). Wykrywanie w PWA może
+// potrwać do ~1 s — akceptowalne na ekranie połączenia.
+#define SZ_BLE_ADV_INTERVAL 1600
 

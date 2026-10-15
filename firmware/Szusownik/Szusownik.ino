@@ -175,22 +175,6 @@ void loop() {
   // i nie trafia do listy pobierania (PWA go nie widzi).
   storage.ensureMeta();
 
-  // Statystyki: dystans z kolejnych fixów (haversine) i max dnia. Max zjazdu
-  // liczy core::RunTracker (port ZigZag z PWA), karmiony per epoka GNSS niżej.
-  if (fix) {
-    if (kmh > maxDayKmh) maxDayKmh = kmh;
-    if (kmh >= SZ_SPD_STATIC_BELOW_KMH) {
-      double la = gnss.lat(), lo = gnss.lon();
-      if (havePrev) {
-        double d = TinyGPSPlus::distanceBetween(prevLat, prevLon, la, lo);
-        if (d >= 0.0 && d < 200.0) totalKm += (float)(d / 1000.0);
-      }
-      prevLat = la;
-      prevLon = lo;
-      havePrev = true;
-    }
-  }
-
   // Zapis na nadejście nowej próbki GNSS (commit RMC), nie na zegarze pętli.
   // Gwarantuje 1 wiersz = 1 pomiar i brak duplikatów przy dudnieniu zegarów.
   if (gnss.consumeNewSample()) {
@@ -212,6 +196,22 @@ void loop() {
 #endif
 
     if (fix) {
+      // Statystyki dnia (max i dystans) liczymy raz na nową próbkę — nie co
+      // iterację pętli: haversine to 8 transcendentalnych `double`, a wartość
+      // zmienia się dopiero na nowej epoce GNSS. Max zjazdu liczy
+      // core::RunTracker (port ZigZag z PWA) niżej.
+      if (kmh > maxDayKmh) maxDayKmh = kmh;
+      if (kmh >= SZ_SPD_STATIC_BELOW_KMH) {
+        double la = gnss.lat(), lo = gnss.lon();
+        if (havePrev) {
+          double d = TinyGPSPlus::distanceBetween(prevLat, prevLon, la, lo);
+          if (d >= 0.0 && d < 200.0) totalKm += (float)(d / 1000.0);
+        }
+        prevLat = la;
+        prevLon = lo;
+        havePrev = true;
+      }
+
       // Baro czytamy raz na epokę (i tak potrzebny do CSV i do fuzji HUD).
       if (baro.present()) baro.read();
       const bool baroOk = baro.present() && baro.valid();
@@ -349,7 +349,36 @@ void loop() {
   hudIn.latE7 = static_cast<int32_t>(lround(gnss.lat() * 1e7));
   hudIn.lonE7 = static_cast<int32_t>(lround(gnss.lon() * 1e7));
   hudIn.segmentIndex = segmentIndex;
-  hudLink.tick(now, hudIn, ble.busy());
+
+  // Parowanie HUD (zlecone z PWA przez BLE): zlecenie → HudLink, wynik → PWA.
+  // Sparowany MAC trafia też do INFO (ble.setHudPeer) dla widoku w PWA. INFO
+  // aktualizujemy PRZED STATUS-em wyniku — PWA czyta INFO zaraz po STATUS-ie,
+  // więc przy odwrotnej kolejności widziałaby stary peerMac. setHudPeer odświeża
+  // INFO tylko przy rzeczywistej zmianie (jedno skanowanie katalogu SD).
+  if (ble.takePairRequest()) hudLink.requestPairing();
+  ble.setHudPeer(hudLink.peerMac());
+  HudPairResult pairResult;
+  if (hudLink.takePairResult(pairResult)) {
+    char msg[48];
+    if (pairResult == HudPairResult::Ok) {
+      const uint8_t* m = hudLink.peerMac();
+      snprintf(msg, sizeof(msg), SZ_ST_PAIRED " %02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2],
+               m[3], m[4], m[5]);
+      ble.reportHudPair(msg);
+    } else if (pairResult == HudPairResult::None) {
+      ble.reportHudPair(SZ_ERR_PAIR_NONE);
+    } else if (pairResult == HudPairResult::TooMany) {
+      ble.reportHudPair(SZ_ERR_PAIR_MULTI);
+    } else {
+      ble.reportHudPair(SZ_ST_ERR "pair");
+    }
+  }
+
+  // Świeży czas dla linku HUD: od początku loop() do tego miejsca mogą wystąpić
+  // blokujące operacje (skan katalogu SD w refreshInfo po wyczyszczeniu MAC-a
+  // przy parowaniu, zapis SD), a okna nadawania i okno zbierania odpowiedzi na
+  // 'P' (prośba o parowanie) liczą się od rzeczywistego „teraz".
+  hudLink.tick(millis(), hudIn, ble.busy());
 
   // Oddaj CPU na chwilę, ale NIE w trakcie transferu BLE: profil BLE jest
   // zamrożony (spacing NOTIFY 4 ms), więc pompa musi kręcić się bez sztucznego

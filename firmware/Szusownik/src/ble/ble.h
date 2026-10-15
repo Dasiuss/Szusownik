@@ -26,6 +26,12 @@ class BleFiles {
   uint32_t routeVersion() const { return routeCrc_; }  // tożsamość = CRC32 bloba
   // Lokalne wyczyszczenie trasy (dotarcie do celu): pusty blob + odświeżenie INFO.
   void clearRoute();
+
+  // Parowanie HUD (ESP-NOW): PWA wysyła PAIR, główna pętla woła requestPairing()
+  // w HudLink, a wynik wraca tu przez reportHudPair(). Sparowany MAC trafia do INFO.
+  bool takePairRequest();
+  void reportHudPair(const char* status);
+  void setHudPeer(const uint8_t* mac);  // nullptr = brak sparowanego Huda
   // Wywoływane z callbacku charakterystyki trasy (host task NimBLE): kopiuje
   // porcję [offset,totalLen] do bufora stagingu i ustawia flagę commitu.
   void onRouteWrite(const uint8_t* data, size_t len);
@@ -80,6 +86,11 @@ class BleFiles {
   uint16_t routeStageLen_ = 0;
   uint16_t routeStageTotal_ = 0;
   volatile bool routeCommitPending_ = false;
+
+  // Parowanie HUD.
+  bool pairRequested_ = false;
+  bool hudPeerValid_ = false;
+  uint8_t hudPeerMac_[6] = {0};
 
   void commitRoute();
 

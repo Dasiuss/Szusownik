@@ -142,6 +142,7 @@ void BleFiles::begin(Storage* storage) {
   adv->enableScanResponse(true);
   adv->addServiceUUID(SZ_UUID_SVC);
   adv->setName(SZ_BLE_NAME);
+  adv->setAdvertisingInterval(SZ_BLE_ADV_INTERVAL);  // 1 s (jednostka 0.625 ms)
   adv->start();
   SZ_LOGIF("BLE start name=%s mtu_req=517", SZ_BLE_NAME);
 }
@@ -172,6 +173,14 @@ void BleFiles::refreshInfo() {
   j += String((unsigned long)routeCrc_);
   j += ",\"routePoints\":";
   j += String((unsigned)routePoints_);
+  j += ",\"peerMac\":\"";
+  if (hudPeerValid_) {
+    char mac[18];
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", hudPeerMac_[0], hudPeerMac_[1],
+             hudPeerMac_[2], hudPeerMac_[3], hudPeerMac_[4], hudPeerMac_[5]);
+    j += mac;
+  }
+  j += "\"";
   if (beeper_) {
     j += ",\"volLow\":";
     j += String(beeper_->volLow());
@@ -247,6 +256,31 @@ void BleFiles::reportMinBeep() {
   refreshInfo();
   setStatus(String(msg));
   SZ_LOGI(msg);
+}
+
+bool BleFiles::takePairRequest() {
+  const bool pending = pairRequested_;
+  pairRequested_ = false;
+  return pending;
+}
+
+void BleFiles::reportHudPair(const char* status) {
+  // Bez refreshInfo(): stan (MAC) aktualizuje setHudPeer() PRZED tym wywołaniem,
+  // a każde odświeżenie INFO to pełny skan katalogu SD (countCsv).
+  setStatus(String(status));
+  SZ_LOGI(status);
+}
+
+void BleFiles::setHudPeer(const uint8_t* mac) {
+  const bool valid = mac != nullptr;
+  if (valid == hudPeerValid_ && (!valid || memcmp(mac, hudPeerMac_, 6) == 0)) return;
+  hudPeerValid_ = valid;
+  if (valid) {
+    memcpy(hudPeerMac_, mac, 6);
+  } else {
+    memset(hudPeerMac_, 0, sizeof(hudPeerMac_));
+  }
+  refreshInfo();
 }
 
 void BleFiles::setStatus(const String& s) {
@@ -366,6 +400,20 @@ void BleFiles::handleCommand(const String& cmd) {
     } else {
       setStatus(SZ_ERR_NO_BEEPER);
     }
+  } else if (cmd.startsWith(SZ_CMD_PAIR)) {
+    // Parowanie HUD: główna pętla woła HudLink::requestPairing() (takePairRequest),
+    // a wynik wraca przez reportHudPair(). Bez dodatkowego statusu tutaj — PWA
+    // czeka na "paired ..."/"err:pair-*".
+    if (transferring_) {
+      // W trakcie transferu HudLink pauzuje radio (transfer ma priorytet), więc
+      // parowanie wykonałoby się dopiero po nim — po timeoucie PWA. Odrzucamy.
+      setStatus(SZ_ERR_BUSY);
+      return;
+    }
+    // Status "pair wait" sygnalizuje PWA początek parowania: dzięki temu wynik
+    // poprzedniej próby nie jest brany za wynik bieżącej.
+    setStatus(SZ_ST_PAIR_WAIT);
+    pairRequested_ = true;
   }
 }
 

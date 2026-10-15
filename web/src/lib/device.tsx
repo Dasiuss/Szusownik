@@ -41,6 +41,8 @@ interface DeviceContextValue {
   setFrequency: (which: "short" | "long", value: number) => Promise<Freq>;
   setTiming: (which: keyof Timing, value: number) => Promise<Timing>;
   setMinBeepKmh: (value: number) => Promise<number>;
+  /** Paruje HUD (HudRekaw) z tym Szusownikiem. Zwraca STATUS urządzenia. */
+  pairHud: () => Promise<string>;
   /** Żąda zsynchronizowania trasy na urządzeniu (null = wyślij CLEAR). */
   syncRoute: (encoded: RouteBlob | null) => void;
 }
@@ -295,6 +297,20 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return requireClient().setMinBeepKmh(value);
   }
 
+  async function pairHud(): Promise<string> {
+    const client = requireClient();
+    try {
+      const status = await client.pairHud();
+      const fresh = await client.readInfo();  // sparowany MAC ląduje w INFO
+      infoRef.current = fresh;
+      setInfo(fresh);
+      return status;
+    } catch (caught) {
+      if (caught instanceof DeviceDisconnectedError) forgetConnection();
+      throw caught;
+    }
+  }
+
   useEffect(() => {
     void tryReconnect();
     return clearIdleTimer;
@@ -320,6 +336,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setFrequency,
         setTiming,
         setMinBeepKmh,
+        pairHud,
         syncRoute,
       }}
     >

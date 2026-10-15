@@ -1,16 +1,22 @@
 {
-  "$comment": "SSOT protokołu ESP-NOW między Szusownikiem (nadajnik) a HudRekaw (odbiornik, wire-proto szusownik/hud-espnow-v1). Ten plik jest jedynym źródłem prawdy dla obu firmware. Zmieniasz TU, potem uruchamiasz: node scripts/gen-hud-protocol.mjs (generuje firmware/Szusownik/src/config/hud_protocol.h i firmware/HudRekaw/src/config/hud_protocol.h). Test web/src/lib/hudProtocol.test.ts pilnuje, że wygenerowane pliki są aktualne. PAKIETY: S=telemetria (14 B, na końcu segmentIndex), L=pozycja+tryb (17 B, na końcu segmentIndex), H=heartbeat HudRekaw->Szusownik (8 B, niesie wersję trzymanej trasy = CRC32 bloba), R=chunk trasy Szusownik->HudRekaw (10 B nagłówka + do HUD_ROUTE_CHUNK_BYTES danych). Blob trasy ma własny SSOT: protocol/route-v1.json. segmentIndex = HUD_SEGMENT_NONE, gdy brak aktywnej trasy.",
+  "$comment": "SSOT protokołu ESP-NOW między Szusownikiem (nadajnik) a HudRekaw (odbiornik, wire-proto szusownik/hud-espnow-v1). Ten plik jest jedynym źródłem prawdy dla obu firmware. Zmieniasz TU, potem uruchamiasz: node scripts/gen-hud-protocol.mjs (generuje firmware/Szusownik/src/config/hud_protocol.h i firmware/HudRekaw/src/config/hud_protocol.h). Test web/src/lib/hudProtocol.test.ts pilnuje, że wygenerowane pliki są aktualne. PAKIETY: S=telemetria (14 B, na końcu segmentIndex), L=pozycja+tryb (17 B, na końcu segmentIndex), R=chunk trasy Szusownik->HudRekaw (10 B nagłówka + do HUD_ROUTE_CHUNK_BYTES danych), P=prośba o parowanie Szusownik->broadcast (2 B), Q=odpowiedź Huda na parowanie (2 B; Szusownik bierze MAC nadawcy z metadanych ESP-NOW), K=potwierdzenie trasy HudRekaw->Szusownik (8 B, niesie CRC32 trzymanego bloba). Blob trasy ma własny SSOT: protocol/route-v1.json. segmentIndex = HUD_SEGMENT_NONE, gdy brak aktywnej trasy. UWAGA: S/L/R/K są zawsze unicastem do zapisanego w NVS MAC-a Huda, a P jest jedynym broadcastem (tylko w trybie parowania) — typ pakietu sam mówi Hudowi, że reszta dotarła unicastem.",
   "numbers": {
     "HUD_PKT_TELEMETRY_SIZE": 14,
     "HUD_PKT_LOCATION_SIZE": 17,
-    "HUD_PKT_HEARTBEAT_SIZE": 8,
+    "HUD_PKT_PAIR_REQ_SIZE": 2,
+    "HUD_PKT_PAIR_RESP_SIZE": 2,
+    "HUD_PKT_ROUTE_CONFIRM_SIZE": 8,
     "HUD_PKT_ROUTE_HEADER_SIZE": 10,
     "HUD_ROUTE_CHUNK_BYTES": 200,
     "HUD_PKT_ROUTE_SIZE": 210,
-    "HUD_HEARTBEAT_MS": 3000,
-    "HUD_HEARTBEAT_TIMEOUT_MS": 10000,
-    "HUD_ROUTE_CHUNK_MS": 60,
-    "HUD_ROUTE_MAX_CYCLES": 4,
+    "HUD_LINK_TIMEOUT_MS": 11000,
+    "HUD_SEND_BACKOFF_MS": 3000,
+    "HUD_TX_ACK_GRACE_MS": 50,
+    "HUD_PAIR_COLLECT_MS": 600,
+    "HUD_PAIR_REQ_MS": 200,
+    "HUD_ROUTE_CHUNK_ACK_TIMEOUT_MS": 250,
+    "HUD_ROUTE_CONFIRM_TIMEOUT_MS": 1000,
+    "HUD_ROUTE_MAX_CYCLES": 3,
     "HUD_SEGMENT_NONE": 255,
     "HUD_SEGMENTS_SHOWN": 3,
     "HUD_LINK_CHANNEL": 1,
@@ -35,7 +41,9 @@
   "chars": {
     "HUD_PKT_TELEMETRY": "S",
     "HUD_PKT_LOCATION": "L",
-    "HUD_PKT_HEARTBEAT": "H",
+    "HUD_PKT_PAIR_REQ": "P",
+    "HUD_PKT_PAIR_RESP": "Q",
+    "HUD_PKT_ROUTE_CONFIRM": "K",
     "HUD_PKT_ROUTE": "R"
   }
 }

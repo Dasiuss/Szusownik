@@ -234,8 +234,10 @@ Nie mieszać charakterystyki `DisplayTest` z transportem plików bez formalnego
 kontraktu (małe pakiety HUD — roadmapa).
 
 Osobne urządzenie z ekranem (HudRekaw) nie używa BLE do podglądu: Szusownik
-nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, broadcast).
-Protokół `S`/`L` i reguła trybu wg prędkości są w `docs/hud-rekaw.md`.
+nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, unicast do
+sparowanego Huda; broadcast tylko w parowaniu).
+Protokół `'S'` (telemetria)/`'L'` (pozycja + tryb) i reguła trybu wg prędkości są
+w `docs/hud-rekaw.md`.
 
 Szusownik **nie dostaje już małych pakietów HUD** (mapa/bitmapy/animacja usunięte
 z planu). Jedyny kanał w tę stronę to wysłanie trasy z PWA do urządzenia; jest

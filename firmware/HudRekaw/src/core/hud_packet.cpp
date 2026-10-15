@@ -1,5 +1,7 @@
 #include "hud_packet.h"
 
+#include <string.h>
+
 namespace {
 
 uint16_t getU16(const uint8_t* in) {
@@ -54,9 +56,23 @@ size_t decodeHudLocation(const uint8_t* in, size_t len, HudLocation& out) {
   return HUD_PKT_LOCATION_SIZE;
 }
 
-size_t encodeHudHeartbeat(uint8_t* out, size_t outLen, uint8_t seq, uint32_t crc, bool hasRoute) {
-  if (out == nullptr || outLen < HUD_PKT_HEARTBEAT_SIZE) return 0;
-  out[0] = static_cast<uint8_t>(HUD_PKT_HEARTBEAT);
+size_t decodeHudPairRequest(const uint8_t* in, size_t len, HudPairRequest& out) {
+  if (in == nullptr || len < HUD_PKT_PAIR_REQ_SIZE) return 0;
+  if (in[0] != static_cast<uint8_t>(HUD_PKT_PAIR_REQ)) return 0;
+  out.seq = in[1];
+  return HUD_PKT_PAIR_REQ_SIZE;
+}
+
+size_t encodeHudPairResponse(uint8_t* out, size_t outLen, uint8_t seq) {
+  if (out == nullptr || outLen < HUD_PKT_PAIR_RESP_SIZE) return 0;
+  out[0] = static_cast<uint8_t>(HUD_PKT_PAIR_RESP);
+  out[1] = seq;
+  return HUD_PKT_PAIR_RESP_SIZE;
+}
+
+size_t encodeHudRouteConfirm(uint8_t* out, size_t outLen, uint8_t seq, uint32_t crc, bool hasRoute) {
+  if (out == nullptr || outLen < HUD_PKT_ROUTE_CONFIRM_SIZE) return 0;
+  out[0] = static_cast<uint8_t>(HUD_PKT_ROUTE_CONFIRM);
   out[1] = seq;
   out[2] = static_cast<uint8_t>(crc & 0xFF);
   out[3] = static_cast<uint8_t>((crc >> 8) & 0xFF);
@@ -64,7 +80,7 @@ size_t encodeHudHeartbeat(uint8_t* out, size_t outLen, uint8_t seq, uint32_t crc
   out[5] = static_cast<uint8_t>((crc >> 24) & 0xFF);
   out[6] = hasRoute ? 0x01 : 0x00;
   out[7] = 0;
-  return HUD_PKT_HEARTBEAT_SIZE;
+  return HUD_PKT_ROUTE_CONFIRM_SIZE;
 }
 
 size_t decodeHudRouteChunk(const uint8_t* in, size_t len, HudRouteChunk& out) {
@@ -78,4 +94,11 @@ size_t decodeHudRouteChunk(const uint8_t* in, size_t len, HudRouteChunk& out) {
   out.payloadLen = static_cast<uint16_t>(len - HUD_PKT_ROUTE_HEADER_SIZE);
   out.payload = in + HUD_PKT_ROUTE_HEADER_SIZE;
   return len;
+}
+
+bool hudShouldAnswerPair(bool paired, const uint8_t* peerMac, const uint8_t* senderMac) {
+  if (senderMac == nullptr) return false;
+  if (!paired) return true;
+  if (peerMac == nullptr) return false;
+  return memcmp(peerMac, senderMac, 6) == 0;
 }

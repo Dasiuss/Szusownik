@@ -27,6 +27,10 @@ import {
   SZ_FREQ_MIN_HZ,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_FREQ_STEP_HZ,
+  SZ_ST_PAIRED,
+  SZ_ERR_BUSY,
+  SZ_ERR_PAIR_MULTI,
+  SZ_ERR_PAIR_NONE,
   SZ_VOL_HIGH_DEFAULT,
   SZ_VOL_LOW_DEFAULT,
 } from "../lib/protocol.ts";
@@ -41,6 +45,8 @@ export default function SettingsView() {
   const [frequency, setFrequency] = useState<Freq | null>(null);
   const [timing, setTiming] = useState<Timing | null>(null);
   const [minBeepKmh, setMinBeepKmh] = useState<number | null>(null);
+  const [pairBusy, setPairBusy] = useState(false);
+  const [pairNotice, setPairNotice] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [resetArmed, setResetArmed] = useState(false);
@@ -223,7 +229,35 @@ export default function SettingsView() {
     device.clearError();
   }
 
+  async function pairHud() {
+    if (pairBusy) return;
+    setPairBusy(true);
+    setPairNotice(null);
+    setSettingsError(null);
+    try {
+      const status = await device.pairHud();
+      if (status.startsWith(SZ_ERR_PAIR_NONE)) {
+        setPairNotice("Nie znaleziono HUD-a w zasięgu. Włącz HudRekaw i spróbuj ponownie.");
+      } else if (status.startsWith(SZ_ERR_PAIR_MULTI)) {
+        setPairNotice("W zasięgu jest więcej niż jeden HudRekaw. Zostaw włączony tylko ten, który chcesz przypisać.");
+      } else if (status.startsWith(SZ_ST_PAIRED)) {
+        setPairNotice(`Przypisano HUD ${status.slice(SZ_ST_PAIRED.length).trim()}.`);
+      } else if (status.startsWith(SZ_ERR_BUSY)) {
+        setPairNotice("Urządzenie jest zajęte (trwa transfer pliku). Spróbuj po zakończeniu pobierania.");
+      } else {
+        setPairNotice(`Odpowiedź urządzenia: ${status}`);
+      }
+    } catch (caught) {
+      setSettingsError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setPairBusy(false);
+    }
+  }
+
   const connected = device.state === "connected" || device.state === "checking" || device.state === "downloading";
+  // Parowanie wymaga bezczynnego łącza: w trakcie transferu firmware ma zamknięte
+  // radio HUD i STATUS należy do transferu, więc przycisk jest zablokowany.
+  const canPair = device.state === "connected";
 
   return (
     <div className="page-stack">
@@ -301,6 +335,15 @@ export default function SettingsView() {
            {minBeepKmh !== null ? <div className="sliders">
                <SoundSlider label="Próg pikania" hint="wzór sygnału pozostaje bez zmian" value={minBeepKmh} min={SZ_BEEP_MIN_KMH_MIN} max={SZ_BEEP_MIN_KMH_MAX} step={SZ_BEEP_MIN_KMH_STEP} onChange={changeMinBeepKmh} onPreview={testMinBeepKmh} suffix=" km/h" />
             </div> : <p className="settings-locked">Suwaki pojawią się po połączeniu z urządzeniem.</p>}
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <div className="section-heading"><div><span className="eyebrow">Wyświetlacz na rękawie</span><h2>HUD (HudRekaw)</h2></div><span className="section-status">{canPair ? (device.info?.peerMac ? "Sparowany" : "Niesparowany") : connected ? "Zajęte (transfer)…" : "Połącz urządzenie"}</span></div>
+          <div className="settings-card">
+            <div className="settings-card-heading"><div className="settings-icon settings-icon-green"><Icon name="bluetooth" size={19} /></div><div><h3>Parowanie</h3><p>Sparuj HudRekaw z tym Szusownikiem, żeby pokazywał dane tylko z niego. Parowanie czyści poprzednie przypisanie.</p></div><button className="button button-ghost settings-reset" disabled={!canPair || pairBusy} onClick={() => void pairHud()} type="button">{pairBusy ? <><span className="spinner" /> Paruję…</> : <><Icon name="bluetooth" size={14} /> Paruj</>}</button></div>
+            <div className="settings-meta"><span>Sparowany HUD</span><b>{device.info?.peerMac || "—"}</b></div>
+            {pairNotice && <p className="settings-locked">{pairNotice}</p>}
           </div>
         </section>
 
