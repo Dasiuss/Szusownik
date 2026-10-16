@@ -1,5 +1,6 @@
 import { db } from "./db.ts";
 import { DEVICE_CSV_V2_HEADER } from "./csv.ts";
+import { GattQueue } from "./gattQueue.ts";
 import { ROUTE_BLE_CHUNK, ROUTE_BLE_HEADER_SIZE, SZ_UUID_ROUTE } from "./routeProtocol.ts";
 import {
   SZ_BEEP_GAP_MAX_MS,
@@ -51,6 +52,14 @@ import {
 // protocol/ble-file-v1.json), więc nie duplikuj ich tutaj.
 
 const TRANSFER_TIMEOUT_MS = 120000;
+// Postęp do UI: nie ma sensu raportować każdej ramki (~250/s) — pierwsza ramka
+// leci od razu, potem najwyżej co tyle, a na końcu wymuszenie pełnej liczby.
+const PROGRESS_INTERVAL_MS = 500;
+// Strumień uznajemy za ucichnięty, gdy nie przyszła żadna ramka przez tyle.
+// Dopiero wtedy sięgamy po STATUS (wykrycie przerwania np. err:read bez end
+// markera w ~1 s), żeby w zdrowym transferze nie zabierać pasma na odczyt STATUS
+// i nie nakładać go na zapisy potwierdzeń.
+const STREAM_STALL_MS = 1000;
 // Start/lista mają zapas ponad czas skanu SD i otwarcia pliku: na urządzeniu
 // pętla główna bywa zajęta (zapis GNSS, fsync), a timeout liczony jest od
 // wysłania komendy. Za krótki próg = fałszywy błąd przy sprawnej karcie.
@@ -260,6 +269,10 @@ export class SzusownikBle {
   private info: BluetoothRemoteGATTCharacteristic | null = null;
   private data: BluetoothRemoteGATTCharacteristic | null = null;
   private stat: BluetoothRemoteGATTCharacteristic | null = null;
+  // Jedna kolejka na WSZYSTKIE operacje GATT tego urządzenia (INFO/STATUS/CTRL/
+  // ROUTE). Chrome/Android potrafi odrzucić operację (`NotSupportedError: GATT
+  // operation failed for unknown reason`), gdy odczyt i zapis są w locie razem.
+  private readonly gatt = new GattQueue();
   private settingsLock: Promise<unknown> = Promise.resolve();
   private detached = false;
 
@@ -337,8 +350,11 @@ export class SzusownikBle {
   }
 
   private async writeCtrl(cmd: string): Promise<void> {
-    this.requireLink();
-    await this.ctrl!.writeValueWithResponse(new TextEncoder().encode(cmd));
+    const bytes = new TextEncoder().encode(cmd);
+    await this.gatt.run(async () => {
+      this.requireLink();
+      await this.ctrl!.writeValueWithResponse(bytes);
+    });
   }
 
   private static readonly INFO_NUMBER_FIELDS = [
@@ -356,8 +372,10 @@ export class SzusownikBle {
   ] as const;
 
   async readInfo(): Promise<DeviceInfo> {
-    this.requireLink();
-    const v = await this.info!.readValue();
+    const v = await this.gatt.run(async () => {
+      this.requireLink();
+      return this.info!.readValue();
+    });
     const bytes = dvBytes(v);
     const text = new TextDecoder().decode(bytes);
     let info: DeviceInfo;
@@ -380,8 +398,10 @@ export class SzusownikBle {
   }
 
   private async readStatus(): Promise<string> {
-    this.requireLink();
-    const v = await this.stat!.readValue();
+    const v = await this.gatt.run(async () => {
+      this.requireLink();
+      return this.stat!.readValue();
+    });
     return new TextDecoder().decode(dvBytes(v));
   }
 
@@ -408,7 +428,10 @@ export class SzusownikBle {
       view.setUint16(2, total, true);
       frame.set(bytes.subarray(offset, offset + take), ROUTE_BLE_HEADER_SIZE);
       try {
-        await this.route.writeValueWithResponse(frame);
+        await this.gatt.run(async () => {
+          this.requireLink();
+          await this.route!.writeValueWithResponse(frame);
+        });
         offset += take;
       } catch (error) {
         // Zerwane łącze nie jest "za dużym zapisem" — nie ma czego zmniejszać.
@@ -633,6 +656,19 @@ export class SzusownikBle {
     let nackSentFor = -1;
     let failed: unknown = null;
     let chain: Promise<void> = Promise.resolve();
+    // Czas ostatniego odebranego NOTIFY — po nim poznajemy, że strumień ucichł
+    // (patrz pętla niżej: STATUS czytamy dopiero po ciszy, nie co 250 ms).
+    let lastFrameAt = Date.now();
+    // Postęp do UI: pierwsza ramka od razu, potem najwyżej co PROGRESS_INTERVAL_MS,
+    // a na końcu wymuszenie (żeby licznik domknął się na pełnej wartości).
+    let lastProgressAt = 0;
+    const reportProgress = (frames: number, force = false) => {
+      const now = Date.now();
+      if (!force && now - lastProgressAt < PROGRESS_INTERVAL_MS) return;
+      lastProgressAt = now;
+      console.log(`[ble] ${meta.name} ramki=${frames}`);
+      onFrames(frames);
+    };
 
     const finish = () => {
       finished = true;
@@ -651,6 +687,7 @@ export class SzusownikBle {
           finalAck = seq + 1;
           await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
           finish();
+          reportProgress(expected, true); // domknięcie licznika na pełnej wartości
         } else if (finished && seq === finalAck - 1) {
           await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
         }
@@ -666,21 +703,19 @@ export class SzusownikBle {
         // (NotSupportedError). Retransmisję odzyskuje też timeout ACK firmware.
         if (nackSentFor !== expected) {
           nackSentFor = expected;
+          console.log(`[ble] ${meta.name} NACK n=${expected}`);
           await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
         }
         return;
       }
-      if (expected < 16) {
-        console.log(`[ble] frame seq=${seq} len=${bytes.length} head=${Array.from(payload.slice(0, 4), (b) => b.toString(16).padStart(2, "0")).join(" ")}`);
-      }
       try {
         await writer.write(payload);
       } catch (err) {
-        console.error(`[ble] write fail seq=${seq} len=${payload.length}`, err);
+        console.error(`[ble] ${meta.name} write fail seq=${seq} len=${payload.length}`, err);
         throw err;
       }
       expected++;
-      onFrames(expected);
+      reportProgress(expected);
       if (expected % SZ_BLE_ACK_BLOCK === 0) {
         await this.writeCtrl(`${SZ_CMD_ACK}${expected}`);
       }
@@ -689,6 +724,7 @@ export class SzusownikBle {
     const onNotify = (e: Event) => {
       const v = (e.target as BluetoothRemoteGATTCharacteristic).value;
       if (!v) return;
+      lastFrameAt = Date.now();
       // Kopiujemy synchronicznie: bufor DataView może być współdzielony między
       // notyfikacjami, a handleFrame wykonuje się asynchronicznie (kolejka chain).
       const bytes = dvBytes(v);
@@ -712,17 +748,21 @@ export class SzusownikBle {
       if (!started.startsWith("streaming") && !started.startsWith("done")) {
         throw new Error(`Brak startu transferu (${started || "brak statusu"})`);
       }
-      let lastStatusCheck = 0;
+      console.log(`[ble] start ${meta.name} (${meta.size} B)`);
+      lastFrameAt = Date.now();
+      let lastStallCheck = 0;
       for (;;) {
         await chain;
         if (failed) throw failed;
         if (finished && readerDone) break;
-        // Firmware może przerwać transfer (np. err:read) BEZ end markera. Wtedy
-        // sama pętla czekałaby do timeoutu transferu, więc co ~250 ms sprawdzamy
-        // STATUS na błąd dotyczący tego pliku.
+        // Firmware może przerwać transfer (np. err:read) BEZ end markera. Zamiast
+        // odpytywać STATUS bez przerwy (zabiera pasmo i nakłada się na zapisy
+        // potwierdzeń), sięgamy po STATUS dopiero, gdy strumień ramek ucichł — w
+        // zdrowym transferze nie ma tu ani jednego odczytu, a błąd i tak
+        // wykryjemy w ~1 s.
         const now = Date.now();
-        if (now - lastStatusCheck >= 250) {
-          lastStatusCheck = now;
+        if (now - lastFrameAt >= STREAM_STALL_MS && now - lastStallCheck >= STREAM_STALL_MS) {
+          lastStallCheck = now;
           let current = "";
           try {
             current = await this.readStatus();
@@ -730,6 +770,7 @@ export class SzusownikBle {
             current = ""; // chwilowy błąd odczytu STATUS nie może psuć transferu
           }
           if (current.includes(meta.name) && current.startsWith(SZ_ST_ERR)) {
+            console.warn(`[ble] ${meta.name} STATUS ${current}`);
             throw this.classifyTransferError(current);
           }
         }
@@ -770,6 +811,7 @@ export class SzusownikBle {
         throw new PermanentDownloadError(`Zły nagłówek CSV: ${header}`);
       }
       if (lines < 2) throw new PermanentDownloadError("Plik bez próbek");
+      console.log(`[ble] done ${meta.name} ramki=${finalAck - 1} bajty=${outLen} linie=${lines}`);
       return text;
     } finally {
       clearTimeout(timeout);

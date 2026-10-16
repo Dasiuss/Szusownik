@@ -104,6 +104,11 @@ class HudLink {
   bool ready_ = false;
   bool radio_ = false;
   bool paused_ = false;
+  // Diagnostyka 4A: radio włączamy i gasimy co okno telemetrii, więc nie
+  // logujemy każdego przełączenia (byłby szum). Mierzymy koszt przełączenia
+  // związanego z pauzą na transfer BLE: `logRadioOn_` przechwytuje czas
+  // najbliższego radioOn() po wznowieniu.
+  bool logRadioOn_ = false;
   uint8_t peerMac_[6] = {0};
   bool peerValid_ = false;
   volatile bool haveAck_ = false;

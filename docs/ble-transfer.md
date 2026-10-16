@@ -434,6 +434,30 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   NOTIFY. `refreshInfo()` w trakcie transferu tylko ustawia `infoDirty_` i jest
   doganiany w `finishStream()`; `storage.sync()` jest pomijany, gdy `ble.busy()`.
   PWA nie wysyła trasy równolegle z pobieraniem (sekwencjonuje `flushRoute`).
+- **Jedna kolejka operacji GATT po stronie PWA** (2026-10-16): wszystkie operacje
+  (INFO/STATUS/CTRL/ROUTE) przechodzą przez `GattQueue`
+  (`web/src/lib/gattQueue.ts`), więc odczyt STATUS nie nakłada się na zapis
+  potwierdzenia. Chrome potrafi odrzucić nakładającą się operację komunikatem
+  `NotSupportedError: GATT operation failed for unknown reason`; objaw na
+  urządzeniu: PWA wyrywa się błędem, a firmware nie dostaje **żadnego** ACK
+  (okno rośnie do pełnego `unacked` i transfer trzeba przerwać `STOP`).
+- **Postęp raportowany rzadko** (2026-10-16): `onFrames`/`onProgress` wołane
+  najwyżej co 500 ms (pierwsza ramka od razu, ostatnia wymuszona na końcu pliku),
+  a nie na każdą ramkę (~250/s). Setki aktualizacji stanu React na sekundę
+  obciążały wątek główny i opóźniały zapisy ACK, pogłębiając gubienie ramek.
+- **STATUS odpytywany tylko po ciszy strumienia** (2026-10-16): pętla odbioru
+  czyta STATUS dopiero, gdy przez ~1 s nie przyszła żadna ramka (wcześniej co
+  250 ms). W zdrowym transferze to zero odczytów STATUS, a przerwanie `err:`
+  bez end markera (np. `err:read`) i tak jest wykrywane w ~1 s.
+- **Logi diagnostyczne BLE** (2026-10-16): PWA loguje zdarzenia transferu
+  (`start`, `NACK n=`, `done`, wygaszenie z odczytanym STATUS), bez logu każdej
+  ramki (ten zmieniał wynik benchmarku). Firmware `HudLink` loguje przełączenie
+  radia ESP-NOW na czas transferu BLE z kosztem `esp_wifi_stop()`/`esp_wifi_start()`
+  (`HUD radio OFF/ON`), żeby dane dało się skorelować z `NACK`/`replay`.
+
+> Status (2026-10-16): kolejka GATT, throttling postępu i odczyt STATUS po ciszy
+> mają testy PWA (emulator + `GattQueue`), ale **nie są jeszcze potwierdzone na
+> sprzęcie** — wymagają powtórnego transferu z telefonu.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw

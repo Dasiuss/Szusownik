@@ -140,18 +140,22 @@ class FakeCharacteristic {
   }
 
   async readValue(): Promise<DataView> {
-    return toDataView(this.emulator.readCharacteristic(this.uuid));
+    return this.emulator.gattOp(`read:${this.uuid}`, () =>
+      toDataView(this.emulator.readCharacteristic(this.uuid)),
+    );
   }
 
   async writeValueWithResponse(bytes: Uint8Array): Promise<void> {
-    if (!this.emulator.linked) {
-      throw new Error("GATT Server is disconnected. Cannot perform GATT operations.");
-    }
-    if (this.uuid === SZ_UUID_ROUTE) {
-      this.emulator.writeRoute(bytes);
-      return;
-    }
-    await this.emulator.writeCtrl(decode(toDataView(bytes)));
+    await this.emulator.gattOp(`write:${this.uuid}`, async () => {
+      if (!this.emulator.linked) {
+        throw new Error("GATT Server is disconnected. Cannot perform GATT operations.");
+      }
+      if (this.uuid === SZ_UUID_ROUTE) {
+        this.emulator.writeRoute(bytes);
+        return;
+      }
+      await this.emulator.writeCtrl(decode(toDataView(bytes)));
+    });
   }
 
   addEventListener(type: string, listener: Listener): void {
@@ -215,6 +219,32 @@ export class DeviceEmulator {
   private malformedListPending: boolean;
 
   readonly commands: string[] = [];
+  /** Diagnostyka: maks. liczba równoległych operacji GATT (poprawnie zawsze 1). */
+  maxConcurrentGattOps = 0;
+  /** Diagnostyka: etykiety operacji GATT w kolejności wywołań. */
+  readonly gattOps: string[] = [];
+  /** Liczba ramek danych ostatniego transferu (diagnostyka testów). */
+  lastTransferFrames = 0;
+  private activeGattOps = 0;
+
+  /**
+   * Opakowuje pojedynczą operację GATT. Wstawiona granica async (setImmediate)
+   * odpowiada realnemu czasowi operacji i pozwala wykryć nakładanie: bez
+   * serializacji dwa równoległe odczyty/zapisy dałyby `maxConcurrentGattOps > 1`.
+   */
+  async gattOp<T>(label: string, op: () => Promise<T> | T): Promise<T> {
+    this.activeGattOps += 1;
+    if (this.activeGattOps > this.maxConcurrentGattOps) {
+      this.maxConcurrentGattOps = this.activeGattOps;
+    }
+    this.gattOps.push(label);
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      return await op();
+    } finally {
+      this.activeGattOps -= 1;
+    }
+  }
 
   constructor(private readonly options: EmulatorOptions) {
     this.pairDevices = options.pairDevices ?? 1;
@@ -452,6 +482,7 @@ export class DeviceEmulator {
     }
     const comp = new Uint8Array(deflateSync(Buffer.from(file.bytes)));
     const totalFrames = comp.length === 0 ? 0 : Math.ceil(comp.length / SZ_BLE_PAYLOAD_SIZE);
+    this.lastTransferFrames = totalFrames;
     this.transfer = {
       file,
       comp,

@@ -150,7 +150,11 @@ describe("odporność na uszkodzenia i błędy", () => {
 
     const first = new SzusownikBle();
     await first.connect();
+    // Przerwanie bez end markera wykrywamy po ciszy strumienia (~1 s), a nie
+    // dopiero po timeoutcie transferu (120 s).
+    const startedAt = Date.now();
     const firstResult = await syncAll(first);
+    expect(Date.now() - startedAt).toBeLessThan(2500);
     expect(firstResult.result.transient).toHaveLength(1);
     expect(failing.commands.some((cmd) => cmd === "STOP")).toBe(true);
 
@@ -220,6 +224,55 @@ describe("NACK/replay i duplikaty", () => {
     expect(result.done).toHaveLength(1);
     const stored = await db.files.get("/20260101_000000.csv");
     expect(stored?.raw).toBe(csv);
+  });
+});
+
+describe("jakość łącza: szeregowanie GATT i postęp", () => {
+  it("odczyt INFO i zapis ustawień nie nakładają się (jedna kolejka GATT)", async () => {
+    const emulator = new DeviceEmulator({ files: [] });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+
+    // Bez kolejki odczyt (INFO) i zapis (CTRL) poszłyby równolegle — na
+    // Chrome/Androidzie kończy się to `NotSupportedError`.
+    await Promise.all([ble.readInfo(), ble.setVolume("low", 50)]);
+    expect(emulator.maxConcurrentGattOps).toBe(1);
+  });
+
+  it("w trakcie transferu żadne dwie operacje GATT się nie nakładają", async () => {
+    const bytes = realRideBytes();
+    const golden = goldenDone();
+    const emulator = new DeviceEmulator({ files: [{ name: golden.file, bytes }] });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+    const { result } = await syncAll(ble);
+    expect(result.done).toHaveLength(1);
+    expect(emulator.maxConcurrentGattOps).toBe(1);
+  });
+
+  it("raportuje postęp rzadko, ale domyka licznik na pełnej liczbie ramek", async () => {
+    const bytes = realRideBytes();
+    const golden = goldenDone();
+    const emulator = new DeviceEmulator({ files: [{ name: golden.file, bytes }] });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+    const queue = await ble.collectNewFiles();
+
+    const progress: number[] = [];
+    const result = await ble.downloadFiles(queue, (p) => progress.push(p.receivedFrames));
+    expect(result.done).toHaveLength(1);
+    // Duży plik, ale oddawany szybko → kilka raportów, nie setki ramek.
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress.length).toBeLessThanOrEqual(3);
+    for (let i = 1; i < progress.length; i++) {
+      expect(progress[i]).toBeGreaterThan(progress[i - 1]);
+    }
+    // Ostatni raport jest wymuszony na końcu pliku — pełna liczba ramek, nie
+    // wartość z ostatniego okna throttle.
+    expect(progress[progress.length - 1]).toBe(emulator.lastTransferFrames);
   });
 });
 

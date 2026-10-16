@@ -57,6 +57,7 @@ bool HudLink::begin() {
 
 bool HudLink::radioOn() {
   if (radio_) return true;
+  const unsigned long t0 = millis();
   esp_wifi_start();
   if (esp_now_init() != ESP_OK) {
     SZ_LOGE("HUD esp-now init fail");
@@ -72,6 +73,12 @@ bool HudLink::radioOn() {
   ackFailed_ = false;
   portEXIT_CRITICAL(&stateMux_);
   radio_ = true;
+  // Diagnostyka 4A: log tylko po pauzie na transfer BLE (patrz `logRadioOn_`),
+  // nie przy każdym oknie telemetrii.
+  if (logRadioOn_) {
+    logRadioOn_ = false;
+    SZ_LOGIF("HUD radio ON %lu ms t=%lu", millis() - t0, millis());
+  }
   return true;
 }
 
@@ -287,15 +294,23 @@ void HudLink::tick(unsigned long nowMs, const HudInput& in, bool paused) {
   drainRxEvents();
 
   if (paused) {
-    // Transfer BLE ma priorytet — nie zabieramy wspólnego radia.
+    // Transfer BLE ma priorytet — nie zabieramy wspólnego radia. Radio i tak
+    // gaśnie co okno telemetrii, ale logujemy TYLKO to przełączenie, bo działa
+    // się ono w chwili startu transferu i pozwala skorelować je z NACK/replay.
+    const unsigned long t0 = millis();
     if (radio_) radioOff();
+    if (!paused_) {
+      SZ_LOGIF("HUD radio OFF na czas transferu BLE (%lu ms) t=%lu", millis() - t0, nowMs);
+    }
     phase_ = Phase::Idle;
     paused_ = true;
     return;
   }
   if (paused_) {
     paused_ = false;
-    forceWindow_ = true;  // wznów bez czekania na koniec okresu
+    forceWindow_ = true;   // wznów bez czekania na koniec okresu
+    logRadioOn_ = true;    // zmierz koszt ponownego włączenia radia i zaloguj raz
+    SZ_LOGIF("HUD wznowienie po transferze BLE t=%lu", nowMs);
   }
 
   mode_ = hudModeForSpeed(in.speedKmh);
