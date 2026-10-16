@@ -173,9 +173,14 @@ Najważniejszy wynik eksperymentów:
 - pacing `4 ms` był najszybszym potwierdzonym profilem bez błędów;
 - `8 ms` było bezpieczne, ale wolniejsze.
 
-`BLECharacteristic::notify()` nie raportuje, czy NimBLE przyjął pakiet. Nie
-wolno traktować jego wywołania jako potwierdzenia wysłania. Stabilność profilu
-wynika ze stałego tempa, a utracone ramki odzyskuje ACK/NACK i ring buffer.
+`BLECharacteristic::notify()` zwraca `false`, gdy NimBLE **nie przyjął** pakietu
+(najczęściej brak wolnych mbufów). Tego `false` nie wolno ignorować — ramka
+przepada, a przy dużych plikach NACK/replay nie odrobią masowych strat (pomiar
+2026-10-16 na Windowsie: `notifyFail=597` przy 183-ramkowym pliku i `err:ack-timeout`).
+Dlatego Szusownik **ponawia** ramkę po `false` (z pacing backoff), zamiast liczyć
+ją jako wysłaną. Samo `true` nadal nie jest potwierdzeniem dostarczenia —
+stabilność profilu wynika ze stałego tempa, a brakujące ramki dodatkowo odzyskuje
+ACK/NACK i ring buffer.
 
 ## 8. Firmware: zasady implementacji
 
@@ -472,16 +477,21 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `BLE abort` i `nf=` w linii SYS). `notify()` nie raportuje sukcesu, więc to
   jedyny tani sposób odróżnienia gubienia po stronie esp32 od gubienia w stosie
   klienta.
+- **Retry `notify()` zamiast cichego gubienia ramki** (2026-10-16): pomiar na
+  Windowsie pokazał `notifyFail=597` przy 183-ramkowym pliku i `err:ack-timeout`
+  (a `notifyFail=0` przy małych plikach) — czyli to **nadajnik** gubił ramki, bo
+  `notify()` zwracało `false` (brak mbufów), a firwmare liczył je jako wysłane.
+  Teraz `emitFrame`, `sendEndMarker` i replay nie zwiększają sekwencji po
+  `false` — ramka wraca po pacing backoff i jest ponawiana. `notifyFail` powinien
+  spaść do ~0, a pacing/rozmiar ramki bez zmian (profil zamrożony).
 
-> Status (2026-10-16): po wgraniu kolejki GATT + throttlingu + STATUS po ciszy
-> transfer **nadal zawodził przy dużych plikach** na Chrome/Windows (raz padał,
-> raz nie — intermittent), a małe (≤ ~16 ramek, jedna porcja `pumpStream`)
-> przechodzą zawsze. `HUD radio` jest wykluczone (koszt `esp_wifi_stop()` = 0 ms,
-> przełączenia nie pokrywają się z `NACK`/`replay`). Licznik `notifyFail` pokazał,
-> że urządzenie samo gubi 0–2 ramki (odzyskiwane `NACK`/`replay`). Zaobserwowana
-> katastrofa to pojedynczy nieudany zapis `ACK:` wywalający cały plik —
-> załatane `safeWriteCtrl`. Zmiana pacing (zamrożony profil) dopiero po
-> powtórzeniu pomiaru i osobnym benchmarku.
+> Status (2026-10-16, po pomiarze): duże pliki padały, bo **nadajnik** masowo
+> gubił ramki (`notifyFail` 297–597 dla 95–183 ramek), co dawało `err:ack-timeout`;
+> małe pliki (`notifyFail=0`) przechodziły zawsze. `HUD radio` wykluczone.
+> Wprowadzone: retry `notify()`, `safeWriteCtrl` (pojedynczy hiccup ACK/NACK nie
+> wywala pliku), normalizacja błędu dekompresora. Do potwierdzenia na sprzęcie:
+> oczekiwane `notifyFail≈0`, `ackTimeout=0`, `replay` bliski 0 przy dużych plikach.
+> Zmiana pacing (zamrożony profil) — tylko jeśli to nie wystarczy i po benchmarku.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw

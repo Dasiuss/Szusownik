@@ -652,7 +652,15 @@ bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
   window_[idx][3] = (uint8_t)((nextSeq_ >> 24) & 0xFF);
   if (len) memcpy(window_[idx] + SZ_BLE_HEADER_SIZE, payload, len);
   windowLen_[idx] = (uint16_t)(SZ_BLE_HEADER_SIZE + len);
-  if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
+  if (!chrData || !chrData->notify(window_[idx], windowLen_[idx])) {
+    // NimBLE nie przyjął ramki (najczęściej brak wolnych mbufów, `false`).
+    // NIE liczymy jej jako wysłanej: cofamy pacing i ponowimy ją w kolejnym
+    // poll(), zamiast gubić i liczyć na NACK/replay. `notify()==true` nadal nie
+    // jest potwierdzeniem dostarczenia (docs/ble-transfer.md §7).
+    notifyFails_++;
+    lastNotifyMs_ = now;  // backoff jak przy pacingu — nie kręcimy się w miejscu
+    return false;
+  }
   compBytes_ += (uint32_t)len;
   frameCount_++;
   nextSeq_++;
@@ -665,7 +673,7 @@ bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
   return true;
 }
 
-void BleFiles::sendEndMarker() {
+bool BleFiles::sendEndMarker() {
   // Pusta ramka (sam nagłówek) = koniec strumienia.
   uint32_t idx = nextSeq_ % SZ_BLE_WINDOW;
   window_[idx][0] = (uint8_t)(nextSeq_ & 0xFF);
@@ -673,13 +681,18 @@ void BleFiles::sendEndMarker() {
   window_[idx][2] = (uint8_t)((nextSeq_ >> 16) & 0xFF);
   window_[idx][3] = (uint8_t)((nextSeq_ >> 24) & 0xFF);
   windowLen_[idx] = SZ_BLE_HEADER_SIZE;
-  if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
+  if (!chrData || !chrData->notify(window_[idx], windowLen_[idx])) {
+    notifyFails_++;
+    lastNotifyMs_ = millis();  // brak mbufów — ponowimy end marker
+    return false;
+  }
   endSeq_ = nextSeq_;
   endSent_ = true;
   nextSeq_++;
   lastNotifyMs_ = millis();
   lastProgressMs_ = lastNotifyMs_;
   SZ_LOGIF("BLE end marker seq=%lu", (unsigned long)endSeq_);
+  return true;
 }
 
 void BleFiles::pumpStream() {
@@ -690,7 +703,11 @@ void BleFiles::pumpStream() {
       unsigned long now = millis();
       if (now - lastNotifyMs_ < SZ_BLE_NOTIFY_MS) break;
       uint32_t idx = replayPos_ % SZ_BLE_WINDOW;
-      if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
+      if (!chrData || !chrData->notify(window_[idx], windowLen_[idx])) {
+        notifyFails_++;
+        lastNotifyMs_ = now;  // brak mbufów — ponowimy w kolejnym poll
+        break;
+      }
       lastNotifyMs_ = now;
       lastProgressMs_ = now;
       replayPos_++;
@@ -765,11 +782,11 @@ void BleFiles::pumpStream() {
 
     // (c) Kompresja zakończona, w stagingu < pełnej ramki: wyślij resztę i end.
     if (pendLen_ > 0) {
-      if (!emitFrame(pend_, pendLen_)) return;  // pacing — dane zostają
+      if (!emitFrame(pend_, pendLen_)) return;  // pacing/brak mbufów — dane zostają
       pendLen_ = 0;
       made++;
     }
-    sendEndMarker();
+    if (!sendEndMarker()) return;  // brak mbufów — ponowimy end marker
     break;
   }
 

@@ -125,7 +125,7 @@ class BleFiles {
   void pumpStream();
   // Zwraca false, gdy pacing 4 ms zabrania wysyłki w tej chwili.
   bool emitFrame(const uint8_t* payload, size_t len);
-  void sendEndMarker();
+  bool sendEndMarker();
   void onAck(uint32_t n);
   void onNack(uint32_t e);
   void replayFrom(uint32_t seq);
