@@ -460,6 +460,13 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `if (failed)` było wtedy fałszywe — błąd dekompresora był połykany i transfer
   wisiał do timeoutu. Teraz każdy błąd jest normalizowany do `Error` i kończy
   się błędem przejściowym (plik wraca do kolejki ponowień).
+- **Nieudany zapis kontrolny nie przerywa transferu** (2026-10-16): `ACK:`/`NACK`
+  idą przez `safeWriteCtrl`, które toleruje pojedyncze hiccupy GATT — zgubiony
+  zapis jest samokorygowalny, bo urządzenie replayuje po własnym timeoucie ACK
+  (500 ms). Dopiero **3 nieudane pod rząd** przerywają plik błędem przejściowym,
+  a `DeviceDisconnectedError` zawsze przerywa natychmiast. Bez tego jeden
+  `NotSupportedError` na zapisie potwierdzenia wywalał cały (poprawnie odebrany)
+  plik — to był zaobserwowany tryb awarii przy dużych plikach.
 - **Pomiar: czy ramki gubi nadajnik** (2026-10-16): firmware liczy wywołania
   `chrData->notify()` zwracające `false` (`notifyFail=` w logach `BLE done`/
   `BLE abort` i `nf=` w linii SYS). `notify()` nie raportuje sukcesu, więc to
@@ -467,12 +474,14 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   klienta.
 
 > Status (2026-10-16): po wgraniu kolejki GATT + throttlingu + STATUS po ciszy
-> transfer **nadal zawodzi przy dużych plikach** na Chrome/Windows, a małe
-> (≤ ~16 ramek, jedna porcja `pumpStream`) przechodzą zawsze. `HUD radio` jest
-> wykluczone (koszt `esp_wifi_stop()` = 0 ms, przełączenia nie pokrywają się z
-> `NACK`/`replay`). Podejrzenie: przepustowość/zawodność odbiornika pod ciągłym
-> strumieniem — czeka na wynik `notifyFail` (pomiar w toku). Zmiana pacing
-> (zamrożony profil) dopiero po tym pomiarze i osobnym benchmarku.
+> transfer **nadal zawodził przy dużych plikach** na Chrome/Windows (raz padał,
+> raz nie — intermittent), a małe (≤ ~16 ramek, jedna porcja `pumpStream`)
+> przechodzą zawsze. `HUD radio` jest wykluczone (koszt `esp_wifi_stop()` = 0 ms,
+> przełączenia nie pokrywają się z `NACK`/`replay`). Licznik `notifyFail` pokazał,
+> że urządzenie samo gubi 0–2 ramki (odzyskiwane `NACK`/`replay`). Zaobserwowana
+> katastrofa to pojedynczy nieudany zapis `ACK:` wywalający cały plik —
+> załatane `safeWriteCtrl`. Zmiana pacing (zamrożony profil) dopiero po
+> powtórzeniu pomiaru i osobnym benchmarku.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw

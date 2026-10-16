@@ -90,6 +90,11 @@ export interface EmulatorOptions {
   peerMac?: string;
   /** Pierwsza odpowiedź na LIST ma zły format (test ponowienia w listSince). */
   malformedListOnce?: boolean;
+  /**
+   * Pierwsze N zapisów kontrolnych pasujących do prefiksu rzuca
+   * `NotSupportedError` (test odporności PWA na pojedynczy hiccup GATT).
+   */
+  failControlWrites?: { prefix: string; times: number };
 }
 
 const textEncoder = new TextEncoder();
@@ -221,6 +226,8 @@ export class DeviceEmulator {
   private peerMac = "";
   private pairDevices: number;
   private malformedListPending: boolean;
+  private failCtrlPrefix: string;
+  private failCtrlRemaining: number;
 
   readonly commands: string[] = [];
   /** Diagnostyka: maks. liczba równoległych operacji GATT (poprawnie zawsze 1). */
@@ -253,6 +260,8 @@ export class DeviceEmulator {
   constructor(private readonly options: EmulatorOptions) {
     this.pairDevices = options.pairDevices ?? 1;
     this.malformedListPending = options.malformedListOnce ?? false;
+    this.failCtrlPrefix = options.failControlWrites?.prefix ?? "";
+    this.failCtrlRemaining = options.failControlWrites?.times ?? 0;
     for (const uuid of [SZ_UUID_INFO, SZ_UUID_CTRL, SZ_UUID_DATA, SZ_UUID_STAT, SZ_UUID_ROUTE]) {
       this.characteristics.set(uuid, new FakeCharacteristic(uuid, this));
     }
@@ -344,6 +353,12 @@ export class DeviceEmulator {
   }
 
   async writeCtrl(command: string): Promise<void> {
+    // Symulacja nieudanego zapisu kontrolnego: komenda nie dociera do urządzenia,
+    // a PWA dostaje NotSupportedError (jak realny hiccup GATT).
+    if (this.failCtrlRemaining > 0 && command.startsWith(this.failCtrlPrefix)) {
+      this.failCtrlRemaining--;
+      throw new DOMException("GATT operation failed for unknown reason.", "NotSupportedError");
+    }
     this.commands.push(command);
     if (command.startsWith(SZ_CMD_LIST)) {
       this.handleList(command.slice(SZ_CMD_LIST.length));

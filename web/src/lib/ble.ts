@@ -60,6 +60,10 @@ const PROGRESS_INTERVAL_MS = 500;
 // markera w ~1 s), żeby w zdrowym transferze nie zabierać pasma na odczyt STATUS
 // i nie nakładać go na zapisy potwierdzeń.
 const STREAM_STALL_MS = 1000;
+// Ile nieudanych zapisów kontrolnych (ACK/NACK) pod rząd przerywa transfer.
+// Pojedynczy hiccup GATT (np. NotSupportedError) jest samokorygowalny — urządzenie
+// replayuje po własnym timeoucie ACK — więc nie może wywalać całego pliku.
+const MAX_CONTROL_WRITE_FAILS = 3;
 // Start/lista mają zapas ponad czas skanu SD i otwarcia pliku: na urządzeniu
 // pętla główna bywa zajęta (zapis GNSS, fsync), a timeout liczony jest od
 // wysłania komendy. Za krótki próg = fałszywy błąd przy sprawnej karcie.
@@ -655,6 +659,29 @@ export class SzusownikBle {
     let finalAck = 0;
     let nackSentFor = -1;
     let gaps = 0; // ile razy poprosiliśmy o retransmisję (diagnostyka gubienia)
+    // Zapis kontrolny (ACK/NACK) może się nie powieść (np. NotSupportedError).
+    // Tolerujemy pojedyncze hiccupy: ramki doszły, a urządzenie replayuje po
+    // własnym timeoucie ACK. Dopiero seria niepowodzeń przerywa plik.
+    let controlWriteFails = 0;
+    const safeWriteCtrl = async (cmd: string) => {
+      try {
+        await this.writeCtrl(cmd);
+        controlWriteFails = 0;
+      } catch (err) {
+        if (err instanceof DeviceDisconnectedError) throw err; // zerwane łącze = koniec
+        controlWriteFails++;
+        console.warn(
+          `[ble] ${meta.name} zapis kontrolny "${cmd}" nieudany ` +
+            `(${controlWriteFails}/${MAX_CONTROL_WRITE_FAILS})`,
+          err,
+        );
+        if (controlWriteFails >= MAX_CONTROL_WRITE_FAILS) {
+          throw err instanceof Error
+            ? err
+            : new Error(`Zapis kontrolny nie powiódł się ${controlWriteFails} raz(y)`);
+        }
+      }
+    };
     let failed: unknown = null;
     let chain: Promise<void> = Promise.resolve();
     // Czas ostatniego odebranego NOTIFY — po nim poznajemy, że strumień ucichł
@@ -686,11 +713,11 @@ export class SzusownikBle {
           await writer.close();
           await drain;
           finalAck = seq + 1;
-          await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
+          await safeWriteCtrl(`${SZ_CMD_ACK}${finalAck}`);
           finish();
           reportProgress(expected, true); // domknięcie licznika na pełnej wartości
         } else if (finished && seq === finalAck - 1) {
-          await this.writeCtrl(`${SZ_CMD_ACK}${finalAck}`);
+          await safeWriteCtrl(`${SZ_CMD_ACK}${finalAck}`);
         }
         return;
       }
@@ -706,7 +733,7 @@ export class SzusownikBle {
           nackSentFor = expected;
           gaps++;
           console.log(`[ble] ${meta.name} NACK n=${expected} (dziura ${gaps})`);
-          await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
+          await safeWriteCtrl(`${SZ_CMD_NACK}${expected}`);
         }
         return;
       }
@@ -722,7 +749,7 @@ export class SzusownikBle {
       expected++;
       reportProgress(expected);
       if (expected % SZ_BLE_ACK_BLOCK === 0) {
-        await this.writeCtrl(`${SZ_CMD_ACK}${expected}`);
+        await safeWriteCtrl(`${SZ_CMD_ACK}${expected}`);
       }
     };
 

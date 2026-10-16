@@ -295,6 +295,42 @@ describe("jakość łącza: szeregowanie GATT i postęp", () => {
   });
 });
 
+describe("odporność na hiccup GATT", () => {
+  it("pojedynczy nieudany zapis kontrolny nie przerywa transferu", async () => {
+    const bytes = realRideBytes();
+    const golden = goldenDone();
+    const emulator = new DeviceEmulator({
+      files: [{ name: golden.file, bytes }],
+      failControlWrites: { prefix: "ACK:", times: 1 },
+    });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+
+    const { result } = await syncAll(ble);
+    // Zgubiony ACK jest samokorygowalny (urządzenie replayuje po swoim timeoucie),
+    // więc plik ma się dokończyć, a nie wypaść jako błąd.
+    expect(result.done).toHaveLength(1);
+    expect(result.transient).toHaveLength(0);
+  });
+
+  it("seria nieudanych zapisów kontrolnych kończy się błędem przejściowym", async () => {
+    const bytes = realRideBytes();
+    const golden = goldenDone();
+    const emulator = new DeviceEmulator({
+      files: [{ name: golden.file, bytes }],
+      failControlWrites: { prefix: "ACK:", times: 99 },
+    });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+
+    const { result } = await syncAll(ble);
+    expect(result.done).toHaveLength(0);
+    expect(result.transient).toHaveLength(1);
+  });
+});
+
 describe("typy błędów", () => {
   it("PermanentDownloadError i FileGoneError są rozróżnialne od błędu przejściowego", () => {
     expect(new PermanentDownloadError("x")).toBeInstanceOf(PermanentDownloadError);
