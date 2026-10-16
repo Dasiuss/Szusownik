@@ -3,6 +3,7 @@
 #include "../storage/storage.h"
 #include "../audio/audio.h"
 #include "../core/route.h"
+#include "../core/ble_adv.h"
 #include "../config/config.h"
 #include "../config/log.h"
 #include <NimBLEDevice.h>
@@ -142,9 +143,35 @@ void BleFiles::begin(Storage* storage) {
   adv->enableScanResponse(true);
   adv->addServiceUUID(SZ_UUID_SVC);
   adv->setName(SZ_BLE_NAME);
-  adv->setAdvertisingInterval(SZ_BLE_ADV_INTERVAL);  // 1 s (jednostka 0.625 ms)
+  // Start szybko: przy boocie stoimy (albo nie mamy fixu) — to najczęstszy
+  // moment łączenia z PWA. W ruchu `updateAdvForSpeed` przełączy na wolny.
+  adv->setAdvertisingInterval(SZ_BLE_ADV_FAST_INTERVAL);
   adv->start();
-  SZ_LOGIF("BLE start name=%s mtu_req=517", SZ_BLE_NAME);
+  SZ_LOGIF("BLE start name=%s mtu_req=517 adv_interval=%u", SZ_BLE_NAME,
+           (unsigned)SZ_BLE_ADV_FAST_INTERVAL);
+}
+
+void BleFiles::applyAdvInterval() {
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  if (adv == nullptr) return;
+  const uint16_t interval = advFast_ ? SZ_BLE_ADV_FAST_INTERVAL : SZ_BLE_ADV_SLOW_INTERVAL;
+  // Nowy interwał obowiązuje od następnego startu reklamowania, dlatego ustawiamy
+  // go także w trakcie połączenia (po rozłączeniu NimBLE wystartuje z właściwym —
+  // advertiseOnDisconnect). Restart robimy tylko, gdy naprawdę reklamujemy.
+  adv->setAdvertisingInterval(interval);
+  if (!g_connected && adv->isAdvertising()) {
+    adv->stop();
+    adv->start();
+  }
+  SZ_LOGIF("BLE adv %s interval=%u", advFast_ ? "fast" : "slow", (unsigned)interval);
+}
+
+void BleFiles::updateAdvForSpeed(float kmh) {
+  const bool fast =
+      core::bleAdvFastNext(advFast_, kmh, SZ_BLE_ADV_FAST_BELOW_KMH, SZ_HYST_KMH);
+  if (fast == advFast_) return;
+  advFast_ = fast;
+  applyAdvInterval();
 }
 
 bool BleFiles::allocStreamMem() {

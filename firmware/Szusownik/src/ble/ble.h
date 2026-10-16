@@ -20,6 +20,11 @@ class BleFiles {
   String lastError() const { return lastError_; }
   uint16_t mtu() const { return mtu_; }  // ostatnio wynegocjowane MTU (0 = brak)
 
+  // Reklamowanie BLE zależne od prędkości: na postoju szybkie (PWA widzi
+  // urządzenie od razu), w ruchu wolne (ograniczenie grzania). Wołane z pętli
+  // głównej; przełącza interwał tylko przy realnej zmianie (z histerezą).
+  void updateAdvForSpeed(float kmh);
+
   // Trasa nawigacyjna trzymana w RAM (SSOT: protocol/route-v1.json).
   const uint8_t* routeRaw() const { return routeRaw_; }
   uint16_t routeRawLen() const { return routeRawLen_; }
@@ -40,6 +45,7 @@ class BleFiles {
   Storage* storage_ = nullptr;
   Beeper* beeper_ = nullptr;
   bool transferring_ = false;
+  bool advFast_ = true;  // true = krótki interwał (postój), false = wolny (ruch)
   String activeFile_;
   String lastError_;
   // stan streamingu (ciężkie bufory w PSRAM, nie w DRAM!)
@@ -101,6 +107,7 @@ class BleFiles {
   bool allocStreamMem();
   void handleCommand(const String& cmd);
   void refreshInfo();
+  void applyAdvInterval();
   void reportVolume();
   void reportFreq();
   void reportTiming();

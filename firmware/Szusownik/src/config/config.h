@@ -119,10 +119,16 @@ static const float SZ_HYST_KMH = 3.0f;
 // (ramki, okno, ACK, UUID, nazwa) są w protocol.h — zmiana tylko po benchmarku
 // na rzeczywistym ESP32 + Androidzie.
 
-// BLE: interwał reklamowania (NimBLE, jednostka 0.625 ms). Domyślny „fast" to
-// 0x20-0x30 (20-30 ms); 1600 = 1 s. Adv trwa tylko wtedy, gdy telefon nie jest
-// połączony, więc rzadsze reklamowanie ogranicza grzanie bez dotykania
-// zamrożonego profilu transferu (docs/ble-transfer.md). Wykrywanie w PWA może
-// potrwać do ~1 s — akceptowalne na ekranie połączenia.
-#define SZ_BLE_ADV_INTERVAL 1600
+// BLE: interwał reklamowania (NimBLE, jednostka 0.625 ms). Reklamujemy SZYBKO,
+// gdy stoimy — wtedy najczęściej łączymy się z PWA — a WOLNO w ruchu. Adv trwa
+// tylko bez połączenia, więc wolny tryb ogranicza grzanie w trakcie jazdy bez
+// wpływu na zamrożony profil transferu (docs/ble-transfer.md).
+// Szybki: 400 = 250 ms.
+#define SZ_BLE_ADV_FAST_INTERVAL 400
+// Wolny: 1600 = 1 s.
+#define SZ_BLE_ADV_SLOW_INTERVAL 1600
+// Próg przełączenia na szybkie reklamowanie; na wolne wracamy dopiero wyżej o
+// histerezę SZ_HYST_KMH (5 -> 8 km/h), żeby szum GNSS nie restartował adv
+// w kółko. Brak fixu liczy się jak postój (szybkie).
+#define SZ_BLE_ADV_FAST_BELOW_KMH 5.0f
 

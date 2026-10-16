@@ -188,10 +188,18 @@ zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
   `TinyGPSPlus::distanceBetween` — 8 transcendentalnych `double`) i max dnia
   liczy się raz na nową próbkę GNSS (w bloku `consumeNewSample()`), a nie co
   iterację pętli; miary zmieniają się dopiero na nowej epoce.
-- **Reklamowanie BLE:** interwał `SZ_BLE_ADV_INTERVAL` = 1600 (NimBLE, jednostka
-  0.625 ms → 1 s) zamiast domyślnego „fast" 20–30 ms. Adv trwa tylko, gdy telefon
-  nie jest połączony, więc rzadsze reklamowanie ogranicza grzanie (bez wpływu na
-  zamrożony profil transferu); kosztem jest dłuższe wykrywanie w PWA (do ~1 s).
+- **Reklamowanie BLE zależne od prędkości:** na postoju
+  `SZ_BLE_ADV_FAST_INTERVAL` = 400 (NimBLE, jednostka 0.625 ms → 250 ms), w ruchu
+  `SZ_BLE_ADV_SLOW_INTERVAL` = 1600 (→ 1 s). Próg to
+  `SZ_BLE_ADV_FAST_BELOW_KMH` (5 km/h), z histerezą `SZ_HYST_KMH` — na 1 s
+  wracamy dopiero powyżej 8 km/h, żeby szum GNSS nie restartował reklamowania
+  w kółko. Brak fixu liczy się jak postój. Adv trwa tylko, gdy telefon nie jest
+  połączony, więc wolny tryb ogranicza grzanie w trakcie jazdy (bez wpływu na
+  zamrożony profil transferu), a przy podejściu do roweru urządzenie jest widoczne
+  w PWA niemal od razu. Zmiana interwału wymaga restartu adv (NimBLE:
+  `stop()` → `setAdvertisingInterval()` → `start()`); w trakcie połączenia
+  ustawiamy tylko parametry na przyszłość. Reguła przełączenia to czysta funkcja
+  `core::bleAdvFastNext` (test hostowy).
 - Linia statusu SYS (DEBUG) ma bufor 512 B (`src/config/log.h`), żeby nie ucinać
   ogona z `loop=`/`die=`/`air=`; przy 256 B te pola ginęły.
 

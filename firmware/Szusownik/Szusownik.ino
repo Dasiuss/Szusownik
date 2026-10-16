@@ -304,6 +304,9 @@ void loop() {
   beeper.tick(kmh, now);
   health.tick(now);  // termika: alarm >95C, deep sleep >100C
   ble.poll();  // callback BLE tylko ustawia flagi (poll czyta CTRL); bez blokowania SD
+  // Reklamowanie zależne od prędkości: na postoju szybkie (PWA łączy się od razu),
+  // w ruchu wolne (mniej grzania). Tanie — przełącza tylko przy zmianie stanu.
+  ble.updateAdvForSpeed(kmh);
 
   // Trasa nawigacyjna: wykryj zmianę wersji (PWA albo lokalny CLEAR po dotarciu),
   // przelicz bieżący odcinek i obsłuż dotarcie do celu.
