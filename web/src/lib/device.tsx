@@ -65,6 +65,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const hasDesiredRouteRef = useRef(false);
   const routeSendingRef = useRef(false);
   const routeDirtyRef = useRef(false);
+  /** Rozwiązuje się, gdy bieżąca wysyłka trasy się zakończy (bramka na transfer). */
+  const routeIdleRef = useRef<Promise<void>>(Promise.resolve());
   const [state, setState] = useState<DeviceState>("disconnected");
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [pendingFiles, setPendingFiles] = useState<FileMeta[]>([]);
@@ -128,8 +130,21 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     infoRef.current = connectedInfo;
     setInfo(connectedInfo);
     setState("checking");
-    const fresh = await client.collectNewFiles();
-    setPendingFiles(fresh);
+    try {
+      const fresh = await client.collectNewFiles();
+      setPendingFiles(fresh);
+    } catch (caught) {
+      // Łącze padło w trakcie sprawdzania — obsłuży to onDisconnected/handleDrop,
+      // nie udajemy „połączone" z nieaktualną listą.
+      if (caught instanceof DeviceDisconnectedError) throw caught;
+      // Listowanie padło (np. karta zajęta) — nie gubimy kolejki ponowień z DB,
+      // żeby dało się pobrać to, co już wiemy, bez ponownego łączenia.
+      setPendingFiles(await client.pendingQueue());
+      setError(
+        `Nie udało się odczytać listy plików (${errorMessage(caught)}). ` +
+          "Możesz pobrać to, co już wiemy, albo spróbować ponownie.",
+      );
+    }
     setState("connected");
     armIdleTimer();
   }
@@ -156,6 +171,12 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       routeDirtyRef.current = true;
       return;
     }
+    // Trasa i transfer plików dzielą ten sam GATT i tę samą pętlę urządzenia
+    // (commit trasy robi skan SD). Nie wysyłamy trasy równolegle z pobieraniem.
+    if (downloadingRef.current) {
+      routeDirtyRef.current = true;
+      return;
+    }
     const client = bleRef.current;
     if (!client) {
       setRouteSync("offline");
@@ -170,32 +191,36 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     routeSendingRef.current = true;
     routeDirtyRef.current = false;
     setRouteSync("sending");
-    try {
-      const status = await client.sendRoute(target.bytes);
-      const fresh = await client.readInfo();
-      infoRef.current = fresh;
-      setInfo(fresh);
-      if (status.startsWith("err:")) {
-        setRouteSyncError(`Urządzenie odrzuciło trasę (${status})`);
-        setRouteSync("error");
-      } else {
-        setRouteSyncError(null);
-        setRouteSync("sent");
+    const task = (async () => {
+      try {
+        const status = await client.sendRoute(target.bytes);
+        const fresh = await client.readInfo();
+        infoRef.current = fresh;
+        setInfo(fresh);
+        if (status.startsWith("err:")) {
+          setRouteSyncError(`Urządzenie odrzuciło trasę (${status})`);
+          setRouteSync("error");
+        } else {
+          setRouteSyncError(null);
+          setRouteSync("sent");
+        }
+      } catch (caught) {
+        if (caught instanceof DeviceDisconnectedError) {
+          // Łącze padło w trakcie wysyłki (zdarzenie mogło jeszcze nie dojść).
+          forgetConnection();
+          setRouteSyncError(null);
+          setRouteSync("offline");
+        } else {
+          setRouteSyncError(errorMessage(caught));
+          setRouteSync("error");
+        }
+      } finally {
+        routeSendingRef.current = false;
+        if (routeDirtyRef.current) void flushRoute();
       }
-    } catch (caught) {
-      if (caught instanceof DeviceDisconnectedError) {
-        // Łącze padło w trakcie wysyłki (zdarzenie mogło jeszcze nie dojść).
-        forgetConnection();
-        setRouteSyncError(null);
-        setRouteSync("offline");
-      } else {
-        setRouteSyncError(errorMessage(caught));
-        setRouteSync("error");
-      }
-    } finally {
-      routeSendingRef.current = false;
-      if (routeDirtyRef.current) void flushRoute();
-    }
+    })();
+    routeIdleRef.current = task;
+    await task;
   }
 
   async function connectAndCheck() {
@@ -237,6 +262,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setState("downloading");
     setProgress(null);
     try {
+      // Dokończ ewentualną wysyłkę trasy, zanim ruszy transfer plików.
+      await routeIdleRef.current;
       const { transient, corrupt } = await client.downloadFiles(pendingFiles, setProgress);
       await materializeAll();
       // Trwale uszkodzone pliki zapamiętujemy, żeby nie wracały w każdej synchronizacji.
@@ -271,6 +298,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       armIdleTimer();
     } finally {
       downloadingRef.current = false;
+      if (routeDirtyRef.current) void flushRoute();  // trasa odroczona na czas transferu
     }
   }
 

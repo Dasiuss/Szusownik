@@ -102,6 +102,11 @@ static const float SZ_HYST_KMH = 3.0f;
 // wystartowały z docelowym zegarem.
 #define SZ_CPU_FREQ_MHZ 160
 
+// Punkt montowania FAT (SD.begin). Musi być jawny, bo tanie listowanie
+// (opendir/readdir) używa pełnej ścieżki VFS — `opendir("/")` patrzy na korzeń
+// VFS bez systemu plików i zwraca NULL. Domyślna wartość SD to "/sd".
+#define SZ_SD_MOUNT "/sd"
+
 // FIFO: przy mniej niż tyle wolnego miejsca kasuj najstarsze pliki CSV.
 #define SZ_SD_MIN_FREE_BYTES (4UL * 1024UL * 1024UL)
 

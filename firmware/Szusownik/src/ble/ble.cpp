@@ -164,6 +164,14 @@ bool BleFiles::allocStreamMem() {
 
 void BleFiles::refreshInfo() {
   if (!chrInfo) return;
+  // INFO wymaga pełnego skanu katalogu SD (countCsv), a ten blokuje pompę NOTIFY
+  // i zjada zegar ACK (500 ms). W trakcie transferu tylko oznaczamy do
+  // odświeżenia; finishStream() dogania INFO po zakończeniu.
+  if (transferring_) {
+    infoDirty_ = true;
+    return;
+  }
+  infoDirty_ = false;
   // INFO celowo małe: pełna lista plików nie mieści się w limicie 512 B atrybutu
   // ATT (Web Bluetooth i tak nie odczyta >512 B), a przekroczenie zeruje wartość
   // w NimBLE. Metadane plików PWA pobiera stronicowanym LIST:<since>.
@@ -602,6 +610,8 @@ void BleFiles::finishStream() {
   setStatus(String(msg));
   SZ_LOGIF("BLE %s name=%s replay=%lu ackTimeout=%lu", msg, activeFile_.c_str(),
            (unsigned long)replays_, (unsigned long)ackTimeouts_);
+  // Odroczone w trakcie transferu odświeżenie INFO (skan SD) dogania teraz.
+  if (infoDirty_) refreshInfo();
 }
 
 bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {

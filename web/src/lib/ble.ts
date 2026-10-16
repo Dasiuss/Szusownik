@@ -51,13 +51,16 @@ import {
 // protocol/ble-file-v1.json), więc nie duplikuj ich tutaj.
 
 const TRANSFER_TIMEOUT_MS = 120000;
-const TRANSFER_START_TIMEOUT_MS = 4000;
+// Start/lista mają zapas ponad czas skanu SD i otwarcia pliku: na urządzeniu
+// pętla główna bywa zajęta (zapis GNSS, fsync), a timeout liczony jest od
+// wysłania komendy. Za krótki próg = fałszywy błąd przy sprawnej karcie.
+const TRANSFER_START_TIMEOUT_MS = 6000;
 const TRANSFER_DONE_TIMEOUT_MS = 5000;
 const SETTINGS_TIMEOUT_MS = 2000;
 const SETTINGS_POLL_MS = 50;
-// Listowanie skanuje katalog SD na urządzeniu (na tej karcie setki ms–sekundy),
-// więc dajemy mu większy zapas niż ustawieniom.
-const LIST_TIMEOUT_MS = 4000;
+// Listowanie skanuje katalog SD na urządzeniu; dajemy mu większy zapas niż
+// ustawieniom i ponawiamy przy braku echa (patrz listSince).
+const LIST_TIMEOUT_MS = 6000;
 // Parowanie HUD: Szusownik zbiera odpowiedzi Huda przez HUD_PAIR_COLLECT_MS
 // (0,6 s) plus zapas na BLE/INFO.
 const PAIR_TIMEOUT_MS = 5000;
@@ -819,14 +822,19 @@ export class SzusownikBle {
       // może odpowiedzieć po naszym timeoucie — wtedy pollStatus zwraca STARY
       // status (inny kursor). Ponawiamy żądanie, zamiast rzucać fałszywy błąd
       // formatu. Trwałe błędy firmware (err:) i tak przerywają od razu.
-      const LIST_ATTEMPTS = 3;
+      const LIST_ATTEMPTS = 4;
       for (let attempt = 0; attempt < LIST_ATTEMPTS; attempt++) {
         await this.writeCtrl(`${SZ_CMD_LIST}${cursor}`);
         status = await this.pollStatus(want, LIST_TIMEOUT_MS);
         if (status.startsWith(SZ_ST_ERR)) throw new Error(`Błąd listowania plików: ${status}`);
-        if (want.test(status)) {
+        if (!want.test(status)) continue;
+        // Zła odpowiedź formatu nie musi być trwała (np. STATUS nadpisany w
+        // połowie skanu) — ponawiamy zamiast wywalać cały sync.
+        try {
           entries = parseListStatus(status, echo);
           break;
+        } catch {
+          /* spróbuj ponownie */
         }
       }
       if (entries === null) {
@@ -843,13 +851,11 @@ export class SzusownikBle {
   }
 
   /**
-   * Odkrywa pliki do pobrania: ROTATE (domknięcie bieżącego pliku) → kolejka
-   * ponowień po nazwie (bez listowania) ∪ nowe nazwy > kursor. Dedup i sort
-   * rosnąco. Kursor = największa rozwiązana nazwa (files ∪ ignoredFiles).
+   * Trwała kolejka ponowień (bez listowania karty). Fallback, gdy LIST padnie:
+   * pozwala pobrać to, co już wiemy, zamiast wywalać cały sync. Sprząta wpisy,
+   * które zdążyły się rozwiązać (znane w files/ignoredFiles).
    */
-  async collectNewFiles(): Promise<FileMeta[]> {
-    await this.writeCtrl(SZ_CMD_ROTATE);
-    await this.pollStatus(/^ok$/);
+  async pendingQueue(): Promise<FileMeta[]> {
     const known = new Set<string>(
       [
         ...((await db.files.toCollection().primaryKeys()) as string[]),
@@ -857,11 +863,30 @@ export class SzusownikBle {
       ].map(bareName),
     );
     const pending = await db.pendingFiles.toArray();
-    const stale = pending.filter((entry) => known.has(entry.name));
-    for (const entry of stale) await db.pendingFiles.delete(entry.name); // już rozwiązany — sprzątnij
-    const alive = pending
+    for (const entry of pending) {
+      if (known.has(entry.name)) await db.pendingFiles.delete(entry.name);
+    }
+    return pending
       .filter((entry) => !known.has(entry.name))
-      .map((entry) => ({ name: entry.name, size: entry.size }));
+      .map((entry) => ({ name: entry.name, size: entry.size }))
+      .sort((a, b) => (a.name < b.name ? -1 : 1));
+  }
+
+  /**
+   * Odkrywa pliki do pobrania: ROTATE (domknięcie bieżącego pliku) → kolejka
+   * ponowień po nazwie (bez listowania) ∪ nowe nazwy > kursor. Dedup i sort
+   * rosnąco. Kursor = największa rozwiązana nazwa (files ∪ ignoredFiles).
+   */
+  async collectNewFiles(): Promise<FileMeta[]> {
+    await this.writeCtrl(SZ_CMD_ROTATE);
+    await this.pollStatus(/^ok$/);
+    const alive = await this.pendingQueue();
+    const known = new Set<string>(
+      [
+        ...((await db.files.toCollection().primaryKeys()) as string[]),
+        ...((await db.ignoredFiles.toCollection().primaryKeys()) as string[]),
+      ].map(bareName),
+    );
     const listed = await this.listSince(await this.readCursor());
     return buildQueue(alive, listed, known);
   }

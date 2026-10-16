@@ -120,7 +120,7 @@ Zachowanie odbiornika:
 | `ROUTE_NOTIFY_WINDOW_SIZE` | `128` | maksymalna liczba niepotwierdzonych ramek |
 | `ROUTE_NOTIFY_INTERVAL_MS` | `4 ms` | minimalny odstęp prób NOTIFY |
 | `ROUTE_ACK_TIMEOUT_MS` | `500 ms` | timeout oczekiwania na ACK |
-| `ROUTE_ACK_RETRY_LIMIT` | `3` | maksymalna liczba replay po timeoutach |
+| `ROUTE_ACK_RETRY_LIMIT` | `6` | maksymalna liczba replay po timeoutach (2026-10-15: `3`→`6`, ~3 s tolerancji; do potwierdzenia benchmarkiem) |
 | PWA output flush | `16 KiB` | agregacja danych przed zapisem |
 | PWA transfer timeout | `120 s` | zabezpieczenie przed zawieszeniem |
 
@@ -415,15 +415,25 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   `lastProgressMs_` ustawiane **po** `refreshInfo()` w `startStream`, (2)
   `countCsv` liczy pliki `.meta` w jednym przebiegu katalogu (bez `SD.exists`
   per plik). Na sprzęcie: kilkanaście plików pod rząd `replay=0 ackTimeout=0`.
-- **`listCsv` jednym przebiegiem katalogu, bez `SD.exists()`** (2026-10-11):
-  `SD.exists()` na każdym CSV dawał ~4 s (na tej karcie każda operacja na pliku
-  to dziesiątki–setki ms), co przekraczało timeout `LIST` w PWA („raz działa,
-  raz nie"). Teraz jeden przebieg `openNextFile()`: zbieramy rozmiary CSV > since
-  i nazwy widocznych CSV (`.meta`) do buforów w RAM, łączymy po przebiegu. Skan
-  ~1,6 s przy kilkudziesięciu plikach — mieści się w timeoutcie PWA (4 s).
-  Uwaga: tańsze `opendir`/`readdir` **nie działa** na tym VFS (zwraca NULL →
-  pusta lista), więc `openNextFile` zostaje. PWA ma osobny, dłuższy timeout
-  listowania (`LIST_TIMEOUT_MS`) i ponawia `LIST` przy braku echa.
+- **Skan katalogu przez `opendir("/sd")`/`readdir`, bez otwierania plików**
+  (2026-10-15): `openNextFile()` (i dawne `SD.exists()`) konstruuje `VFSFileImpl`,
+  którego konstruktor woła `fopen()` — FatFs rozwiązuje nazwę liniowo w katalogu,
+  więc dla n wpisów koszt rośnie ~O(n²) i skan blokuje pętlę na sekundy
+  (`listCsv` ~1,6 s, `countCsv` ~0,8 s). Teraz `countCsv`, `listCsv` i
+  `ensureFreeSpace` iterują katalog tanio: nazwy z `readdir`, a rozmiar tylko dla
+  ≤ `SZ_BLE_LIST_MAX` zwracanych wpisów przez `stat` (nie czyta danych pliku).
+  Znika też ~10 KB statycznych tablic `listCsv`. **Uwaga:** wcześniejsza próba
+  (commit `c1527b5`) użyła `opendir("/")` — to korzeń VFS bez zamontowanego
+  systemu plików, więc zwracał NULL. Poprawna ścieżka to mountpoint `SZ_SD_MOUNT`
+  = `/sd` (`SD.begin` montuje tam domyślnie); `vfs_fat_opendir`/`vfs_fat_readdir`
+  są w `libfatfs.a`. PWA ma osobny, dłuższy timeout listowania
+  (`LIST_TIMEOUT_MS`, 6 s) i ponawia `LIST` także przy złej odpowiedzi formatu.
+- **Skan i fsync nie mogą zjadać zegara ACK w trakcie transferu** (2026-10-15):
+  pełny skan katalogu (`refreshInfo`→`countCsv`, wołany m.in. z `commitRoute`
+  po wysłaniu trasy) oraz `Storage::sync()` (fsync co 10 s) dzielą pętlę z pompą
+  NOTIFY. `refreshInfo()` w trakcie transferu tylko ustawia `infoDirty_` i jest
+  doganiany w `finishStream()`; `storage.sync()` jest pomijany, gdy `ble.busy()`.
+  PWA nie wysyła trasy równolegle z pobieraniem (sekwencjonuje `flushRoute`).
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw

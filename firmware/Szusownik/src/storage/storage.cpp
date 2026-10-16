@@ -3,6 +3,9 @@
 #include "../config/config.h"
 #include "../config/log.h"
 #include "../core/csv_line.h"
+#include "../core/meta_name.h"
+#include <dirent.h>
+#include <sys/stat.h>
 #include <SPI.h>
 #include <SD.h>
 
@@ -11,7 +14,8 @@ static File readFile;
 
 bool Storage::begin() {
   SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
-  ready_ = SD.begin(PIN_SD_CS, SPI, 20000000);
+  // Jawny mountpoint = SZ_SD_MOUNT; listowanie używa go wprost (patrz config.h).
+  ready_ = SD.begin(PIN_SD_CS, SPI, 20000000, SZ_SD_MOUNT);
   return ready_;
 }
 
@@ -115,75 +119,62 @@ void Storage::ensureMeta() {
 
 uint32_t Storage::countCsv() const {
   if (!ready_) return 0;
+  // Widoczny dla PWA = CSV z plikiem ".meta". Iterujemy katalog TANIO
+  // (opendir/readdir), bez otwierania plików. `openNextFile()` konstruuje
+  // `VFSFileImpl`, którego konstruktor woła `fopen()`; FatFs rozwiązuje nazwę
+  // liniowo w katalogu, więc dla n wpisów koszt rośnie ~O(n^2) i skan blokuje
+  // pętlę na sekundy (nawet jeśli nie potrzebujemy treści pliku).
+  DIR* dir = opendir(SZ_SD_MOUNT);
+  if (!dir) return 0;
   uint32_t count = 0;
-  File root = SD.open("/");
-  if (!root) return 0;
-  while (true) {
-    File f = root.openNextFile();
-    if (!f) break;
-    if (!f.isDirectory()) {
-      // Plik widoczny dla PWA = CSV z plikiem .meta. Zamiast robić SD.exists()
-      // na każdym CSV (osobny odczyt katalogu, przy wielu plikach blokuje pętlę
-      // setki ms — a na starcie transferu zjadało to timeout ACK), liczymy
-      // pliki ".meta" w jednym przebiegu. Każdy .meta należy do CSV.
-      String n = String(f.name());
-      if (n.endsWith(SZ_CSV_META_SUFFIX)) count++;
-    }
-    f.close();
+  struct dirent* ent;
+  char base[sizeof(StorageEntry::name)];
+  while ((ent = readdir(dir)) != nullptr) {
+    // DT_UNKNOWN nie jest błędem (nie każdy VFS wypełnia d_type); filtrujemy
+    // po sufiksie, więc katalogi i tak odpadają.
+    if (ent->d_type == DT_DIR) continue;
+    if (core::csvNameFromMeta(ent->d_name, SZ_CSV_META_SUFFIX, base, sizeof(base))) count++;
   }
-  root.close();
+  closedir(dir);
   return count;
 }
 
 uint32_t Storage::listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const {
   if (!ready_ || maxCount == 0) return 0;
-  // Skan katalogu SD na tej karcie jest bardzo wolny (~O(n^2) — kolejne
-  // openNextFile/istnienie pliku kosztuje dziesiątki–setki ms), a SD.exists() na
-  // każdym CSV dawało ~4 s i przekraczało timeout LIST w PWA. Dlatego JEDEN
-  // przebieg katalogu: zbieramy rozmiary CSV > since oraz nazwy widocznych CSV
-  // (pliki .meta), a łączymy dopiero potem — bez SD.exists() i drugiego skanu.
-  static const size_t kCap = 200;  // zapas; karta FIFO trzyma dużo mniej
-  static char s_csvName[kCap][sizeof(out[0].name)];
-  static char s_metaName[kCap][sizeof(out[0].name)];
-  static uint32_t s_csvSize[kCap];
-  size_t csvCount = 0, metaCount = 0;
-  File root = SD.open("/");
-  if (!root) return 0;
-  const size_t suffixLen = strlen(SZ_CSV_META_SUFFIX);
-  while (true) {
-    File f = root.openNextFile();
-    if (!f) break;
-    if (!f.isDirectory()) {
-      String n = String(f.name());
-      if (n.endsWith(SZ_CSV_META_SUFFIX)) {
-        String csv = n.substring(0, n.length() - suffixLen);
-        if (csv > since && metaCount < kCap) {
-          strncpy(s_metaName[metaCount], csv.c_str(), sizeof(s_metaName[0]) - 1);
-          s_metaName[metaCount][sizeof(s_metaName[0]) - 1] = '\0';
-          metaCount++;
-        }
-      } else if ((n.endsWith(".csv") || n.endsWith(".CSV")) && n > since && csvCount < kCap) {
-        strncpy(s_csvName[csvCount], n.c_str(), sizeof(s_csvName[0]) - 1);
-        s_csvName[csvCount][sizeof(s_csvName[0]) - 1] = '\0';
-        s_csvSize[csvCount] = (uint32_t)f.size();
-        csvCount++;
-      }
-    }
-    f.close();
-  }
-  root.close();
-
+  // JEDEN tani przebieg katalogu (opendir/readdir, bez otwierania plików).
+  // Widoczność = obecność pliku ".meta"; nazwę CSV odtwarzamy z nazwy ".meta",
+  // więc nie ma drugiego przebiegu ani SD.exists() na każdym CSV. Dawne
+  // openNextFile() otwierało każdy wpis (fopen -> liniowe szukanie w FatFs),
+  // co dawało ~O(n^2) i LIST ~1,6 s. Bufor wynikowy ogranicza się do maxCount
+  // wpisów, więc znikają też ~10 KB statycznych tablic.
+  DIR* dir = opendir(SZ_SD_MOUNT);
+  if (!dir) return 0;
   uint32_t count = 0;
-  for (size_t i = 0; i < csvCount; i++) {
-    for (size_t j = 0; j < metaCount; j++) {
-      if (strcmp(s_csvName[i], s_metaName[j]) == 0) {
-        // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
-        count = (uint32_t)core::listInsert(out, count, maxCount, s_csvName[i], s_csvSize[i]);
-        break;
-      }
+  struct dirent* ent;
+  char base[sizeof(StorageEntry::name)];
+  while ((ent = readdir(dir)) != nullptr) {
+    if (ent->d_type == DT_DIR) continue;
+    if (!core::csvNameFromMeta(ent->d_name, SZ_CSV_META_SUFFIX, base, sizeof(base))) continue;
+    if (!(String(base) > since)) continue;
+    // Wstaw do posortowanego bufora (rosnąco), zachowując maxCount NAJSTARSZYCH.
+    count = (uint32_t)core::listInsert(out, count, maxCount, base, 0);
+  }
+  closedir(dir);
+
+  // Rozmiar tylko dla <= maxCount wybranych wpisów (stat nie czyta danych
+  // pliku). Wpis ".meta" bez pary CSV wypada — jak w dawnym przecięciu zbiorów.
+  uint32_t kept = 0;
+  for (uint32_t i = 0; i < count; i++) {
+    String p = SZ_SD_MOUNT "/";
+    p += out[i].name;
+    struct stat st;
+    if (stat(p.c_str(), &st) == 0 && !S_ISDIR(st.st_mode)) {
+      if (kept != i) out[kept] = out[i];
+      out[kept].size = (unsigned long)st.st_size;
+      kept++;
     }
   }
-  return count;
+  return kept;
 }
 
 bool Storage::openRead(const String& name) {
@@ -267,29 +258,25 @@ void Storage::ensureFreeSpace() {
   unsigned long total = SD.totalBytes();
   if (total == 0) return;  // brak karty — nie ma czego sprzątać
   while (SD.totalBytes() - SD.usedBytes() < SZ_SD_MIN_FREE_BYTES) {
-    // Znajdź najstarszy CSV (nazwa = timestamp, więc leksykograficznie).
-    File root = SD.open("/");
-    if (!root) return;
+    // Znajdź najstarszy CSV (nazwa = timestamp, więc leksykograficznie) tanim
+    // przebiegiem readdir — bez otwierania każdego wpisu.
+    DIR* dir = opendir(SZ_SD_MOUNT);
+    if (!dir) return;
     String oldest;
-    while (true) {
-      File f = root.openNextFile();
-      if (!f) break;
-      if (!f.isDirectory()) {
-        String n = String(f.name());
-        if (n.endsWith(".csv") || n.endsWith(".CSV")) {
-          if (oldest.length() == 0 || n < oldest) oldest = n;
-        }
+    struct dirent* ent;
+    while ((ent = readdir(dir)) != nullptr) {
+      if (ent->d_type == DT_DIR) continue;
+      String n = String(ent->d_name);
+      if (n.endsWith(".csv") || n.endsWith(".CSV")) {
+        if (oldest.length() == 0 || n < oldest) oldest = n;
       }
-      f.close();
     }
-    root.close();
+    closedir(dir);
     if (oldest.length() == 0) return;  // nic do skasowania
     if (fileOpen_ && currentName_.endsWith(oldest)) return;  // nie rusz bieżącego
     if (SD.remove(oldest)) {
       SZ_LOGWF("SD FIFO kasuje %s", oldest.c_str());
-      String mp = oldest;
-      if (!mp.startsWith("/")) mp = "/" + mp;
-      SD.remove(mp + SZ_CSV_META_SUFFIX);  // plik towarzyszący
+      SD.remove(oldest + SZ_CSV_META_SUFFIX);  // plik towarzyszący
     } else {
       return;
     }

@@ -284,3 +284,50 @@ describe("ustawienia urządzenia", () => {
     expect(refreshed.freqShort).toBe(600);
   });
 });
+
+describe("odporność listowania i kolejka ponowień", () => {
+  it("ponawia LIST po odpowiedzi złego formatu, zamiast wywalać sync", async () => {
+    const emulator = new DeviceEmulator({
+      files: [file("20260101_000000.csv", syntheticDescentCsv(5))],
+      malformedListOnce: true,
+    });
+    useEmulator(emulator);
+
+    const ble = new SzusownikBle();
+    await ble.connect();
+    const queue = await ble.collectNewFiles();
+    expect(queue.map((entry) => entry.name)).toEqual(["20260101_000000.csv"]);
+  });
+
+  it("pendingQueue zwraca trwałe ponowienia (bez znanych) — fallback, gdy LIST padnie", async () => {
+    installFakeBluetooth(new DeviceEmulator({ files: [] }));
+    const ble = new SzusownikBle();
+    await ble.connect();
+
+    await db.pendingFiles.put({
+      name: "20260102_000000.csv",
+      size: 20,
+      attempts: 1,
+      lastError: "err:read",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await db.pendingFiles.put({
+      name: "20260101_000000.csv",
+      size: 10,
+      attempts: 1,
+      lastError: "err:read",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    // Ten plik zdążył się rozwiązać w poprzedniej sesji — nie wraca w kolejce.
+    await db.files.put({
+      name: "/20260102_000000.csv",
+      size: 20,
+      receivedAt: "2026-01-01T00:00:00.000Z",
+      userId: "local",
+      raw: "",
+    });
+
+    expect(await ble.pendingQueue()).toEqual([{ name: "20260101_000000.csv", size: 10 }]);
+    expect(await db.pendingFiles.get("20260102_000000.csv")).toBeUndefined();
+  });
+});

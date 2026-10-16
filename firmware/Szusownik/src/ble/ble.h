@@ -87,6 +87,10 @@ class BleFiles {
   uint16_t routeStageTotal_ = 0;
   volatile bool routeCommitPending_ = false;
 
+  // INFO wymaga pełnego skanu katalogu SD (countCsv). Podczas transferu odraczamy
+  // odświeżenie, żeby skan nie zjadał zegara ACK; flush po zakończeniu transferu.
+  bool infoDirty_ = false;
+
   // Parowanie HUD.
   bool pairRequested_ = false;
   bool hudPeerValid_ = false;

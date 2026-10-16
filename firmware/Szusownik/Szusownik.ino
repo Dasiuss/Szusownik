@@ -238,7 +238,10 @@ void loop() {
 
   if (now >= nextSync) {
     nextSync = now + SZ_SD_COMMIT_MS;
-    storage.sync();
+    // fsync (`File::flush` -> f_sync) dzieli SPI z odczytem transferu i na tej
+    // karcie potrafi być długi. W trakcie transferu pomijamy go (dane w buforze
+    // stdio domkną się po transferze albo na rolce), żeby nie zjadał zegara ACK.
+    if (!ble.busy()) storage.sync();
   }
   if (now >= nextHud) {
     nextHud = now + 500;

@@ -85,6 +85,8 @@ export interface EmulatorOptions {
   pairDevices?: number;
   /** MAC, który emulator przypisze przy udanym parowaniu. */
   peerMac?: string;
+  /** Pierwsza odpowiedź na LIST ma zły format (test ponowienia w listSince). */
+  malformedListOnce?: boolean;
 }
 
 const textEncoder = new TextEncoder();
@@ -210,11 +212,13 @@ export class DeviceEmulator {
   // Sparowany HudRekaw: MAC w INFO (`peerMac`), jak w prawdziwym Szusowniku.
   private peerMac = "";
   private pairDevices: number;
+  private malformedListPending: boolean;
 
   readonly commands: string[] = [];
 
   constructor(private readonly options: EmulatorOptions) {
     this.pairDevices = options.pairDevices ?? 1;
+    this.malformedListPending = options.malformedListOnce ?? false;
     for (const uuid of [SZ_UUID_INFO, SZ_UUID_CTRL, SZ_UUID_DATA, SZ_UUID_STAT, SZ_UUID_ROUTE]) {
       this.characteristics.set(uuid, new FakeCharacteristic(uuid, this));
     }
@@ -423,6 +427,12 @@ export class DeviceEmulator {
 
   private handleList(since: string): void {
     const echo = since || "0";
+    if (this.malformedListPending) {
+      this.malformedListPending = false;
+      // Nieparzysta liczba pól => parseListStatus rzuca; PWA ma ponowić.
+      this.setStatus(`${SZ_ST_LIST}${echo} zle`);
+      return;
+    }
     const pageSize = this.options.listPageSize ?? SZ_BLE_LIST_MAX;
     const entries = this.visibleFiles().filter((file) => file.name > since).slice(0, pageSize);
     let message = `${SZ_ST_LIST}${echo}`;
