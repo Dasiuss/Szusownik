@@ -466,12 +466,12 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   wisiał do timeoutu. Teraz każdy błąd jest normalizowany do `Error` i kończy
   się błędem przejściowym (plik wraca do kolejki ponowień).
 - **Nieudany zapis kontrolny nie przerywa transferu** (2026-10-16): `ACK:`/`NACK`
-  idą przez `safeWriteCtrl`, które toleruje pojedyncze hiccupy GATT — zgubiony
-  zapis jest samokorygowalny, bo urządzenie replayuje po własnym timeoucie ACK
-  (500 ms). Dopiero **3 nieudane pod rząd** przerywają plik błędem przejściowym,
-  a `DeviceDisconnectedError` zawsze przerywa natychmiast. Bez tego jeden
-  `NotSupportedError` na zapisie potwierdzenia wywalał cały (poprawnie odebrany)
-  plik — to był zaobserwowany tryb awarii przy dużych plikach.
+  idą przez `safeWriteCtrl`, które toleruje hiccupy GATT — zgubiony zapis jest
+  samokorygowalny, bo urządzenie replayuje po własnym timeoucie ACK. Limit jest
+  wysoki (`CONTROL_WRITE_FAIL_LIMIT` = 40 pod rząd, ~20 s przy zastoju), żeby PWA
+  **nie poddawała się przed** bezpiecznikiem urządzenia (10 s → `err:`); dopiero
+  po nim plik kończy się błędem przejściowym, a `DeviceDisconnectedError` zawsze
+  przerywa natychmiast.
 - **Pomiar: czy ramki gubi nadajnik** (2026-10-16): firmware liczy wywołania
   `chrData->notify()` zwracające `false` (`notifyFail=` w logach `BLE done`/
   `BLE abort` i `nf=` w linii SYS). `notify()` nie raportuje sukcesu, więc to
@@ -489,10 +489,12 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   sekundach samo wraca — potwierdzone na sprzęcie (jedno połączenie, ponowienia
   PWA kończyły się sukcesem; `20260926_181420.csv` raz `done replay=0
   ackTimeout=0 notifyFail=87`, a nieudane próby miały `notifyFail` 1100–3400 i
-  `err:ack-timeout`). Dlatego podczas zastoju (`sendBlocked_`) **nie liczymy
-  timeoutu ACK** — czekamy i ponawiamy. Bezpiecznik: ciągły zastój dłuższy niż
-  `SZ_BLE_SEND_STALL_MAX_MS` (10 s) kończy transfer `err:ack-timeout`. Ramki,
-  pacing, okno i retry ACK bez zmian.
+  `err:ack-timeout`). Dlatego **timeout ACK liczymy od ostatniego zaakceptowanego
+  potwierdzenia** (`lastAckMs_`), a nie od liczby retry: przez nieudany okres
+  wznawiamy od najstarszej niepotwierdzonej co 500 ms, ale transfer kończymy
+  dopiero po `SZ_BLE_SEND_STALL_MAX_MS` (10 s) bez żadnego ACK. Sam licznik
+  `SZ_BLE_ACK_RETRY` (6) przerywał po ~3 s — za wcześnie wobec zastojów 4–9 s.
+  Ramki, pacing, okno i retry ACK bez zmian.
 
 > Status (2026-10-16, po pomiarze): duże pliki padały, bo **nadajnik** masowo
 > gubił ramki (`notifyFail` 297–597 dla 95–183 ramek), co dawało `err:ack-timeout`;

@@ -78,10 +78,10 @@ class BleFiles {
   // Ile razy NimBLE odrzucił notify() (brak mbufów/inne). diagnostyka gubienia
   // ramek — notify() nie mówi wprost, czy pakiet poszedł (docs/ble-transfer.md §7).
   uint32_t notifyFails_ = 0;
-  // Bieżący zastój wysyłki: `sendBlocked_` = ostatni notify() zwrócił false.
-  // `blockedSinceMs_` = początek zastoju (do bezpiecznika SZ_BLE_SEND_STALL_MAX_MS).
-  bool sendBlocked_ = false;
-  unsigned long blockedSinceMs_ = 0;
+  // Ostatnie zaakceptowane potwierdzenie (ACK). Limit zastoju liczymy od niego,
+  // a nie od liczby retry — zastój łącza bywa "miękki" (ramki się wysyłają, ale
+  // potwierdzenia nie wracają) i licznik 6×500 ms ucinał go za wcześnie.
+  unsigned long lastAckMs_ = 0;
   uint16_t mtu_ = 0;
   uint8_t inBuf_[512];
   size_t inLen_ = 0;
@@ -130,10 +130,6 @@ class BleFiles {
   // Zwraca false, gdy pacing 4 ms zabrania wysyłki w tej chwili.
   bool emitFrame(const uint8_t* payload, size_t len);
   bool sendEndMarker();
-  // Reakcja na wynik notify(): false = zastój wysyłki (czekamy i ponawiamy),
-  // true = wysyłka odpuszcza. Wołane z emitFrame/sendEndMarker/replay.
-  void noteSendBlocked();
-  void noteSendOk();
   void onAck(uint32_t n);
   void onNack(uint32_t e);
   void replayFrom(uint32_t seq);

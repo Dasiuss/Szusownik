@@ -322,7 +322,7 @@ describe("odporność na hiccup GATT", () => {
       failControlWrites: { prefix: "ACK:", times: 99 },
     });
     useEmulator(emulator);
-    const ble = new SzusownikBle();
+    const ble = new SzusownikBle(3); // limit skrócony, żeby test był szybki
     await ble.connect();
 
     const { result } = await syncAll(ble);

@@ -61,9 +61,10 @@ const PROGRESS_INTERVAL_MS = 500;
 // i nie nakładać go na zapisy potwierdzeń.
 const STREAM_STALL_MS = 1000;
 // Ile nieudanych zapisów kontrolnych (ACK/NACK) pod rząd przerywa transfer.
-// Pojedynczy hiccup GATT (np. NotSupportedError) jest samokorygowalny — urządzenie
-// replayuje po własnym timeoucie ACK — więc nie może wywalać całego pliku.
-const MAX_CONTROL_WRITE_FAILS = 3;
+// Zastój GATT sam mija (urządzenie ma własny bezpiecznik ~10 s i wtedy kończy
+// transfer statusem err:), więc limit jest wysoki, a nie 3 — inaczej PWA poddawała
+// się przed urządzeniem.
+const CONTROL_WRITE_FAIL_LIMIT = 40;
 // Start/lista mają zapas ponad czas skanu SD i otwarcia pliku: na urządzeniu
 // pętla główna bywa zajęta (zapis GNSS, fsync), a timeout liczony jest od
 // wysłania komendy. Za krótki próg = fałszywy błąd przy sprawnej karcie.
@@ -279,6 +280,12 @@ export class SzusownikBle {
   private readonly gatt = new GattQueue();
   private settingsLock: Promise<unknown> = Promise.resolve();
   private detached = false;
+  // Limit nieudanych zapisów kontrolnych pod rząd (parametr dla testów).
+  private readonly controlWriteFailLimit: number;
+
+  constructor(controlWriteFailLimit: number = CONTROL_WRITE_FAIL_LIMIT) {
+    this.controlWriteFailLimit = controlWriteFailLimit;
+  }
 
   /** Czy łącze GATT jest aktywne. `false` po cichym zerwaniu (gattserverdisconnected). */
   get connected(): boolean {
@@ -672,10 +679,10 @@ export class SzusownikBle {
         controlWriteFails++;
         console.warn(
           `[ble] ${meta.name} zapis kontrolny "${cmd}" nieudany ` +
-            `(${controlWriteFails}/${MAX_CONTROL_WRITE_FAILS})`,
+            `(${controlWriteFails}/${this.controlWriteFailLimit})`,
           err,
         );
-        if (controlWriteFails >= MAX_CONTROL_WRITE_FAILS) {
+        if (controlWriteFails >= this.controlWriteFailLimit) {
           throw err instanceof Error
             ? err
             : new Error(`Zapis kontrolny nie powiódł się ${controlWriteFails} raz(y)`);
