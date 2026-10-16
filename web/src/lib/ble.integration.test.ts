@@ -184,6 +184,25 @@ describe("odporność na uszkodzenia i błędy", () => {
     const ignored = await db.ignoredFiles.get("20260101_000000.csv");
     expect(ignored?.reason).toContain("nagłówek");
   });
+
+  it("uszkodzona ramka (błąd dekompresora) to błąd przejściowy, a nie zawieszenie", async () => {
+    const csv = syntheticDescentCsv(40);
+    const emulator = new DeviceEmulator({
+      files: [file("20260101_000000.csv", csv)],
+      corruptSeqs: [0], // psuje nagłówek zlib -> DecompressionStream zgłasza błąd
+    });
+    useEmulator(emulator);
+
+    const ble = new SzusownikBle();
+    await ble.connect();
+    // `writer.write()` odrzuca z `undefined`; bez normalizacji błąd znika w
+    // `if (failed)` i transfer wisi do timeoutu 120 s.
+    const startedAt = Date.now();
+    const { result } = await syncAll(ble);
+    expect(Date.now() - startedAt).toBeLessThan(3000);
+    expect(result.transient.map((entry) => entry.name)).toEqual(["20260101_000000.csv"]);
+    expect(emulator.commands.some((cmd) => cmd === "STOP")).toBe(true);
+  });
 });
 
 describe("NACK/replay i duplikaty", () => {

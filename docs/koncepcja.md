@@ -20,7 +20,7 @@ Dwa główne elementy:
 - Adaptacyjna częstotliwość próbkowania.
 - Feedback dźwiękowy (bipnięcia piezo) + sygnał rekordu.
 - Zapis surowy CSV na microSD.
-- Transfer BLE do PWA (Android), podgląd offline (IndexedDB).
+- Transfer BLE do PWA (Chrome, Windows/Android), podgląd offline (IndexedDB).
 - Warstwa prezentacyjna w PWA: spis zjazdów (czasy + max prędkość), po wejściu w zjazd — wykresy.
 - Generowanie FIT w PWA + wysyłka do Strava przez proxy serverless.
 - Baza w chmurze: Supabase.
@@ -113,7 +113,7 @@ Dwa główne elementy:
 - **Cięcie trasy przy kliknięciu w PWA**: aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia. Ograniczenie: maksymalnie **bieżący dzień** — jeśli poprzednie cięcie było
   wcześniejszego dnia, uwzględniane są tylko dane z dzisiaj (starsze zostają niewrzucone).
-- **Transfer BLE** do PWA (Android, Chrome/Web Bluetooth), chunkowany.
+- **Transfer BLE** do PWA (Chrome/Web Bluetooth), chunkowany.
 - **FIT generowane w PWA** (`@garmin-fit/sdk`).
 - **Dwie akcje w PWA**: (1) pobierz z urządzenia (BLE → IndexedDB),
   (2) wyślij do Strava (FIT → Edge Function).

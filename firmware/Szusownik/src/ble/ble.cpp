@@ -603,6 +603,7 @@ bool BleFiles::startStream(const String& name) {
   replaying_ = false;
   replays_ = 0;
   ackTimeouts_ = 0;
+  notifyFails_ = 0;
   lastNotifyMs_ = 0;
   // Bez refreshInfo(): to pełny skan katalogu SD (~0,8 s), a PWA nie czyta INFO
   // w trakcie transferu, a fileCount się przy nim nie zmienia. Zegar ACK startuje
@@ -622,7 +623,7 @@ void BleFiles::abortStream(const String& reason) {
   // Dołącz nazwę pliku, żeby PWA odróżniła błąd bieżącego transferu od
   // poprzedniego (nazwy plików są unikalne).
   setStatus(activeFile_.length() ? reason + " " + activeFile_ : reason);
-  SZ_LOGWF("BLE abort (%s)", reason.c_str());
+  SZ_LOGWF("BLE abort (%s) notifyFail=%lu", reason.c_str(), (unsigned long)notifyFails_);
 }
 
 void BleFiles::finishStream() {
@@ -635,8 +636,8 @@ void BleFiles::finishStream() {
   transferring_ = false;
   compActive_ = false;
   setStatus(String(msg));
-  SZ_LOGIF("BLE %s name=%s replay=%lu ackTimeout=%lu", msg, activeFile_.c_str(),
-           (unsigned long)replays_, (unsigned long)ackTimeouts_);
+  SZ_LOGIF("BLE %s name=%s replay=%lu ackTimeout=%lu notifyFail=%lu", msg, activeFile_.c_str(),
+           (unsigned long)replays_, (unsigned long)ackTimeouts_, (unsigned long)notifyFails_);
   // Odroczone w trakcie transferu odświeżenie INFO (skan SD) dogania teraz.
   if (infoDirty_) refreshInfo();
 }
@@ -651,7 +652,7 @@ bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
   window_[idx][3] = (uint8_t)((nextSeq_ >> 24) & 0xFF);
   if (len) memcpy(window_[idx] + SZ_BLE_HEADER_SIZE, payload, len);
   windowLen_[idx] = (uint16_t)(SZ_BLE_HEADER_SIZE + len);
-  if (chrData) chrData->notify(window_[idx], windowLen_[idx]);
+  if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
   compBytes_ += (uint32_t)len;
   frameCount_++;
   nextSeq_++;
@@ -672,7 +673,7 @@ void BleFiles::sendEndMarker() {
   window_[idx][2] = (uint8_t)((nextSeq_ >> 16) & 0xFF);
   window_[idx][3] = (uint8_t)((nextSeq_ >> 24) & 0xFF);
   windowLen_[idx] = SZ_BLE_HEADER_SIZE;
-  if (chrData) chrData->notify(window_[idx], windowLen_[idx]);
+  if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
   endSeq_ = nextSeq_;
   endSent_ = true;
   nextSeq_++;
@@ -689,7 +690,7 @@ void BleFiles::pumpStream() {
       unsigned long now = millis();
       if (now - lastNotifyMs_ < SZ_BLE_NOTIFY_MS) break;
       uint32_t idx = replayPos_ % SZ_BLE_WINDOW;
-      if (chrData) chrData->notify(window_[idx], windowLen_[idx]);
+      if (chrData && !chrData->notify(window_[idx], windowLen_[idx])) notifyFails_++;
       lastNotifyMs_ = now;
       lastProgressMs_ = now;
       replayPos_++;

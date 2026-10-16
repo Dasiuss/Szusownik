@@ -94,7 +94,10 @@ Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 3. Od razu po wgraniu odpal monitor w osobnym oknie przez `monitor_COM7.cmd`
    z katalogu repo (nie blokuje wywołania):
    `Start-Process -FilePath "<repo>\monitor_COM7.cmd"`
-   żeby widać było logi od startu urządzenia.
+   żeby widać było logi od startu urządzenia. Skrypt pokazuje logi na konsoli
+   **i** zapisuje je do `monitor_COM7.log` w katalogu repo (UTF-8, plik jest
+   czyszczony przy każdym starcie) — agent może czytać ten plik, gdy nie widzi
+   okna konsoli.
 
 Uwagi: `arduino-cli upload` bez `--input-dir` potrafi użyć przeterminowanego
 cache build i wgrać starą binarkę, ignorując zmianę w nagłówku (`config.h`,

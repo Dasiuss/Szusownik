@@ -19,6 +19,7 @@ import {
   SZ_BEEP_LONG_DEFAULT_MS,
   SZ_BEEP_MIN_KMH_DEFAULT,
   SZ_BEEP_SHORT_DEFAULT_MS,
+  SZ_BLE_HEADER_SIZE,
   SZ_BLE_LIST_MAX,
   SZ_BLE_PAYLOAD_SIZE,
   SZ_BLE_WINDOW,
@@ -75,6 +76,8 @@ export interface EmulatorOptions {
   dropSeqs?: number[];
   /** seq wysyłane podwójnie (duplikat, PWA ignoruje seq < expected). */
   duplicateSeqs?: number[];
+  /** seq, którym psujemy pierwszy bajt payloadu (uszkodzony strumień zlib). */
+  corruptSeqs?: number[];
   /** STATUS done z przekręconym CRC (PWA -> PermanentDownloadError). */
   corruptCrc?: boolean;
   /** Nazwy, które odpowiadają `err:open <nazwa>` (FileGoneError). */
@@ -122,6 +125,7 @@ interface Transfer {
   crc: number;
   droppedOnce: Set<number>;
   duplicateOnce: Set<number>;
+  corruptOnce: Set<number>;
 }
 
 type Listener = (event: { target: FakeCharacteristic }) => void;
@@ -491,6 +495,7 @@ export class DeviceEmulator {
       crc: crc32(file.bytes),
       droppedOnce: new Set(this.options.dropSeqs ?? []),
       duplicateOnce: new Set(this.options.duplicateSeqs ?? []),
+      corruptOnce: new Set(this.options.corruptSeqs ?? []),
     };
     this.acked = 0;
     this.nextSent = 0;
@@ -545,6 +550,10 @@ export class DeviceEmulator {
         ? transfer.comp.slice(seq * SZ_BLE_PAYLOAD_SIZE, (seq + 1) * SZ_BLE_PAYLOAD_SIZE)
         : new Uint8Array(0);
     const frame = concat(header, payload);
+    if (transfer.corruptOnce.has(seq) && frame.length > SZ_BLE_HEADER_SIZE) {
+      transfer.corruptOnce.delete(seq);
+      frame[SZ_BLE_HEADER_SIZE] = frame[SZ_BLE_HEADER_SIZE] ^ 0xff; // psuje strumień zlib
+    }
     this.dataChar.push(frame);
     if (transfer.duplicateOnce.has(seq)) {
       transfer.duplicateOnce.delete(seq);

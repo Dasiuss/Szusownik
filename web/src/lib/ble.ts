@@ -654,6 +654,7 @@ export class SzusownikBle {
     let finished = false;
     let finalAck = 0;
     let nackSentFor = -1;
+    let gaps = 0; // ile razy poprosiliśmy o retransmisję (diagnostyka gubienia)
     let failed: unknown = null;
     let chain: Promise<void> = Promise.resolve();
     // Czas ostatniego odebranego NOTIFY — po nim poznajemy, że strumień ucichł
@@ -703,7 +704,8 @@ export class SzusownikBle {
         // (NotSupportedError). Retransmisję odzyskuje też timeout ACK firmware.
         if (nackSentFor !== expected) {
           nackSentFor = expected;
-          console.log(`[ble] ${meta.name} NACK n=${expected}`);
+          gaps++;
+          console.log(`[ble] ${meta.name} NACK n=${expected} (dziura ${gaps})`);
           await this.writeCtrl(`${SZ_CMD_NACK}${expected}`);
         }
         return;
@@ -712,7 +714,10 @@ export class SzusownikBle {
         await writer.write(payload);
       } catch (err) {
         console.error(`[ble] ${meta.name} write fail seq=${seq} len=${payload.length}`, err);
-        throw err;
+        // `writer.write()` przy zepsutym strumieniu potrafi odrzucić z `undefined`
+        // (np. gdy DecompressionStream zgłosi błąd). Normalizujemy do Error, żeby
+        // błąd nie zniknął w `if (failed)` i żeby PWA ponowiła plik zamiast wisieć.
+        throw err instanceof Error ? err : new Error(`Błąd dekompresora (ramka ${seq})`);
       }
       expected++;
       reportProgress(expected);
@@ -753,7 +758,7 @@ export class SzusownikBle {
       let lastStallCheck = 0;
       for (;;) {
         await chain;
-        if (failed) throw failed;
+        if (failed !== null) throw failed;
         if (finished && readerDone) break;
         // Firmware może przerwać transfer (np. err:read) BEZ end markera. Zamiast
         // odpytywać STATUS bez przerwy (zabiera pasmo i nakłada się na zapisy
@@ -775,7 +780,7 @@ export class SzusownikBle {
           }
         }
         await new Promise((r) => setTimeout(r, 20));
-        if (failed) throw failed;
+        if (failed !== null) throw failed;
       }
       // Walidacja end-to-end: rozmiar (STATUS done raw=), CRC, schemat CSV.
       const status = await this.pollTransfer(meta.name, /^done /, TRANSFER_DONE_TIMEOUT_MS);
@@ -811,7 +816,7 @@ export class SzusownikBle {
         throw new PermanentDownloadError(`Zły nagłówek CSV: ${header}`);
       }
       if (lines < 2) throw new PermanentDownloadError("Plik bez próbek");
-      console.log(`[ble] done ${meta.name} ramki=${finalAck - 1} bajty=${outLen} linie=${lines}`);
+      console.log(`[ble] done ${meta.name} ramki=${finalAck - 1} dziury=${gaps} bajty=${outLen} linie=${lines}`);
       return text;
     } finally {
       clearTimeout(timeout);

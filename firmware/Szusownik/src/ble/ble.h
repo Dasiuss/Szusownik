@@ -19,6 +19,9 @@ class BleFiles {
   bool busy() const { return transferring_; }
   String lastError() const { return lastError_; }
   uint16_t mtu() const { return mtu_; }  // ostatnio wynegocjowane MTU (0 = brak)
+  // Ile notify() zostało odrzuconych w bieżącym transferze (0 = nic nie zgubiliśmy
+  // po naszej stronie). Diagnostyka: rozdziela gubienie nadajnika od odbiornika.
+  uint32_t notifyFails() const { return notifyFails_; }
 
   // Reklamowanie BLE zależne od prędkości: na postoju szybkie (PWA widzi
   // urządzenie od razu), w ruchu wolne (ograniczenie grzania). Wołane z pętli
@@ -72,6 +75,9 @@ class BleFiles {
   // zadzialal timeout ACK. Pomagaja ocenic jakosc lacza bez sledzenia konsoli.
   uint32_t replays_ = 0;
   uint32_t ackTimeouts_ = 0;
+  // Ile razy NimBLE odrzucił notify() (brak mbufów/inne). diagnostyka gubienia
+  // ramek — notify() nie mówi wprost, czy pakiet poszedł (docs/ble-transfer.md §7).
+  uint32_t notifyFails_ = 0;
   uint16_t mtu_ = 0;
   uint8_t inBuf_[512];
   size_t inLen_ = 0;

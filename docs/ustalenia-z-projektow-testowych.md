@@ -40,7 +40,7 @@ microSD  OLED     BLE
 surowe   lokalny   pliki + stan HUD
 CSV      HUD             |
                           v
-                     [PWA Android]
+                     [PWA Chrome]
                    BLE -> IndexedDB
                           |
              parser / cięcie zjazdów / statystyki

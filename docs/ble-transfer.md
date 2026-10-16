@@ -6,8 +6,9 @@
 
 ## 1. Cel i wynik testów
 
-`BleTest` mierzył transfer większego pliku z ESP32-S3-Zero do Chrome na
-Androidzie wyłącznie przez BLE. Telefon nie przełączał się na Wi-Fi.
+`BleTest` mierzył transfer większego pliku z ESP32-S3-Zero do Chrome (głównie na
+Windowsie, sprawdzany też na Androidzie) wyłącznie przez BLE. Klient nie
+przełączał się na Wi-Fi.
 
 Najlepszy potwierdzony profil sprzętowy:
 
@@ -35,7 +36,7 @@ formalnego limitu bez ponownego pomiaru.
 ESP32-S3
   PROGMEM/SD -> strumieniowy zlib/DEFLATE -> ramki BLE NOTIFY
                                               |
-Chrome Android PWA <-------------------------+
+Chrome PWA (Windows/Android) <----------------+
   Web Bluetooth -> sekwencje -> ACK/NACK -> DecompressionStream
   -> CRC32 / rozmiar / liczba linii -> OPFS lub Blob/IndexedDB
 ```
@@ -450,14 +451,28 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   250 ms). W zdrowym transferze to zero odczytów STATUS, a przerwanie `err:`
   bez end markera (np. `err:read`) i tak jest wykrywane w ~1 s.
 - **Logi diagnostyczne BLE** (2026-10-16): PWA loguje zdarzenia transferu
-  (`start`, `NACK n=`, `done`, wygaszenie z odczytanym STATUS), bez logu każdej
-  ramki (ten zmieniał wynik benchmarku). Firmware `HudLink` loguje przełączenie
-  radia ESP-NOW na czas transferu BLE z kosztem `esp_wifi_stop()`/`esp_wifi_start()`
-  (`HUD radio OFF/ON`), żeby dane dało się skorelować z `NACK`/`replay`.
+  (`start`, `NACK n=`, `done` z liczbą dziur, wygaszenie z odczytanym STATUS), bez
+  logu każdej ramki (ten zmieniał wynik benchmarku). Firmware `HudLink` loguje
+  przełączenie radia ESP-NOW na czas transferu BLE z kosztem
+  `esp_wifi_stop()`/`esp_wifi_start()` (`HUD radio OFF/ON`).
+- **`writer.write()` z `undefined` nie może zniknąć** (2026-10-16): przy
+  uszkodzonym strumieniu `DecompressionStream` odrzuca zapis z `undefined`, a
+  `if (failed)` było wtedy fałszywe — błąd dekompresora był połykany i transfer
+  wisiał do timeoutu. Teraz każdy błąd jest normalizowany do `Error` i kończy
+  się błędem przejściowym (plik wraca do kolejki ponowień).
+- **Pomiar: czy ramki gubi nadajnik** (2026-10-16): firmware liczy wywołania
+  `chrData->notify()` zwracające `false` (`notifyFail=` w logach `BLE done`/
+  `BLE abort` i `nf=` w linii SYS). `notify()` nie raportuje sukcesu, więc to
+  jedyny tani sposób odróżnienia gubienia po stronie esp32 od gubienia w stosie
+  klienta.
 
-> Status (2026-10-16): kolejka GATT, throttling postępu i odczyt STATUS po ciszy
-> mają testy PWA (emulator + `GattQueue`), ale **nie są jeszcze potwierdzone na
-> sprzęcie** — wymagają powtórnego transferu z telefonu.
+> Status (2026-10-16): po wgraniu kolejki GATT + throttlingu + STATUS po ciszy
+> transfer **nadal zawodzi przy dużych plikach** na Chrome/Windows, a małe
+> (≤ ~16 ramek, jedna porcja `pumpStream`) przechodzą zawsze. `HUD radio` jest
+> wykluczone (koszt `esp_wifi_stop()` = 0 ms, przełączenia nie pokrywają się z
+> `NACK`/`replay`). Podejrzenie: przepustowość/zawodność odbiornika pod ciągłym
+> strumieniem — czeka na wynik `notifyFail` (pomiar w toku). Zmiana pacing
+> (zamrożony profil) dopiero po tym pomiarze i osobnym benchmarku.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.
 Dane pozostają na karcie jako backup. Żądanie synchronizacji zamyka najpierw
@@ -488,6 +503,6 @@ jako produkcyjny, a nie tylko opisem w dokumentacji.
 - Rozłączenie w trakcie kompresji, replay i ponowne połączenie.
 - `STOP` z PWA i błąd zapisu na SD.
 - CRC, rozmiar, liczba linii i semantyczna poprawność CSV.
-- Dwa różne telefony Android i kilka wersji Chrome.
+- Chrome na Windowsie i na Androidzie (kilka wersji).
 - Benchmark z wyłączonym szczegółowym logiem DOM, bo logowanie każdej ramki
   zmienia wynik.

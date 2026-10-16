@@ -279,7 +279,7 @@ void loop() {
     SZ_LOGDF("SYS fix=%d sats=%lu hdop=%.2f age=%lums band=%d rate=%lums cfg=%d chars=%lu "
              "ubxfail=%lu | sd=%s file=%s wr=%lu err=%lu syncMax=%lums | "
              "smp=%.2fHz ep=%.2fHz gapMax=%lums | loop=%.1f/%lums stall=%lu | "
-             "heap=%lu min=%lu psram=%lu | die=%.1f air=%.1f | ble=%s mtu=%u",
+             "heap=%lu min=%lu psram=%lu | die=%.1f air=%.1f | ble=%s mtu=%u nf=%lu",
              gnss.hasFix() ? 1 : 0, (unsigned long)gnss.sats(), gnss.hdop(), gnss.locationAgeMs(),
              gnss.band(), gnss.logIntervalMs(), gnss.isConfigured() ? 1 : 0,
              (unsigned long)gnss.charsProcessed(), (unsigned long)gnss.ubxFails(),
@@ -288,7 +288,8 @@ void loop() {
              storage.syncMaxMs(), sampleHz, epochHz, maxEpochGapMs, loopAvg, maxLoopMs,
              (unsigned long)loopStallCount, (unsigned long)ESP.getFreeHeap(),
              (unsigned long)ESP.getMinFreeHeap(), (unsigned long)ESP.getFreePsram(),
-             temperatureRead(), airC, ble.busy() ? "xfer" : "idle", (unsigned)ble.mtu());
+             temperatureRead(), airC, ble.busy() ? "xfer" : "idle", (unsigned)ble.mtu(),
+             (unsigned long)ble.notifyFails());
 
     windowStart = now;
     windowSamples = 0;
