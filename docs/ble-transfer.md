@@ -484,13 +484,23 @@ Decyzje względem pierwotnej granicy funkcjonalnej:
   Teraz `emitFrame`, `sendEndMarker` i replay nie zwiększają sekwencji po
   `false` — ramka wraca po pacing backoff i jest ponawiana. `notifyFail` powinien
   spaść do ~0, a pacing/rozmiar ramki bez zmian (profil zamrożony).
+- **Zastój wysyłki przeczekujemy, nie przerywamy** (2026-10-16): gdy `notify()`
+  zwraca `false`, łącze na chwilę „zamarza” (pule mbufów stoją), ale po kilku
+  sekundach samo wraca — potwierdzone na sprzęcie (jedno połączenie, ponowienia
+  PWA kończyły się sukcesem; `20260926_181420.csv` raz `done replay=0
+  ackTimeout=0 notifyFail=87`, a nieudane próby miały `notifyFail` 1100–3400 i
+  `err:ack-timeout`). Dlatego podczas zastoju (`sendBlocked_`) **nie liczymy
+  timeoutu ACK** — czekamy i ponawiamy. Bezpiecznik: ciągły zastój dłuższy niż
+  `SZ_BLE_SEND_STALL_MAX_MS` (10 s) kończy transfer `err:ack-timeout`. Ramki,
+  pacing, okno i retry ACK bez zmian.
 
 > Status (2026-10-16, po pomiarze): duże pliki padały, bo **nadajnik** masowo
 > gubił ramki (`notifyFail` 297–597 dla 95–183 ramek), co dawało `err:ack-timeout`;
 > małe pliki (`notifyFail=0`) przechodziły zawsze. `HUD radio` wykluczone.
 > Wprowadzone: retry `notify()`, `safeWriteCtrl` (pojedynczy hiccup ACK/NACK nie
-> wywala pliku), normalizacja błędu dekompresora. Do potwierdzenia na sprzęcie:
-> oczekiwane `notifyFail≈0`, `ackTimeout=0`, `replay` bliski 0 przy dużych plikach.
+> wywala pliku), normalizacja błędu dekompresora, przeczekiwanie zastoju wysyłki
+> (10 s bezpiecznik). Do potwierdzenia na sprzęcie: oczekiwane `ackTimeout=0`,
+> `replay≈0`, a zastój przeczekany bez abortu (`notifyFail` może być >0).
 > Zmiana pacing (zamrożony profil) — tylko jeśli to nie wystarczy i po benchmarku.
 
 PWA pobiera pliki tylko nowe lub z kolejki ponowień, porównując nazwy z IndexedDB.

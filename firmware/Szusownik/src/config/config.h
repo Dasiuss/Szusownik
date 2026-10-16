@@ -132,3 +132,10 @@ static const float SZ_HYST_KMH = 3.0f;
 // w kółko. Brak fixu liczy się jak postój (szybkie).
 #define SZ_BLE_ADV_FAST_BELOW_KMH 5.0f
 
+// BLE: maksymalny ciągły zastój WYSYŁKI (notify() zwraca false — łącze nie
+// przyjmuje ramek, np. zapchana pula mbufów po stronie kontrolera). Do tego czasu
+// czekamy i ponawiamy zamiast przerywać (zastój sam mija, a ponowienie PWA jest
+// kosztowne); po nim dopiero err:ack-timeout. To NIE zmiana zamrożonego profilu
+// (ramki/pacing/okno bez zmian) — tylko bezpiecznik na czas oczekiwania.
+#define SZ_BLE_SEND_STALL_MAX_MS 10000UL
+

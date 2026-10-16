@@ -604,6 +604,8 @@ bool BleFiles::startStream(const String& name) {
   replays_ = 0;
   ackTimeouts_ = 0;
   notifyFails_ = 0;
+  sendBlocked_ = false;
+  blockedSinceMs_ = 0;
   lastNotifyMs_ = 0;
   // Bez refreshInfo(): to pełny skan katalogu SD (~0,8 s), a PWA nie czyta INFO
   // w trakcie transferu, a fileCount się przy nim nie zmienia. Zegar ACK startuje
@@ -642,6 +644,18 @@ void BleFiles::finishStream() {
   if (infoDirty_) refreshInfo();
 }
 
+void BleFiles::noteSendBlocked() {
+  notifyFails_++;
+  if (!sendBlocked_) {
+    sendBlocked_ = true;
+    blockedSinceMs_ = millis();
+  }
+}
+
+void BleFiles::noteSendOk() {
+  sendBlocked_ = false;
+}
+
 bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
   unsigned long now = millis();
   if (now - lastNotifyMs_ < SZ_BLE_NOTIFY_MS) return false;  // pacing 4 ms
@@ -657,10 +671,11 @@ bool BleFiles::emitFrame(const uint8_t* payload, size_t len) {
     // NIE liczymy jej jako wysłanej: cofamy pacing i ponowimy ją w kolejnym
     // poll(), zamiast gubić i liczyć na NACK/replay. `notify()==true` nadal nie
     // jest potwierdzeniem dostarczenia (docs/ble-transfer.md §7).
-    notifyFails_++;
+    noteSendBlocked();
     lastNotifyMs_ = now;  // backoff jak przy pacingu — nie kręcimy się w miejscu
     return false;
   }
+  noteSendOk();
   compBytes_ += (uint32_t)len;
   frameCount_++;
   nextSeq_++;
@@ -682,10 +697,11 @@ bool BleFiles::sendEndMarker() {
   window_[idx][3] = (uint8_t)((nextSeq_ >> 24) & 0xFF);
   windowLen_[idx] = SZ_BLE_HEADER_SIZE;
   if (!chrData || !chrData->notify(window_[idx], windowLen_[idx])) {
-    notifyFails_++;
+    noteSendBlocked();
     lastNotifyMs_ = millis();  // brak mbufów — ponowimy end marker
     return false;
   }
+  noteSendOk();
   endSeq_ = nextSeq_;
   endSent_ = true;
   nextSeq_++;
@@ -696,6 +712,16 @@ bool BleFiles::sendEndMarker() {
 }
 
 void BleFiles::pumpStream() {
+  // 0) Bezpiecznik zastoju wysyłki. Gdy notify() nie przyjmuje ramek, łącze na
+  // chwilę "zamiera" (pule mbufów stoją), ale zwykle sam wraca — wtedy chcemy
+  // przeczekać, a nie liczyć to jako zgubiony ACK i przerywać. Dopiero gdy zastój
+  // trwa dłużej niż SZ_BLE_SEND_STALL_MAX_MS, kończymy transfer błędem.
+  if (sendBlocked_ && millis() - blockedSinceMs_ >= SZ_BLE_SEND_STALL_MAX_MS) {
+    SZ_LOGWF("BLE zastoj wysylki %lums - koncze", (unsigned long)(millis() - blockedSinceMs_));
+    abortStream(SZ_ERR_ACK_TIMEOUT);
+    return;
+  }
+
   // 1) retransmisja w toku — najpierw dokończ replay (max 8 ramek na poll).
   if (replaying_) {
     uint8_t n = 0;
@@ -704,10 +730,11 @@ void BleFiles::pumpStream() {
       if (now - lastNotifyMs_ < SZ_BLE_NOTIFY_MS) break;
       uint32_t idx = replayPos_ % SZ_BLE_WINDOW;
       if (!chrData || !chrData->notify(window_[idx], windowLen_[idx])) {
-        notifyFails_++;
+        noteSendBlocked();
         lastNotifyMs_ = now;  // brak mbufów — ponowimy w kolejnym poll
         break;
       }
+      noteSendOk();
       lastNotifyMs_ = now;
       lastProgressMs_ = now;
       replayPos_++;
@@ -790,8 +817,10 @@ void BleFiles::pumpStream() {
     break;
   }
 
-  // 3) timeout ACK -> replay od najstarszej niepotwierdzonej.
-  if (millis() - lastProgressMs_ > SZ_BLE_ACK_TIMEOUT_MS) {
+  // 3) timeout ACK -> replay od najstarszej niepotwierdzonej. Gdy wysyłka jest
+  // zablokowana (notify()==false), to nie jest zgubiony ACK — czekamy na odpuszczenie
+  // łącza (bezpiecznik w punkcie 0), zamiast nabijać retry i przerywać transfer.
+  if (!sendBlocked_ && millis() - lastProgressMs_ > SZ_BLE_ACK_TIMEOUT_MS) {
     if (ackRetries_ >= SZ_BLE_ACK_RETRY) {
       abortStream(SZ_ERR_ACK_TIMEOUT);
       return;
