@@ -120,8 +120,8 @@ Zachowanie odbiornika:
 | `ROUTE_NOTIFY_ACK_BLOCK_SIZE` | `32` | liczba zaakceptowanych ramek na skumulowany ACK |
 | `ROUTE_NOTIFY_WINDOW_SIZE` | `128` | maksymalna liczba niepotwierdzonych ramek |
 | `ROUTE_NOTIFY_INTERVAL_MS` | `4 ms` | minimalny odstęp prób NOTIFY |
-| `ROUTE_ACK_TIMEOUT_MS` | `500 ms` | timeout oczekiwania na ACK |
-| `ROUTE_ACK_RETRY_LIMIT` | `6` | maksymalna liczba replay po timeoutach (2026-10-15: `3`→`6`, ~3 s tolerancji; do potwierdzenia benchmarkiem) |
+| `ROUTE_ACK_TIMEOUT_MS` | `500 ms` | kadencja replay, gdy brak ACK (bez zmian) |
+| przerwanie przy braku ACK | `SZ_BLE_SEND_STALL_MAX_MS` = `10 s` | po tylu ms BEZ zaakceptowanego ACK transfer kończy się `err:ack-timeout`. Wcześniej ograniczał to licznik `SZ_BLE_ACK_RETRY` = `6` (~3 s), ale ucinał zastoje łącza za wcześnie — usunięty 2026-10-16 (§10) |
 | PWA output flush | `16 KiB` | agregacja danych przed zapisem |
 | PWA transfer timeout | `120 s` | zabezpieczenie przed zawieszeniem |
 
