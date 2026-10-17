@@ -545,8 +545,9 @@ pokrycia/zaliczenia całej trasy, oceny warunków i score tras.
 ### Pokrycie tras na mapie (zaimplementowane)
 
 Przycisk ikonowy na dużym widoku mapy (narty z checkiem) włącza tryb pokrycia:
-każda trasa liniowa dostaje pogrubioną obwódkę (casing) — zieloną, gdy
-przejechana, szarą, gdy nieodwiedzona; kolor trudności trasy zostaje na linii pod
+każda trasa liniowa dostaje pogrubioną obwódkę (casing) — jasnozieloną, gdy
+przejechana, jasnoczerwoną, gdy nieodwiedzona (celowo wyraźnie jaśniejszą od
+czerwieni tras z tabeli kolorów trudności); kolor trudności trasy zostaje na linii pod
 obwódką, zaznaczona trasa pozostaje żółta. Przy włączonym trybie pod przyciskami
 widnieje licznik „przejechane X z Y tras". Stan przełącznika nie jest
 zapamiętywany (domyślnie wyłączony).

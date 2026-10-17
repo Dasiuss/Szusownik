@@ -76,7 +76,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
   zjazdów dnia. Szczegóły: `docs/mapy-routing.md` §5.
 - **Mapa (duża): pokrycie tras.** Przycisk ikonowy (narty z checkiem) na dużym
   widoku mapy włącza tryb pokrycia: trasy przejechane w ostatnich ~30 dniach
-  dostają zieloną obwódkę, nieodwiedzone szarą, a przy włączonym trybie widać
+  dostają jasnozieloną obwódkę, nieodwiedzone jasnoczerwoną, a przy włączonym trybie widać
   licznik „przejechane X z Y tras". Bez danych tras albo przy nieświeżym cache
   OSM przycisk jest zablokowany (bez komunikatu). Szczegóły: `docs/mapy-routing.md` §9.
 - **Wskazanie próbki na wykresie pokazuje jej punkt na mini-mapie** (HTML Marker):

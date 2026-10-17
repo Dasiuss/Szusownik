@@ -696,13 +696,14 @@ export default function MapView() {
     }
   }, [coverage, mapReady]);
 
-  // Tryb pokrycia: obwódka (casing) zielona (przejechana) / szara (nieodwiedzona),
-  // pogrubiona; zaznaczona zostaje żółta. Po wyłączeniu wraca biała obwódka.
+  // Tryb pokrycia: obwódka (casing) jasnozielona (przejechana) / jasnoczerwona
+  // (nieodwiedzona, wyraźnie jaśniejsza od czerwieni tras), pogrubiona;
+  // zaznaczona zostaje żółta. Po wyłączeniu wraca biała obwódka.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getLayer("pistes-casing")) return;
     if (coverageActive) {
-      map.setPaintProperty("pistes-casing", "line-color", ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", ["boolean", ["feature-state", "traveled"], false], "#16a34a", "#9ca3af"] as never);
+      map.setPaintProperty("pistes-casing", "line-color", ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", ["boolean", ["feature-state", "traveled"], false], "#4ade80", "#fca5a5"] as never);
       map.setPaintProperty("pistes-casing", "line-width", ["case", ["boolean", ["feature-state", "selected"], false], 11, 9] as never);
       return;
     }
