@@ -72,8 +72,13 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - **Mini-mapa 2D** nad wykresami: trasy OSM z numerami, wyciągi oraz ślad GPS
   zjazdu kolorowany prędkością (zielony → niebieski → pomarańczowy → czerwony →
   ciemna czerwień). Kamera płaska o stałej orientacji (bez obrotu) i przycisk
-  powiększenia kafelka (240 px ↔ 75vh). W „Całym dniu” pokazuje wszystkie ślady
+  powiększenia kafelka (240 px ↔ 75vh). W „Całym dniu" pokazuje wszystkie ślady
   zjazdów dnia. Szczegóły: `docs/mapy-routing.md` §5.
+- **Mapa (duża): pokrycie tras.** Przycisk ikonowy (narty z checkiem) na dużym
+  widoku mapy włącza tryb pokrycia: trasy przejechane w ostatnich ~30 dniach
+  dostają zieloną obwódkę, nieodwiedzone szarą, a przy włączonym trybie widać
+  licznik „przejechane X z Y tras". Bez danych tras albo przy nieświeżym cache
+  OSM przycisk jest zablokowany (bez komunikatu). Szczegóły: `docs/mapy-routing.md` §9.
 - **Wskazanie próbki na wykresie pokazuje jej punkt na mini-mapie** (HTML Marker):
   na desktopie najechanie myszą, na dotyku pojedynczy tap (poziomy drag nadal
   przesuwa wykres, podwójny tap resetuje zoom). Kropka znika po opuszczeniu

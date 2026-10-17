@@ -542,6 +542,34 @@ zjazdów. Ręcznej korekty dopasowania nie ma — wynik jest w pełni automatycz
 Czego nadal nie ma: dopasowania per próbka z ciągłością i kierunkiem (HMM),
 pokrycia/zaliczenia całej trasy, oceny warunków i score tras.
 
+### Pokrycie tras na mapie (zaimplementowane)
+
+Przycisk ikonowy na dużym widoku mapy (narty z checkiem) włącza tryb pokrycia:
+każda trasa liniowa dostaje pogrubioną obwódkę (casing) — zieloną, gdy
+przejechana, szarą, gdy nieodwiedzona; kolor trudności trasy zostaje na linii pod
+obwódką, zaznaczona trasa pozostaje żółta. Przy włączonym trybie pod przyciskami
+widnieje licznik „przejechane X z Y tras". Stan przełącznika nie jest
+zapamiętywany (domyślnie wyłączony).
+
+Tożsamość i uniwersum tras liczy `web/src/lib/routeCoverage.ts` (czysta logika,
+testy `routeCoverage.test.ts`):
+
+- uniwersum to trasy-pisty z geometrią liniową (dokładnie te, które widzi
+  matcher) grupowane po `site + label` (odcinki bez nazwy osobno per `uid`);
+  trasy zamknięte (polygon) i wyciągi są pomijane;
+- przejechana = zjazd z `routeSpans` do danego klucza, z ostatnich
+  `COVERAGE_WINDOW_DAYS = 30` dni (po lokalnym dniu telefonu); wystarcza odcinek
+  ≥ 100 m (jak w matcherze), a zjazd demo liczy się jak normalny przejazd;
+- licznik `X z Y`: X to część wspólna przejechanych z uniwersum (klucz trasy,
+  którego nie ma już w danych OSM, nie zawyża licznika), Y to liczba tras w
+  uniwersum.
+
+Stan liczony jest na bieżąco ze zjazdów (`getAllRuns`), bez zmiany schematu Dexie
+i bez materializacji. Obwódka korzysta ze `feature-state` (`traveled`) na
+istniejącym źródle `pistes` (MapLibre scala stany, więc `selected` zostaje). Bez
+danych tras lub przy nieświeżym cache OSM (`mapData.stale`) przycisk jest
+zablokowany bez komunikatu.
+
 ## 10. Wydajność
 
 Dobre decyzje do zachowania:

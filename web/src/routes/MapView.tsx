@@ -4,11 +4,13 @@ import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "../components/Icon.tsx";
 import { LiftIcon, LIFT_EMPTY_IMAGE_ID, LIFT_ICON_IMAGE_EXPRESSION, LIFT_MAP_IMAGES } from "../components/LiftIcon.tsx";
-import { getAllStoredSamples } from "../lib/data.ts";
+import { getAllRuns, getAllStoredSamples } from "../lib/data.ts";
 import { useDevice } from "../lib/device.tsx";
 import { findRoute, snapToPiste, snapToRoute, trimRoute, type RouteResult } from "../lib/mapRouting.ts";
+import { routeCoverage } from "../lib/routeCoverage.ts";
 import { encodeRoute } from "../lib/routeTransfer.ts";
 import { routeSyncNotice } from "../lib/routeSyncNotice.ts";
+import type { StoredRun } from "../lib/db.ts";
 import {
   ACTIVE_BOUNDS,
   ACTIVE_CENTER,
@@ -383,6 +385,8 @@ export default function MapView() {
   const [search, setSearch] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [samples, setSamples] = useState<Sample[]>([]);
+  const [runs, setRuns] = useState<StoredRun[]>([]);
+  const [coverageOn, setCoverageOn] = useState(false);
   const device = useDevice();
   // Najświeższa funkcja syncRoute bez wywoływania efektu przy każdym renderze.
   const syncRouteRef = useRef(device.syncRoute);
@@ -417,6 +421,14 @@ export default function MapView() {
       return true;
     });
   }, [route]);
+
+  // Pokrycie tras liczone na bieżąco z zjazdów (bez zmiany schematu). `Date.now()`
+  // w memo jest ok: okno liczymy po lokalnym dniu, więc przeliczamy przy zmianie
+  // zjazdów albo danych OSM, a nie co sekundę.
+  const coverage = useMemo(() => routeCoverage(runs, mapData, Date.now()), [runs, mapData]);
+  // Brak danych tras albo nieświeży cache OSM -> przycisk zablokowany (bez komunikatu).
+  const coverageDisabled = mapData.stale || coverage.total === 0;
+  const coverageActive = coverageOn && !coverageDisabled;
 
   const syncNotice = routeSyncNotice({
     deviceState: device.state,
@@ -456,6 +468,20 @@ export default function MapView() {
       })
       .catch(() => {
         if (active) setSamples([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [device.dataRevision]);
+
+  useEffect(() => {
+    let active = true;
+    getAllRuns()
+      .then((loaded) => {
+        if (active) setRuns(loaded);
+      })
+      .catch(() => {
+        if (active) setRuns([]);
       });
     return () => {
       active = false;
@@ -659,6 +685,30 @@ export default function MapView() {
     if (map.getLayer("lifts-icons-line")) map.setFilter("lifts-icons-line", withExclusion(LIFTS_ICON_CONDITIONS) as never);
     if (map.getLayer("lifts-names")) map.setFilter("lifts-names", withExclusion(LIFTS_LABEL_CONDITIONS) as never);
   }, [mapReady, route]);
+
+  // Pokrycie tras: stan `traveled` na każdym elemencie trasy liniowej. MapLibre
+  // scala stany, więc `selected` ustawiane przy kliknięciu zostaje.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    for (const [uid, key] of coverage.keyByUid) {
+      map.setFeatureState({ source: "pistes", id: uid }, { traveled: coverage.visited.has(key) });
+    }
+  }, [coverage, mapReady]);
+
+  // Tryb pokrycia: obwódka (casing) zielona (przejechana) / szara (nieodwiedzona),
+  // pogrubiona; zaznaczona zostaje żółta. Po wyłączeniu wraca biała obwódka.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getLayer("pistes-casing")) return;
+    if (coverageActive) {
+      map.setPaintProperty("pistes-casing", "line-color", ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", ["boolean", ["feature-state", "traveled"], false], "#16a34a", "#9ca3af"] as never);
+      map.setPaintProperty("pistes-casing", "line-width", ["case", ["boolean", ["feature-state", "selected"], false], 11, 9] as never);
+      return;
+    }
+    map.setPaintProperty("pistes-casing", "line-color", ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#ffffff"] as never);
+    map.setPaintProperty("pistes-casing", "line-width", ["case", ["boolean", ["feature-state", "selected"], false], 10, 6] as never);
+  }, [coverageActive, mapReady]);
 
   // Po każdej zmianie geometrii trasy (także po przycięciu w nawigacji co ~5 s)
   // wysyłamy ją na urządzenie. Kontekst urządzenia porównuje CRC i nie wysyła,
@@ -894,9 +944,11 @@ export default function MapView() {
     <div className="map-page">
       <div className="map-canvas" ref={mapContainer} aria-label="Mapa tras narciarskich Sölden" />
       <div className="map-actions">
+        {coverageActive && <span className="map-coverage-counter" role="status">Przejechane {coverage.visitedCount} z {coverage.total} tras</span>}
         <button className="map-icon-button" type="button" onClick={centerOnPosition} disabled={!position} aria-label="Pokaż moją pozycję" title="Pokaż moją pozycję"><Icon name="activity" size={19} /></button>
         <button className={`map-icon-button${menuOpen ? " map-icon-button-active" : ""}`} type="button" onClick={() => setMenuOpen((open) => !open)} aria-label="Szukaj tras i wyciągów" title="Szukaj tras i wyciągów"><Icon name="search" size={19} /></button>
         <button className={`map-icon-button${routeMode !== "idle" || route ? " map-icon-button-active" : ""}`} type="button" onClick={toggleRouteMode} aria-label={route ? "Wyczyść trasę" : "Wyznacz trasę"} title={route ? "Wyczyść trasę" : "Wyznacz trasę"}><Icon name="route" size={19} /></button>
+        <button className={`map-icon-button${coverageActive ? " map-icon-button-active" : ""}`} type="button" onClick={() => setCoverageOn((on) => !on)} disabled={coverageDisabled} aria-label="Pokaż pokrycie tras" title="Pokaż pokrycie tras"><Icon name="ski-check" size={19} /></button>
       </div>
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}

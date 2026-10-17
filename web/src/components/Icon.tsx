@@ -1,6 +1,9 @@
-export type IconName = "activity" | "archive" | "bluetooth" | "chart-combined" | "chart-rows" | "chevron" | "collapse" | "curve" | "download" | "expand" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh";
+export type IconName = "activity" | "archive" | "bluetooth" | "chart-combined" | "chart-rows" | "chevron" | "collapse" | "curve" | "download" | "expand" | "gauge" | "map" | "mountain" | "percent" | "play" | "route" | "ruler" | "satellite" | "search" | "settings" | "trash" | "edit" | "check" | "x" | "refresh" | "ski-check";
 
-const paths: Record<IconName, string> = {
+/** Pojedyncza ścieżka ikony albo ikona złożona z kilku (każda z własną grubością). */
+type IconGlyph = string | Array<{ d: string; width?: number }>;
+
+const paths: Record<IconName, IconGlyph> = {
   activity: "M3 12h4l2-7 4 14 2-7h6",
   archive: "M4 7h16v13H4z M3 4h18v3H3z M9 11h6",
   bluetooth: "M12 3v18l5-5-10-8 10-8-5-5 M7 8l10 8",
@@ -26,9 +29,17 @@ const paths: Record<IconName, string> = {
   check: "m5 12 4 4L19 6",
   x: "m6 6 12 12M18 6 6 18",
   refresh: "M20 11a8 8 0 0 0-14.9-3M4 5v4h4m-4 2a8 8 0 0 0 14.9 3M20 19v-4h-4",
+  // Dwie równoległe narty z czubkami zawiniętymi do tyłu (w lewo) + mały check
+  // (bez kółka) w prawym dolnym rogu, odsunięty od nart.
+  "ski-check": [
+    { d: "M2.5 20 L10.5 8 Q11.9 5.8 10.9 4.6 M7 21.5 L15 9.5 Q16.4 7.3 15.4 6.1" },
+    { d: "M15.5 17.7 L17.9 20.8 L22.6 14", width: 2.2 },
+  ],
 };
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  const glyph = paths[name];
+  const strokes = typeof glyph === "string" ? [{ d: glyph }] : glyph;
   return (
     <svg
       aria-hidden="true"
@@ -38,7 +49,16 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       width={size}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d={paths[name]} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      {strokes.map((stroke, index) => (
+        <path
+          key={index}
+          d={stroke.d}
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={stroke.width ?? 1.8}
+        />
+      ))}
     </svg>
   );
 }

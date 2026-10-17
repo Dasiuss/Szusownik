@@ -309,6 +309,7 @@ h3 { color: #17363b; font-size: 15px; font-weight: 800; }
 .home-marker-house { fill: none; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .map-feature-kicker { display: block; color: #7c9697; font-size: 9px; font-weight: 800; letter-spacing: .12em; line-height: 1.2; text-transform: uppercase; }
 .map-actions { position: absolute; z-index: 31; top: 12px; right: 12px; display: flex; align-items: center; gap: 7px; }
+.map-coverage-counter { padding: 8px 11px; border: 1px solid #dbe9e6; border-radius: 12px; color: #2f6f5e; background: #fffffff0; box-shadow: 0 8px 20px #2b64631c; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .map-icon-button { display: inline-grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 12px; color: #236ca8; background: #e9f3fb; }
 .map-icon-button:disabled { color: #9aabab; background: #edf3f1; cursor: not-allowed; }
 .map-icon-button-active { color: #fff; background: #17363b; }
