@@ -1,4 +1,4 @@
-import { ROUTE_SNAP_RADIUS_M, type MapMode, type Position, type SkiLineFeature, type SkiProperties } from "./mapData.ts";
+import { ROUTE_SNAP_RADIUS_M, type Position, type SkiLineFeature, type SkiProperties } from "./mapData.ts";
 
 const METERS_PER_DEGREE = 111320;
 const ROUTE_CONNECT_RADIUS_M = 100;
@@ -574,7 +574,7 @@ function addGraphEdge(adjacency: Map<string, RouteGraphEdge[]>, from: string, ed
   adjacency.set(from, edges);
 }
 
-function buildRouteGraph(features: NormalizedRouteFeature[], getElevation: ElevationProvider, extraPoints: ExtraPoint[], mode: MapMode = "ski"): RouteGraph {
+function buildRouteGraph(features: NormalizedRouteFeature[], getElevation: ElevationProvider, extraPoints: ExtraPoint[]): RouteGraph {
   const featureByUid = new Map(features.map((feature) => [feature.uid, feature]));
   const pointsByFeature = new Map<string, RoutePointRecord[]>();
   const pointNodeIds = new Map<RoutePointRecord, string>();
@@ -752,14 +752,12 @@ function buildRouteGraph(features: NormalizedRouteFeature[], getElevation: Eleva
         downhillLiftCount: 0,
       };
       addGraphEdge(adjacency, from, featureEdge);
-      // HACK (testy Wrocław): drogi są dwukierunkowe — dodaj krawędź wsteczną
-      // tak jak dla wyciągów (bez kary zjazdu wyciągiem).
-      if (feature.kind === "lift" || mode === "road") {
+      if (feature.kind === "lift") {
         addGraphEdge(adjacency, to, {
           ...featureEdge,
           to: from,
           geometry: routeFeatureSlice(feature, toPoint.location, fromPoint.location),
-          downhillLiftCount: feature.kind === "lift" ? 1 : 0,
+          downhillLiftCount: 1,
         });
       }
     }
@@ -926,7 +924,6 @@ export async function findRoute(
   start: Position,
   end: Position,
   getElevation?: (coordinate: Position) => number | null,
-  mode: MapMode = "ski",
 ): Promise<RouteResult> {
   const normalizedFeatures = normalizeRouteFeatures(features);
   const startCandidate = nearestPiste(normalizedFeatures, start);
@@ -937,7 +934,7 @@ export async function findRoute(
   const graph = buildRouteGraph(normalizedFeatures, getElevation, [
     { id: "start", uid: startCandidate.uid, coordinate: startCandidate.coordinate, location: startCandidate.location },
     { id: "end", uid: endCandidate.uid, coordinate: endCandidate.coordinate, location: endCandidate.location },
-  ], mode);
+  ]);
   const result = findGraphRoute(graph);
   if (!result) throw new Error("Nie znalazłem połączenia między tymi punktami.");
 

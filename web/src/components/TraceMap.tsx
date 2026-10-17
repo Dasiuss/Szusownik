@@ -11,10 +11,9 @@ import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "./Icon.tsx";
 import {
-  ACTIVE_BOUNDS,
-  ACTIVE_CENTER,
   DIFFICULTY_COLORS,
-  MAP_MODE,
+  SOLDEN_BOUNDS,
+  SOLDEN_CENTER,
   getSkiDataForMatching,
   loadCachedSkiData,
   loadSkiData,
@@ -53,7 +52,7 @@ const MINI_STYLE: StyleSpecification = {
       type: "raster",
       tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      bounds: ACTIVE_BOUNDS,
+      bounds: SOLDEN_BOUNDS,
       attribution: "© OpenTopoMap contributors",
     },
   },
@@ -189,7 +188,7 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
   useEffect(() => {
     if (skiData) return;
     let active = true;
-    loadSkiData(MAP_MODE)
+    loadSkiData()
       .then((data) => {
         if (active) setSkiData(data);
       })
@@ -205,7 +204,7 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
     const map = new maplibregl.Map({
       container,
       style: MINI_STYLE,
-      center: ACTIVE_CENTER,
+      center: SOLDEN_CENTER,
       zoom: 12,
       pitch: 0,
       bearing: -90,

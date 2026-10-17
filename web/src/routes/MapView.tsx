@@ -12,12 +12,10 @@ import { encodeRoute } from "../lib/routeTransfer.ts";
 import { routeSyncNotice } from "../lib/routeSyncNotice.ts";
 import type { StoredRun } from "../lib/db.ts";
 import {
-  ACTIVE_BOUNDS,
-  ACTIVE_CENTER,
   AERIALWAY_LABELS,
   DIFFICULTY_COLORS,
-  HOME_COORDINATES,
-  MAP_MODE,
+  SOLDEN_BOUNDS,
+  SOLDEN_CENTER,
   loadSkiData,
   type Position,
   type SkiData,
@@ -79,6 +77,7 @@ interface MapItem {
 
 type RouteMode = "idle" | "start" | "end";
 
+const HOME_COORDINATES: Position = [11.0095, 46.9726];
 const NAVIGATION_REFRESH_MS = 5000;
 const NAVIGATION_MOVE_THRESHOLD_M = 15;
 const NAVIGATION_ON_ROUTE_M = 25;
@@ -112,7 +111,7 @@ const MAP_STYLE: StyleSpecification = {
       type: "raster",
       tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      bounds: ACTIVE_BOUNDS,
+      bounds: SOLDEN_BOUNDS,
       attribution: "© OpenTopoMap contributors",
     },
     dem: {
@@ -120,7 +119,7 @@ const MAP_STYLE: StyleSpecification = {
       tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
       tileSize: 256,
       encoding: "terrarium",
-      bounds: ACTIVE_BOUNDS,
+      bounds: SOLDEN_BOUNDS,
     },
   },
   layers: [
@@ -351,7 +350,7 @@ function routeDistanceLabel(distanceM: number): string {
 }
 
 function withinBounds(position: Position): boolean {
-  return position[0] >= ACTIVE_BOUNDS[0] && position[0] <= ACTIVE_BOUNDS[2] && position[1] >= ACTIVE_BOUNDS[1] && position[1] <= ACTIVE_BOUNDS[3];
+  return position[0] >= SOLDEN_BOUNDS[0] && position[0] <= SOLDEN_BOUNDS[2] && position[1] >= SOLDEN_BOUNDS[1] && position[1] <= SOLDEN_BOUNDS[3];
 }
 
 export default function MapView() {
@@ -448,7 +447,7 @@ export default function MapView() {
 
   useEffect(() => {
     let active = true;
-    loadSkiData(MAP_MODE)
+    loadSkiData()
       .then((loaded) => {
         if (active) setMapData(loaded);
       })
@@ -514,10 +513,8 @@ export default function MapView() {
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: MAP_STYLE,
-      center: ACTIVE_CENTER,
-      zoom: MAP_MODE === "road"
-        ? (window.matchMedia("(max-width: 768px)").matches ? 14 : 15)
-        : (window.matchMedia("(max-width: 768px)").matches ? 12 : 13),
+      center: SOLDEN_CENTER,
+      zoom: window.matchMedia("(max-width: 768px)").matches ? 12 : 13,
       pitch: 40,
       bearing: -90,
       maxPitch: 85,
@@ -739,7 +736,7 @@ export default function MapView() {
       const result = await findRoute(mapData.lines, routeStart, routeEnd, (coordinate) => {
         if (!map) return null;
         return map.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] }, { exaggerated: false });
-      }, MAP_MODE);
+      });
       // Wynik spóźniony (wyczyszczenie lub nowy cel) nie może nadpisać stanu.
       if (generation !== routeGenerationRef.current) return;
       setRoute(result);
