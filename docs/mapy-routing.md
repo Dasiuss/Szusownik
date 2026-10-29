@@ -60,7 +60,8 @@ zależałaby od odległości. Płaskie mini-mapy (`zoom`, widok z góry) podwaja
 interwał przy oddalaniu — 400 m do z11, 200 m na z12, 100 m na z13, 50 m od
 z14 — dzięki czemu odstęp linii na ekranie jest w przybliżeniu stały i przy
 dopasowaniu całego dnia poziomice nie dominują obrazu. Co czwarta linia jest
-grubsza i tylko ona dostaje etykietę wysokości.
+grubsza; poziomice nie mają etykiet wysokości (na zboczu były nieczytelne
+i celowo ich nie ma).
 
 Ten sam mechanizm przycina **podkład wektorowy**: `pmtiles extract --bbox`
 zostawia całe kafelki, więc drogi, woda i pokrycie terenu wystawałyby poza

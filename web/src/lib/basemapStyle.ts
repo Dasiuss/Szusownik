@@ -21,7 +21,6 @@ const SPRITE = local("sprites/v4/light");
 
 export const HILLSHADE_LAYER_ID = "dem-hillshade";
 export const CONTOUR_LINES_LAYER_ID = "contour-lines";
-export const CONTOUR_LABELS_LAYER_ID = "contour-labels";
 
 // Ustalone w prototypie: cieniowanie 45%.
 const HILLSHADE_EXAGGERATION = 0.675;
@@ -109,6 +108,8 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
     },
   } as unknown as StyleSpecification["layers"][number];
 
+  // Poziomice bez etykiet wysokości — na mapie i tak nie były czytelne
+  // (linia + tekst na zboczu), a użytkownik ich nie chce. Zostaje sama linia.
   const contourLines = {
     id: CONTOUR_LINES_LAYER_ID,
     type: "line",
@@ -120,26 +121,6 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
     },
   } as unknown as StyleSpecification["layers"][number];
 
-  const contourLabels = {
-    id: CONTOUR_LABELS_LAYER_ID,
-    type: "symbol",
-    source: "contours",
-    "source-layer": CONTOUR_SOURCE_LAYER,
-    filter: [">", ["get", "level"], 0] as never,
-    layout: {
-      "symbol-placement": "line",
-      "text-size": 10,
-      "text-field": ["concat", ["number-format", ["get", "ele"], {}], " m"] as never,
-      "text-font": ["Noto Sans Medium"],
-      "text-padding": 6,
-    },
-    paint: {
-      "text-color": "#7a6448",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.2,
-    },
-  } as unknown as StyleSpecification["layers"][number];
-
   // Cieniowanie leży nad wypełnieniami lądu, a pod liniami, wodą i etykietami.
   const insertAt = base.findIndex((layer) => layer.type === "line" || layer.type === "symbol");
   const at = insertAt === -1 ? base.length : insertAt;
@@ -148,7 +129,6 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
   if (hillshade) layers.push(hillshadeLayer);
   if (contourUrl) layers.push(contourLines);
   layers.push(...base.slice(at));
-  if (contourUrl) layers.push(contourLabels);
 
   return {
     version: 8,
