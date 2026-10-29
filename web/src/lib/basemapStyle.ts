@@ -83,7 +83,9 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
 
   const contourUrl = contours ? contourTilesUrl(CONTOUR_MINOR_M) : null;
   if (contourUrl) {
-    sources.contours = { type: "vector", tiles: [contourUrl], maxzoom: 15 };
+    // `bounds` ogranicza żądania do kafelków przecinających obszar; reszta
+    // i tak wraca pusta z protokołu (bez generowania i bez błędów DEM).
+    sources.contours = { type: "vector", tiles: [contourUrl], maxzoom: 15, bounds: SOLDEN_BOUNDS };
   }
 
   const hillshadeLayer = {

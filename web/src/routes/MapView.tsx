@@ -942,6 +942,13 @@ export default function MapView() {
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && gpsError && <div className="map-alert"><Icon name="x" size={16} /><span>{gpsError}</span><button className="map-alert-close" type="button" onClick={() => setGpsError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
+      {!mapError && basemapReady === false && (
+        <div className="map-alert" role="status">
+          <Icon name="x" size={16} />
+          <span>Podkład mapy jest niedostępny — offline wejście bez wcześniejszego pobrania. Odśwież po odzyskaniu sieci.</span>
+          <button className="map-alert-close" type="button" onClick={() => window.location.reload()} aria-label="Odśwież aplikację">Odśwież</button>
+        </div>
+      )}
       {!mapError && !mapReady && <div className="map-loading"><span className="spinner" /> Wczytuję mapę i trasy…</div>}
 
       {(routeMode !== "idle" || routeError || routing) && (

@@ -45,6 +45,16 @@ export function isEmptyRect(rect: TileRect): boolean {
   return rect.maxX <= rect.minX || rect.maxY <= rect.minY;
 }
 
+/** Czy kafelek przecina bbox (używane do pomijania generowania poza obszarem). */
+export function tileIntersectsBounds(
+  z: number,
+  x: number,
+  y: number,
+  bounds: [number, number, number, number],
+): boolean {
+  return !isEmptyRect(tileRect(z, x, y, bounds));
+}
+
 /** Odcina odcinek do prostokąta (Liang–Barsky). Null, gdy odcinek jest poza. */
 function clipSegment(x0: number, y0: number, x1: number, y1: number, rect: TileRect): Point[] | null {
   const dx = x1 - x0;

@@ -13,6 +13,7 @@ import {
   clipRingToRect,
   clipVectorTile,
   isEmptyRect,
+  tileIntersectsBounds,
   tileRect,
 } from "./tileClip.ts";
 
@@ -62,6 +63,12 @@ describe("tileRect", () => {
 
   it("kafelek poza bboxem daje pusty prostokąt", () => {
     expect(isEmptyRect(tileRect(13, 1, 1, BOUNDS))).toBe(true);
+  });
+
+  it("rozpoznaje kafelek przecinający obszar", () => {
+    expect(tileIntersectsBounds(INSIDE_TILE.z, INSIDE_TILE.x, INSIDE_TILE.y, BOUNDS)).toBe(true);
+    expect(tileIntersectsBounds(EDGE_TILE.z, EDGE_TILE.x, EDGE_TILE.y, BOUNDS)).toBe(true);
+    expect(tileIntersectsBounds(13, 1, 1, BOUNDS)).toBe(false);
   });
 });
 

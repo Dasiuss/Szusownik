@@ -38,6 +38,8 @@ let prepared: Promise<boolean> | null = null;
  * Wczytuje archiwum podkładu i rejestruje protokół `pmtiles://`.
  * Zwraca `false`, gdy archiwum jest niedostępne (np. pierwsze wejście offline
  * bez precache) — mapa działa wtedy bez podkładu, ale z resztą warstw.
+ * Po niepowodzeniu stan jest czyszczony, więc kolejne wywołanie próbuje
+ * ponownie (np. gdy sieć wróci) zamiast zwracać zapamiętaną porażkę.
  */
 export function prepareBasemap(): Promise<boolean> {
   if (!prepared) {
@@ -62,6 +64,7 @@ export function prepareBasemap(): Promise<boolean> {
         return true;
       } catch (error) {
         console.warn("Podkład wektorowy niedostępny:", error);
+        prepared = null;
         return false;
       }
     })();

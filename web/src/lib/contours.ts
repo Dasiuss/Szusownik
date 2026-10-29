@@ -1,6 +1,6 @@
 import * as maplibregl from "maplibre-gl";
 import mlcontour from "maplibre-contour";
-import { clipVectorTile } from "./tileClip.ts";
+import { clipVectorTile, tileIntersectsBounds } from "./tileClip.ts";
 import { SOLDEN_BOUNDS } from "./mapData.ts";
 
 const BASE = import.meta.env.BASE_URL;
@@ -28,11 +28,14 @@ try {
   // więc gotową geometrię przycinamy do obszaru mapy — inaczej poziomice leją
   // się daleko poza dane (przy z8 kafelek to ~1,4° szerokości).
   maplibregl.addProtocol(source.contourProtocolId, async (request, abortController) => {
-    const response = await source.contourProtocolV4(request, abortController);
     const match = /\/\/(\d+)\/(\d+)\/(\d+)/.exec(request.url);
-    if (!match) return response;
+    if (!match) return source.contourProtocolV4(request, abortController);
     const [, z, x, y] = match.map(Number);
-    return { ...response, data: clipVectorTile(response.data, z, x, y, SOLDEN_BOUNDS) };
+    // Kafelek poza obszarem danych: nie ma czego generować, a brakujące kafelki
+    // DEM kończyłyby się błędem. Zwracamy pusty kafelek od razu.
+    if (!tileIntersectsBounds(z, x, y, SOLDEN_BOUNDS)) return { data: new ArrayBuffer(0) };
+    const response = await source.contourProtocolV4(request, abortController);
+    return { ...response, data: clipVectorTile(response.data as ArrayBuffer, z, x, y, SOLDEN_BOUNDS) };
   });
   demSource = source;
 } catch (error) {
