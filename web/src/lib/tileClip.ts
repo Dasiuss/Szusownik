@@ -89,13 +89,17 @@ export function clipLineToRect(line: Point[], rect: TileRect): Point[][] {
     const continues = current !== null
       && Math.abs(current[current.length - 1][0] - start[0]) < 1e-6
       && Math.abs(current[current.length - 1][1] - start[1]) < 1e-6;
-    if (!continues) {
-      current = [start];
-      parts.push(current);
+    let part: Point[];
+    if (continues && current !== null) {
+      part = current;
     } else {
-      current.push(start);
+      part = [start];
+      current = part;
+      parts.push(part);
     }
-    current.push(end);
+    // Przy kontynuacji `part` już kończy się w `start`, więc nie dublujemy
+    // wierzchołka (zerowe odcinki psułyby geometrię i powiększały dane).
+    part.push(end);
     // Segment skończył się na wierzchołku? Jeśli nie, linia opuściła prostokąt.
     if (Math.abs(end[0] - x1) > 1e-6 || Math.abs(end[1] - y1) > 1e-6) current = null;
   }

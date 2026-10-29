@@ -195,8 +195,12 @@ function featureLengthM(feature: SkiFeature): number {
 
 function terrainElevationAt(map: maplibregl.Map | null, coordinate: Position): number | null {
   try {
-    const elevation = map?.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] }, { exaggerated: false });
-    return typeof elevation === "number" && Number.isFinite(elevation) ? elevation : null;
+    const elevation = map?.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] });
+    if (typeof elevation !== "number" || !Number.isFinite(elevation)) return null;
+    // MapLibre 6 zwraca wysokość pomnożoną przez `exaggeration` terenu.
+    // Dzielimy, żeby dostawać rzeczywiste metry (spadki i przewyższenia).
+    const exaggeration = map?.getTerrain()?.exaggeration ?? 1;
+    return exaggeration > 0 ? elevation / exaggeration : elevation;
   } catch {
     return null;
   }
@@ -399,8 +403,8 @@ export default function MapView() {
   // w memo jest ok: okno liczymy po lokalnym dniu, więc przeliczamy przy zmianie
   // zjazdów albo danych OSM, a nie co sekundę.
   const coverage = useMemo(() => routeCoverage(runs, mapData, Date.now()), [runs, mapData]);
-  // Brak danych tras albo nieświeży cache OSM -> przycisk zablokowany (bez komunikatu).
-  const coverageDisabled = mapData.stale || coverage.total === 0;
+  // Brak danych tras -> przycisk zablokowany (bez komunikatu).
+  const coverageDisabled = coverage.total === 0;
   const coverageActive = coverageOn && !coverageDisabled;
 
   const syncNotice = routeSyncNotice({
@@ -506,7 +510,6 @@ export default function MapView() {
       bearing: -90,
       maxPitch: 85,
       maxZoom: 19,
-      attributionControl: true,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -724,10 +727,7 @@ export default function MapView() {
     await new Promise((resolve) => window.setTimeout(resolve, 50));
     try {
       const map = mapRef.current;
-      const result = await findRoute(mapData.lines, routeStart, routeEnd, (coordinate) => {
-        if (!map) return null;
-        return map.queryTerrainElevation({ lng: coordinate[0], lat: coordinate[1] }, { exaggerated: false });
-      });
+      const result = await findRoute(mapData.lines, routeStart, routeEnd, (coordinate) => terrainElevationAt(map, coordinate));
       // Wynik spóźniony (wyczyszczenie lub nowy cel) nie może nadpisać stanu.
       if (generation !== routeGenerationRef.current) return;
       setRoute(result);
@@ -941,6 +941,7 @@ export default function MapView() {
       </div>
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
+      {!mapError && gpsError && <div className="map-alert"><Icon name="x" size={16} /><span>{gpsError}</span><button className="map-alert-close" type="button" onClick={() => setGpsError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && !mapReady && <div className="map-loading"><span className="spinner" /> Wczytuję mapę i trasy…</div>}
 
       {(routeMode !== "idle" || routeError || routing) && (

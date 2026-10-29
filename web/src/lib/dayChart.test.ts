@@ -12,6 +12,9 @@ function storedRuns(lifts: number): StoredRun[] {
     dayKey: "2026-01-15",
     analysisVersion: QUALITY_ANALYSIS_VERSION,
     receivedAt: run.startT,
+    routeSpans: [],
+    routeSequence: [],
+    routeName: null,
   }));
 }
 

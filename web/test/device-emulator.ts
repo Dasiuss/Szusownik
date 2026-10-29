@@ -139,10 +139,13 @@ class FakeCharacteristic {
   value: DataView | null = null;
   private readonly listeners = new Set<Listener>();
 
-  constructor(
-    readonly uuid: string,
-    private readonly emulator: DeviceEmulator,
-  ) {}
+  readonly uuid: string;
+  private readonly emulator: DeviceEmulator;
+
+  constructor(uuid: string, emulator: DeviceEmulator) {
+    this.uuid = uuid;
+    this.emulator = emulator;
+  }
 
   async startNotifications(): Promise<void> {
     /* nic nie robimy — emulator pushuje sam */
@@ -257,7 +260,10 @@ export class DeviceEmulator {
     }
   }
 
-  constructor(private readonly options: EmulatorOptions) {
+  private readonly options: EmulatorOptions;
+
+  constructor(options: EmulatorOptions) {
+    this.options = options;
     this.pairDevices = options.pairDevices ?? 1;
     this.malformedListPending = options.malformedListOnce ?? false;
     this.failCtrlPrefix = options.failControlWrites?.prefix ?? "";

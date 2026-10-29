@@ -188,7 +188,7 @@ function normalizeRouteFeatures(features: SkiLineFeature[]): NormalizedRouteFeat
         properties: feature.properties,
         coordinates,
         segments,
-        bbox: [west, south, east, north],
+        bbox: [west, south, east, north] as BBox,
         length,
       };
     })

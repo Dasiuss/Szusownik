@@ -23,8 +23,8 @@ import { buildTraceCollection, traceBounds, type TracePoint } from "../lib/trace
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-const EMPTY_PISTES = { type: "FeatureCollection", features: [] } as const;
-const EMPTY_TRACE = { type: "FeatureCollection", features: [] } as const;
+const EMPTY_PISTES: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_TRACE: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 const PISTE_LABEL_FILTER = ["all", ["==", ["geometry-type"], "LineString"], ["has", "label"]] as never;
 

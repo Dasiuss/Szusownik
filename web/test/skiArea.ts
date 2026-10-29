@@ -1,7 +1,7 @@
 // Fixture małego ośrodka narciarskiego dla testów mapy i routingu.
 // Współrzędne to [lon, lat] (kolejność GeoJSON/MapLibre).
 
-import type { Position, SkiLineFeature, SkiProperties } from "../src/lib/mapData.ts";
+import type { OverpassElement, Position, SkiLineFeature, SkiProperties } from "../src/lib/mapData.ts";
 
 /** Płaszczyzna wysokości: maleje na południe i wschód (zjazd w dół). */
 export function planeElevation([longitude, latitude]: Position): number {
@@ -43,7 +43,7 @@ export function midPoint(first: Position, second: Position): Position {
 }
 
 /** Surowa odpowiedź Overpass (elementy) do testów normalizeSkiData. */
-export function overpassElements() {
+export function overpassElements(): OverpassElement[] {
   return [
     {
       type: "way" as const,

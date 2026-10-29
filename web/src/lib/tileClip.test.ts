@@ -85,6 +85,17 @@ describe("clipLineToRect", () => {
     }
   });
 
+  it("nie dubluje wierzchołków na styku odcinków", () => {
+    const parts = clipLineToRect([[0, 150], [150, 150], [150, 180], [400, 180]], rect);
+    expect(parts).toHaveLength(1);
+    const part = parts[0];
+    expect(part[0]).toEqual([100, 150]);
+    expect(part).toEqual([[100, 150], [150, 150], [150, 180], [200, 180]]);
+    for (let i = 1; i < part.length; i += 1) {
+      expect(part[i]).not.toEqual(part[i - 1]);
+    }
+  });
+
   it("pomija linię całkowicie poza prostokątem", () => {
     expect(clipLineToRect([[0, 0], [50, 50]], rect)).toEqual([]);
   });

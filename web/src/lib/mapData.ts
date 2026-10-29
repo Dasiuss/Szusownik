@@ -100,7 +100,7 @@ interface OverpassMember {
   geometry?: OverpassGeometryPoint[];
 }
 
-interface OverpassElement {
+export interface OverpassElement {
   type: "node" | "way" | "relation";
   id: number;
   tags?: Record<string, string>;

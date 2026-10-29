@@ -17,7 +17,11 @@ const PMTILES_URL = `${window.location.origin}${BASE}${PMTILES_KEY}`;
  * potrafi zepsuć odczyt offline. Wczytanie ~3 MB do pamięci usuwa tę zależność.
  */
 class MemorySource implements Source {
-  constructor(private readonly buffer: ArrayBuffer) {}
+  private readonly buffer: ArrayBuffer;
+
+  constructor(buffer: ArrayBuffer) {
+    this.buffer = buffer;
+  }
 
   getKey(): string {
     return PMTILES_KEY;
@@ -52,7 +56,8 @@ export function prepareBasemap(): Promise<boolean> {
           const match = /\/\/(\d+)\/(\d+)\/(\d+)/.exec(request.url);
           if (!match) return tile;
           const [, z, x, y] = match.map(Number);
-          return { ...tile, data: clipVectorTile(tile.data, z, x, y, SOLDEN_BOUNDS) };
+          const data = tile.data as ArrayBuffer;
+          return { ...tile, data: clipVectorTile(data, z, x, y, SOLDEN_BOUNDS) };
         });
         return true;
       } catch (error) {

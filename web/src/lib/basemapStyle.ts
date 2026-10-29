@@ -1,4 +1,4 @@
-import type { StyleSpecification } from "maplibre-gl";
+import type { RasterDEMSourceSpecification, StyleSpecification } from "maplibre-gl";
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
 
 import { SOLDEN_BOUNDS } from "./mapData.ts";
@@ -68,14 +68,14 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
     };
   }
 
-  const demSourceSpec = {
+  const demSourceSpec: RasterDEMSourceSpecification = {
     type: "raster-dem",
     tiles: [DEM_TILES_URL],
     tileSize: 256,
     maxzoom: DEM_MAX_ZOOM,
     encoding: "terrarium",
     bounds: SOLDEN_BOUNDS,
-  } as const;
+  };
   if (terrain || hillshade) sources.dem = { ...demSourceSpec, attribution: DEM_ATTRIBUTION };
   // Osobne źródło dla cieniowania — MapLibre ostrzega, że wspólne z terenem
   // pogarsza jakość renderowania.

@@ -28,8 +28,6 @@ function skiData(lines: SkiLineFeature[], pistes: SkiFeature[] = lines): SkiData
     pistes: { type: "FeatureCollection", features: pistes },
     lifts: { type: "FeatureCollection", features: [] },
     lines,
-    stale: false,
-    savedAt: "",
   };
 }
 
