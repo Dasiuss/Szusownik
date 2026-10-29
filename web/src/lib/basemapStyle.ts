@@ -2,8 +2,8 @@ import type { RasterDEMSourceSpecification, StyleSpecification } from "maplibre-
 import { layers as basemapLayers, namedFlavor } from "@protomaps/basemaps";
 
 import { SOLDEN_BOUNDS } from "./mapData.ts";
+import { CONTOUR_MINOR_M, type ContourProfile } from "./contourLevels.ts";
 import {
-  CONTOUR_MINOR_M,
   CONTOUR_SOURCE_LAYER,
   DEM_MAX_ZOOM,
   DEM_TILES_URL,
@@ -44,6 +44,11 @@ export interface MapStyleOptions {
   terrain: boolean;
   /** Poziomice liczone z DEM. */
   contours: boolean;
+  /**
+   * Profil gęstości poziomic: `pitch` (duża mapa 3D, stały interwał) albo
+   * `zoom` (płaskie mini-mapy, interwał podwajany przy oddalaniu).
+   */
+  contourProfile: ContourProfile;
 }
 
 /**
@@ -51,7 +56,13 @@ export interface MapStyleOptions {
  * i opcjonalnie teren 3D. Wszystkie zasoby są lokalne (self-hosted).
  */
 export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpecification {
-  const { basemap = true, hillshade = true, terrain = true, contours = true } = options;
+  const {
+    basemap = true,
+    hillshade = true,
+    terrain = true,
+    contours = true,
+    contourProfile = "pitch",
+  } = options;
 
   const base = (basemap
     ? basemapLayers("protomaps", namedFlavor("light"), { lang: "pl" })
@@ -81,7 +92,7 @@ export function buildMapStyle(options: Partial<MapStyleOptions> = {}): StyleSpec
   // pogarsza jakość renderowania.
   if (hillshade) sources["dem-hillshade"] = { ...demSourceSpec };
 
-  const contourUrl = contours ? contourTilesUrl(CONTOUR_MINOR_M) : null;
+  const contourUrl = contours ? contourTilesUrl(CONTOUR_MINOR_M, contourProfile) : null;
   if (contourUrl) {
     // `bounds` ogranicza żądania do kafelków przecinających obszar; reszta
     // i tak wraca pusta z protokołu (bez generowania i bez błędów DEM).

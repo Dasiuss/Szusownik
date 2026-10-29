@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import mlcontour from "maplibre-contour";
 import { clipVectorTile, tileIntersectsBounds } from "./tileClip.ts";
 import { SOLDEN_BOUNDS } from "./mapData.ts";
+import { CONTOUR_MINOR_M, contourThresholds, type ContourProfile } from "./contourLevels.ts";
 
 const BASE = import.meta.env.BASE_URL;
 const ORIGIN = window.location.origin;
@@ -10,7 +11,6 @@ const ORIGIN = window.location.origin;
 export const DEM_TILES_URL = `${ORIGIN}${BASE}dem/{z}/{x}/{y}.png`;
 export const DEM_MAX_ZOOM = 13;
 export const CONTOUR_SOURCE_LAYER = "contours";
-export const CONTOUR_MINOR_M = 50;
 
 // Poziomice liczone w przeglądarce z kafelków DEM (`maplibre-contour`, BSD-3).
 // Brak generowanych plików — krzywe powstają z tego samego DEM co relief.
@@ -43,23 +43,17 @@ try {
 }
 
 /**
- * Adres kafelków poziomic. Interwał jest identyczny na z10–z14, bo przy
- * pochyleniu MapLibre renderuje dalszy plan na niższym zoomie — dzięki temu
- * gęstość linii nie zależy od odległości.
+ * Adres kafelków poziomic. Profil decyduje o interwale na kolejnych zoomach
+ * (`contourThresholds`): `pitch` trzyma stały interwał pod pochyloną mapę,
+ * `zoom` podwaja go przy oddalaniu w płaskich mini-mapach.
  */
-export function contourTilesUrl(minorMeters: number = CONTOUR_MINOR_M): string | null {
+export function contourTilesUrl(
+  minorMeters: number = CONTOUR_MINOR_M,
+  profile: ContourProfile = "pitch",
+): string | null {
   if (!demSource) return null;
-  const major = minorMeters * 4;
   return demSource.contourProtocolUrl({
-    thresholds: {
-      8: [minorMeters * 4, major * 4],
-      9: [minorMeters * 4, major * 4],
-      10: [minorMeters, major],
-      11: [minorMeters, major],
-      12: [minorMeters, major],
-      13: [minorMeters, major],
-      14: [minorMeters, major],
-    },
+    thresholds: contourThresholds(profile, minorMeters),
     contourLayer: CONTOUR_SOURCE_LAYER,
     elevationKey: "ele",
     levelKey: "level",

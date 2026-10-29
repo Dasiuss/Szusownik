@@ -53,6 +53,15 @@ Gotowa geometria poziomic jest dodatkowo przycinana do bboxa
 znacznie większy niż obszar mapy (z8 to ~1,4° szerokości), więc bez przycięcia
 linie leją się daleko poza dane przy oddaleniu widoku.
 
+Interwał poziomic zależy od profilu widoku (`web/src/lib/contourLevels.ts`).
+Duża mapa (`pitch`) trzyma stałe 50 m od z10 (na z8–z9 200 m), bo przy
+pochyleniu MapLibre renderuje dalszy plan na niższym zoomie i gęstość linii
+zależałaby od odległości. Płaskie mini-mapy (`zoom`, widok z góry) podwajają
+interwał przy oddalaniu — 400 m do z11, 200 m na z12, 100 m na z13, 50 m od
+z14 — dzięki czemu odstęp linii na ekranie jest w przybliżeniu stały i przy
+dopasowaniu całego dnia poziomice nie dominują obrazu. Co czwarta linia jest
+grubsza i tylko ona dostaje etykietę wysokości.
+
 Ten sam mechanizm przycina **podkład wektorowy**: `pmtiles extract --bbox`
 zostawia całe kafelki, więc drogi, woda i pokrycie terenu wystawałyby poza
 obszar. Protokół `pmtiles://` (`web/src/lib/pmtilesSource.ts`) przycina każdy
@@ -65,6 +74,7 @@ Testy pilnujące mapy (poza `protocol`/routingiem):
 | --- | --- |
 | `mapFonts.test.ts` | komplet glifów dla każdego kroju z `text-font` |
 | `mapDem.test.ts` | pierścień sąsiadów DEM (poziomice bez dziur) |
+| `contourLevels.test.ts` | progi poziomic: stałe w dużej mapie, zależne od zoomu w mini-mapach |
 | `tileClip.test.ts` | przycinanie linii, poligonów i punktów do bboxa |
 | `mapDataClip.test.ts` | przycinanie tras/wyciągów + odsiew wyciągów „w projekcie" |
 | `mapSnapshot.test.ts` | dane OSM: obszar, brak wyciągów w budowie, trasy 36/38/39/40 |
@@ -233,8 +243,10 @@ MapLibre z `MapView`) pokazuje nad wykresami w `RunView` i `DaySummaryView`
 trasy OSM, wyciągi i ślad GPS kolorowany prędkością. Kamera jest płaska i ma
 **stałą orientację** jak duża mapa: `pitch 0`, `maxPitch 0`, obrót wyłączony
 (`dragRotate` + `touchZoomRotate`/`keyboard` bez rotacji), `bearing -90`, ten
-sam wektorowy podkład co duża mapa oraz poziomice 50 m, ale bez terenu 3D
-i cieniowania (`dem`/`sky` nie są dodawane). W prawym górnym rogu kafelka jest przycisk powiększenia: przełącza
+sam wektorowy podkład co duża mapa oraz poziomice w profilu `zoom` (interwał
+podwajany przy oddalaniu — inaczej niż w dużej mapie, patrz wyżej), ale bez
+terenu 3D i cieniowania (`dem`/`sky` nie są dodawane). W prawym górnym rogu
+kafelka jest przycisk powiększenia: przełącza
 wysokość mapy z 240 px na 75vh (ten sam przycisk zwija z powrotem).
 
 Warstwy (kolejność rysowania): `pistes-casing` (biała 4, opacity 0.55),

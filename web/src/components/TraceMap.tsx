@@ -198,7 +198,13 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
     if (!container || basemapReady === null) return;
     const map = new maplibregl.Map({
       container,
-      style: buildMapStyle({ basemap: basemapReady, hillshade: false, terrain: false, contours: true }),
+      style: buildMapStyle({
+        basemap: basemapReady,
+        hillshade: false,
+        terrain: false,
+        contours: true,
+        contourProfile: "zoom",
+      }),
       center: SOLDEN_CENTER,
       zoom: 12,
       pitch: 0,
