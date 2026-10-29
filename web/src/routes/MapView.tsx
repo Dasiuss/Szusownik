@@ -10,6 +10,7 @@ import { findRoute, snapToPiste, snapToRoute, trimRoute, type RouteResult } from
 import { routeCoverage } from "../lib/routeCoverage.ts";
 import { encodeRoute } from "../lib/routeTransfer.ts";
 import { routeSyncNotice } from "../lib/routeSyncNotice.ts";
+import { gpsNotice } from "../lib/geolocationNotice.ts";
 import type { StoredRun } from "../lib/db.ts";
 import {
   AERIALWAY_LABELS,
@@ -85,6 +86,8 @@ const NAVIGATION_MOVE_THRESHOLD_M = 15;
 const NAVIGATION_ON_ROUTE_M = 25;
 const NAVIGATION_ARRIVAL_M = 30;
 const NAVIGATION_MAX_ACCURACY_M = 50;
+// Komunikaty informacyjne (brak GPS w przeglądarce, błąd mapy) znikają same.
+const TRANSIENT_ALERT_MS = 2000;
 const EMPTY_COLLECTION: GeoJsonLineCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_POINTS: GeoJsonPointCollection = { type: "FeatureCollection", features: [] };
 const LINE_GEOMETRY_FILTER = ["==", ["geometry-type"], "LineString"] as never;
@@ -351,6 +354,7 @@ export default function MapView() {
   const [basemapReady, setBasemapReady] = useState<boolean | null>(null);
   const [position, setPosition] = useState<DevicePosition | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [transientAlert, setTransientAlert] = useState<string | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("idle");
   const [manualStart, setManualStart] = useState<Position | null>(null);
   const [destination, setDestination] = useState<Position | null>(null);
@@ -423,6 +427,20 @@ export default function MapView() {
     routeModeRef.current = routeMode;
   }, [routeMode]);
 
+  // Błędy wczytywania mapy i brak GPS to informacje jednorazowe — po chwili
+  // znikają same, żeby nie zasłaniać mapy przy każdym wejściu.
+  useEffect(() => {
+    if (!mapError) return undefined;
+    const timer = window.setTimeout(() => setMapError(null), TRANSIENT_ALERT_MS);
+    return () => window.clearTimeout(timer);
+  }, [mapError]);
+
+  useEffect(() => {
+    if (!transientAlert) return undefined;
+    const timer = window.setTimeout(() => setTransientAlert(null), TRANSIENT_ALERT_MS);
+    return () => window.clearTimeout(timer);
+  }, [transientAlert]);
+
   useEffect(() => {
     let active = true;
     loadSkiData()
@@ -472,7 +490,7 @@ export default function MapView() {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setGpsError("Ta przeglądarka nie udostępnia GPS.");
+      setTransientAlert("Ta przeglądarka nie udostępnia GPS.");
       return undefined;
     }
     const watchId = navigator.geolocation.watchPosition(
@@ -480,7 +498,7 @@ export default function MapView() {
         setGpsError(null);
         setPosition({ coordinate: [next.coords.longitude, next.coords.latitude], accuracy: next.coords.accuracy });
       },
-      (error) => setGpsError(error.code === error.PERMISSION_DENIED ? "Brak zgody na lokalizację telefonu." : "Nie udało się odczytać pozycji GPS."),
+      (error) => setGpsError(gpsNotice(error.code)),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
@@ -942,6 +960,7 @@ export default function MapView() {
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && gpsError && <div className="map-alert"><Icon name="x" size={16} /><span>{gpsError}</span><button className="map-alert-close" type="button" onClick={() => setGpsError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
+      {!mapError && !gpsError && transientAlert && <div className="map-alert" role="status"><Icon name="x" size={16} /><span>{transientAlert}</span><button className="map-alert-close" type="button" onClick={() => setTransientAlert(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && basemapReady === false && (
         <div className="map-alert" role="status">
           <Icon name="x" size={16} />
