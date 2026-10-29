@@ -1,9 +1,20 @@
+import { clipLineToRect, clipRingToRect, type TileRect } from "./tileClip.ts";
+
 export type Position = [number, number];
 
-export const SOLDEN_BOUNDS: [number, number, number, number] = [10.75, 46.85, 11.05, 47.1];
+// Bbox danych mapy: west, south, east, north. Musi zgadzać się z
+// `scripts/build-map-assets.mjs` i ekstrakcją `solden.pmtiles`.
+export const SOLDEN_BOUNDS: [number, number, number, number] = [
+  10.905, 46.886957, 11.028039, 46.999242,
+];
 export const SOLDEN_CENTER: Position = [10.977123714520985, 46.95802633395613];
 export const ROUTE_SNAP_RADIUS_M = 100;
-export const MAP_DATA_TTL_MS = 8 * 24 * 60 * 60 * 1000;
+
+export const HOME_COORDINATES: Position = [11.0095, 46.9726];
+
+// Snapshot OSM (trasy + wyciągi) budowany przez `scripts/build-map-assets.mjs`
+// i precache'owany razem z resztą zasobów mapy. Brak zapytań do Overpassa.
+const SKI_SNAPSHOT_URL = `${import.meta.env.BASE_URL}overpass-solden.json`;
 
 export const DIFFICULTY_COLORS: Record<string, string> = {
   novice: "#22c55e",
@@ -75,8 +86,6 @@ export interface SkiData {
   pistes: SkiFeatureCollection;
   lifts: SkiFeatureCollection;
   lines: SkiLineFeature[];
-  stale: boolean;
-  savedAt: string;
 }
 
 interface OverpassGeometryPoint {
@@ -103,16 +112,8 @@ interface OverpassResponse {
   elements?: OverpassElement[];
 }
 
-interface CachedSkiData {
-  savedAt: string;
-  elements: OverpassElement[];
-}
-
-const CACHE_KEY = "szusownik:ski-data:v3";
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-
-// Ostatnio wczytane (cache/świeże) dane tras — używane przez dopasowanie
-// zjazdów do tras przy materializacji. Nie pobiera nic z sieci.
+// Ostatnio wczytane dane tras — używane przez dopasowanie zjazdów do tras przy
+// materializacji. Nie pobiera nic z sieci.
 let matchingSkiData: SkiData | null = null;
 
 function difficultyFor(tags: Record<string, string>): string {
@@ -186,7 +187,10 @@ function normalizeElement(element: OverpassElement, routeKind: "piste" | "lift",
   };
 }
 
-export function normalizeSkiData(elements: OverpassElement[], stale: boolean, savedAt: string): SkiData {
+// Statusy, w których wyciąg nie jest czynny (projekty, budowa, zamknięte).
+const NON_PASSENGER_AERIALWAY = new Set(["proposed", "construction", "abandoned", "disused", "razed", "no"]);
+
+export function normalizeSkiData(elements: OverpassElement[]): SkiData {
   const pistes: SkiFeature[] = [];
   const lifts: SkiFeature[] = [];
   const seen = new Set<string>();
@@ -223,7 +227,8 @@ export function normalizeSkiData(elements: OverpassElement[], stale: boolean, sa
 
   for (const element of elements) {
     const tags = element.tags ?? {};
-    const isLift = Boolean(tags.aerialway);
+    // Wyciągi w projekcie/budowie/nieczynne nie są częścią czynnego ośrodka.
+    const isLift = Boolean(tags.aerialway) && !NON_PASSENGER_AERIALWAY.has(tags.aerialway);
     const isPiste = Boolean(tags["piste:type"]);
     if (!isLift && !isPiste) continue;
     const feature = normalizeElement(element, isLift ? "lift" : "piste", siteFor(element));
@@ -237,77 +242,52 @@ export function normalizeSkiData(elements: OverpassElement[], stale: boolean, sa
     pistes: { type: "FeatureCollection", features: pistes },
     lifts: { type: "FeatureCollection", features: lifts },
     lines: [...pistes, ...lifts].filter((feature): feature is SkiLineFeature => feature.geometry.type === "LineString"),
-    stale,
-    savedAt,
   };
 }
 
-function readCache(): CachedSkiData | null {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedSkiData;
-    if (!parsed.savedAt || !Array.isArray(parsed.elements)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+/**
+ * Przycina trasy i wyciągi do bboxa mapy. Elementy całkowicie poza obszarem
+ * znikają, a te przecinające granicę kończą się na niej (tak samo jak podkład
+ * i poziomice). Z rozciętej linii zostaje najdłuższy fragment — geometria tras
+ * nie bywa rozcinana na wiele części, a typ `LineString` musi zostać.
+ */
+export function clipSkiDataToBounds(data: SkiData, bounds: [number, number, number, number]): SkiData {
+  const rect: TileRect = { minX: bounds[0], minY: bounds[1], maxX: bounds[2], maxY: bounds[3] };
+  const clipFeature = (feature: SkiFeature): SkiFeature | null => {
+    if (feature.geometry.type === "LineString") {
+      const parts = clipLineToRect(feature.geometry.coordinates, rect).filter((part) => part.length >= 2);
+      if (parts.length === 0) return null;
+      const longest = parts.reduce((best, part) => (part.length > best.length ? part : best));
+      return { ...feature, geometry: { type: "LineString", coordinates: longest } };
+    }
+    const ring = clipRingToRect(feature.geometry.coordinates[0], rect);
+    if (ring.length < 3) return null;
+    return { ...feature, geometry: { type: "Polygon", coordinates: [ring] } };
+  };
+  const pistes = data.pistes.features.map(clipFeature).filter((feature): feature is SkiFeature => feature !== null);
+  const lifts = data.lifts.features.map(clipFeature).filter((feature): feature is SkiFeature => feature !== null);
+  return {
+    pistes: { ...data.pistes, features: pistes },
+    lifts: { ...data.lifts, features: lifts },
+    lines: [...pistes, ...lifts].filter((feature): feature is SkiLineFeature => feature.geometry.type === "LineString"),
+  };
 }
 
-function writeCache(cache: CachedSkiData): void {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // A full localStorage should not prevent showing freshly downloaded data.
-  }
-}
-
-function overpassQuery(): string {
-  const [west, south, east, north] = SOLDEN_BOUNDS;
-  return `[out:json][timeout:30];(
-  way["piste:type"](${south},${west},${north},${east});
-  relation["piste:type"](${south},${west},${north},${east});
-  way["aerialway"](${south},${west},${north},${east});
-  relation["site"="piste"](${south},${west},${north},${east});
-);out body geom;`;
-}
-
-async function fetchElements(): Promise<OverpassElement[]> {
-  const response = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    body: `data=${encodeURIComponent(overpassQuery())}`,
-  });
-  if (!response.ok) throw new Error(`Overpass: HTTP ${response.status}`);
-  const payload = (await response.json()) as OverpassResponse;
-  if (!Array.isArray(payload.elements)) throw new Error("Overpass: brak danych tras");
-  return payload.elements;
-}
-
-// Współbieżne wywołania (boot PWA i mini-mapa) dzielą jedno zapytanie Overpass.
+// Współbieżne wywołania (boot PWA i mini-mapa) dzielą jedno wczytanie snapshotu.
 let inflightLoad: Promise<SkiData> | null = null;
 
 export async function loadSkiData(): Promise<SkiData> {
-  const cached = readCache();
-  if (cached && Date.now() - Date.parse(cached.savedAt) < MAP_DATA_TTL_MS) {
-    matchingSkiData = normalizeSkiData(cached.elements, false, cached.savedAt);
-    return matchingSkiData;
-  }
+  if (matchingSkiData) return matchingSkiData;
   if (inflightLoad) return inflightLoad;
 
   inflightLoad = (async () => {
     try {
-      const elements = await fetchElements();
-      const fresh: CachedSkiData = { elements, savedAt: new Date().toISOString() };
-      writeCache(fresh);
-      matchingSkiData = normalizeSkiData(elements, false, fresh.savedAt);
+      const response = await fetch(SKI_SNAPSHOT_URL);
+      if (!response.ok) throw new Error(`Snapshot tras: HTTP ${response.status}`);
+      const payload = (await response.json()) as OverpassResponse;
+      if (!Array.isArray(payload.elements)) throw new Error("Snapshot tras: brak danych");
+      matchingSkiData = clipSkiDataToBounds(normalizeSkiData(payload.elements), SOLDEN_BOUNDS);
       return matchingSkiData;
-    } catch (error) {
-      if (cached) {
-        matchingSkiData = normalizeSkiData(cached.elements, true, cached.savedAt);
-        return matchingSkiData;
-      }
-      throw error;
     } finally {
       inflightLoad = null;
     }
@@ -315,19 +295,7 @@ export async function loadSkiData(): Promise<SkiData> {
   return inflightLoad;
 }
 
-/**
- * Cache bez sieci: zwraca znormalizowane trasy z localStorage, jeśli są, i
- * zapamiętuje je do dopasowania. Null, gdy cache nie istnieje.
- */
-export function loadCachedSkiData(): SkiData | null {
-  const cached = readCache();
-  if (!cached) return null;
-  const stale = Date.now() - Date.parse(cached.savedAt) >= MAP_DATA_TTL_MS;
-  matchingSkiData = normalizeSkiData(cached.elements, stale, cached.savedAt);
-  return matchingSkiData;
-}
-
-/** Trasy dostępne dla dopasowania (cache/ostatnie wczytanie) albo null. */
+/** Trasy dostępne dla dopasowania (ostatnie wczytanie) albo null. */
 export function getSkiDataForMatching(): SkiData | null {
   return matchingSkiData;
 }
@@ -335,4 +303,5 @@ export function getSkiDataForMatching(): SkiData | null {
 /** Wstrzyknięcie tras do dopasowania (testy) — bez sieci i storage. */
 export function primeSkiDataForMatching(data: SkiData | null): void {
   matchingSkiData = data;
+  inflightLoad = null;
 }

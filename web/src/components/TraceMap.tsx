@@ -7,18 +7,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
-import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
+import type { GeoJSONSource } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "./Icon.tsx";
 import {
   DIFFICULTY_COLORS,
-  SOLDEN_BOUNDS,
   SOLDEN_CENTER,
   getSkiDataForMatching,
-  loadCachedSkiData,
   loadSkiData,
   type SkiData,
 } from "../lib/mapData.ts";
+import { buildMapStyle } from "../lib/basemapStyle.ts";
+import { prepareBasemap } from "../lib/pmtilesSource.ts";
 import { buildTraceCollection, traceBounds, type TracePoint } from "../lib/traceMap.ts";
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -43,24 +43,6 @@ const PISTE_COLOR_EXPRESSION = [
   DIFFICULTY_COLORS.expert,
   DIFFICULTY_COLORS.unknown,
 ] as never;
-
-const MINI_STYLE: StyleSpecification = {
-  version: 8,
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {
-    topo: {
-      type: "raster",
-      tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      bounds: SOLDEN_BOUNDS,
-      attribution: "© OpenTopoMap contributors",
-    },
-  },
-  layers: [
-    { id: "background", type: "background", paint: { "background-color": "#dbe9e5" } },
-    { id: "topo", type: "raster", source: "topo", paint: { "raster-saturation": -0.15, "raster-contrast": 0.05 } },
-  ],
-};
 
 function addMiniLayers(map: maplibregl.Map): void {
   map.addSource("pistes", { type: "geojson", data: EMPTY_PISTES });
@@ -179,7 +161,7 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
   }, []);
 
   const [skiData, setSkiData] = useState<SkiData | null>(
-    () => getSkiDataForMatching() ?? loadCachedSkiData(),
+    () => getSkiDataForMatching(),
   );
   const skiRef = useRef(skiData);
   skiRef.current = skiData;
@@ -198,12 +180,25 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
     };
   }, [skiData]);
 
+  const [basemapReady, setBasemapReady] = useState<boolean | null>(null);
+
+  // Podkład wektorowy wczytany do pamięci — jak w dużej mapie (offline bez Range).
+  useEffect(() => {
+    let active = true;
+    void prepareBasemap().then((ready) => {
+      if (active) setBasemapReady(ready);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || basemapReady === null) return;
     const map = new maplibregl.Map({
       container,
-      style: MINI_STYLE,
+      style: buildMapStyle({ basemap: basemapReady, hillshade: false, terrain: false, contours: true }),
       center: SOLDEN_CENTER,
       zoom: 12,
       pitch: 0,
@@ -218,7 +213,8 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
     mapRef.current = map;
-    map.on("load", () => {
+    map.on("style.load", () => {
+      if (loadedRef.current) return;
       addMiniLayers(map);
       loadedRef.current = true;
       applySkiData(map, skiRef.current);
@@ -231,7 +227,7 @@ export default function TraceMap({ traces, highlight, ariaLabel = "Mapa śladu" 
       mapRef.current = null;
       map.remove();
     };
-  }, [setMarker]);
+  }, [setMarker, basemapReady]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -60,11 +60,11 @@ const PROFILES = {
   solden: {
     label: 'Sölden, Austria',
     mode: 'ski',
-    bbox: { south: 46.93, west: 10.92, north: 47.02, east: 11.10 },
+    bbox: { south: 46.886957, west: 10.905, north: 46.999242, east: 11.028039 },
     zoom: 14,
     tiles: 1,
     reportFile: 'map-report.txt',
-    overpassCacheFile: 'overpass-solden.json',
+    overpassCacheFile: 'overpass-pwa.json',
     elevationCacheFile: 'elevation-solden.json',
   },
   wroclaw: {
@@ -318,8 +318,14 @@ function collectWays(elements) {
   const lifts = [];
   const elevationQueries = [];
 
+  // Cache OSM jest wspólny dla PWA i HUD (szerszy niż mapa), więc bierzemy tylko
+  // drogi/trasy, które choć jednym punktem wpadają w obszar profilu.
+  const inBbox = (geometry) => geometry.some((point) =>
+    point.lon >= BBOX.west && point.lon <= BBOX.east && point.lat >= BBOX.south && point.lat <= BBOX.north);
+
   for (const element of elements) {
     if (element.type !== 'way' || !Array.isArray(element.geometry) || element.geometry.length < 2) continue;
+    if (!inBbox(element.geometry)) continue;
     const tags = element.tags ?? {};
     if (hasLifecyclePrefix(tags)) continue;
 

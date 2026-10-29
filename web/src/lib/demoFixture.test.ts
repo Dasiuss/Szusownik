@@ -39,7 +39,7 @@ function loopFeatures() {
     },
     geometry: way.geometry.map(([lon, lat]) => ({ lon, lat })),
   }));
-  return normalizeSkiData(elements, false, "2026-01-15T00:00:00.000Z").lines;
+  return normalizeSkiData(elements).lines;
 }
 
 describe("demo fixture", () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
-import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
+import type { GeoJSONSource } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Icon } from "../components/Icon.tsx";
 import { LiftIcon, LIFT_EMPTY_IMAGE_ID, LIFT_ICON_IMAGE_EXPRESSION, LIFT_MAP_IMAGES } from "../components/LiftIcon.tsx";
@@ -21,6 +21,8 @@ import {
   type SkiData,
   type SkiFeature,
 } from "../lib/mapData.ts";
+import { buildMapStyle } from "../lib/basemapStyle.ts";
+import { prepareBasemap } from "../lib/pmtilesSource.ts";
 import type { Sample } from "../lib/csv.ts";
 
 interface GeoJsonPointCollection {
@@ -103,33 +105,6 @@ const WARNING_COLOR_EXPRESSION = [
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-const MAP_STYLE: StyleSpecification = {
-  version: 8,
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {
-    topo: {
-      type: "raster",
-      tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      bounds: SOLDEN_BOUNDS,
-      attribution: "© OpenTopoMap contributors",
-    },
-    dem: {
-      type: "raster-dem",
-      tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      encoding: "terrarium",
-      bounds: SOLDEN_BOUNDS,
-    },
-  },
-  layers: [
-    { id: "background", type: "background", paint: { "background-color": "#dbe9e5" } },
-    { id: "topo", type: "raster", source: "topo", paint: { "raster-saturation": -0.15, "raster-contrast": 0.05 } },
-  ],
-  terrain: { source: "dem", exaggeration: 0.6 },
-  sky: { "sky-color": "#a5d6f5", "horizon-color": "#f0f6fa", "horizon-fog-blend": 0.4, "fog-color": "#e8eef2", "fog-ground-blend": 0.4, "atmosphere-blend": 1 },
-};
-
 const COLOR_EXPRESSION = [
   "match",
   ["get", "difficulty"],
@@ -151,8 +126,6 @@ function emptyMapData(): SkiData {
     pistes: { type: "FeatureCollection", features: [] },
     lifts: { type: "FeatureCollection", features: [] },
     lines: [],
-    stale: false,
-    savedAt: "",
   };
 }
 
@@ -371,6 +344,7 @@ export default function MapView() {
   const [mapData, setMapData] = useState<SkiData>(emptyMapData);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [basemapReady, setBasemapReady] = useState<boolean | null>(null);
   const [position, setPosition] = useState<DevicePosition | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("idle");
@@ -508,11 +482,24 @@ export default function MapView() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // Podkład wektorowy wczytujemy do pamięci PRZED utworzeniem mapy — dzięki
+  // temu offline nie zależy od obsługi HTTP Range przez service worker.
   useEffect(() => {
+    let active = true;
+    void prepareBasemap().then((ready) => {
+      if (active) setBasemapReady(ready);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (basemapReady === null) return undefined;
     if (!mapContainer.current || mapRef.current) return undefined;
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: MAP_STYLE,
+      style: buildMapStyle({ basemap: basemapReady }),
       center: SOLDEN_CENTER,
       zoom: window.matchMedia("(max-width: 768px)").matches ? 12 : 13,
       pitch: 40,
@@ -539,15 +526,16 @@ export default function MapView() {
     });
     const homeMarker = new maplibregl.Marker({ element: homeMarkerElement, anchor: "bottom" }).setLngLat(HOME_COORDINATES).addTo(map);
     let cancelled = false;
-     map.on("load", async () => {
-       try {
-         await addLiftImages(map, () => cancelled);
-       } catch (error: unknown) {
-         if (cancelled) return;
-         setMapError(error instanceof Error ? error.message : String(error));
-         return;
-       }
-       if (cancelled) return;
+    const installLayers = async () => {
+      if (cancelled || map.getSource("pistes")) return;
+      try {
+        await addLiftImages(map, () => cancelled);
+      } catch (error: unknown) {
+        if (cancelled) return;
+        setMapError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      if (cancelled) return;
        map.addSource("pistes", { type: "geojson", data: mapData.pistes as never, promoteId: "uid" });
        map.addSource("lifts", { type: "geojson", data: mapData.lifts as never, promoteId: "uid" });
        map.addSource("recent-trace", { type: "geojson", data: EMPTY_COLLECTION as never });
@@ -630,6 +618,9 @@ export default function MapView() {
       map.on("mouseenter", "lifts-hit", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "lifts-hit", () => { map.getCanvas().style.cursor = ""; });
       setMapReady(true);
+    };
+    map.on("style.load", () => {
+      void installLayers();
     });
     map.on("error", (event) => {
       const mapErrorEvent = event as typeof event & { sourceId?: string; tile?: unknown };
@@ -646,7 +637,7 @@ export default function MapView() {
     };
     // The map is created once; source data is synchronized by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [basemapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -950,7 +941,7 @@ export default function MapView() {
       </div>
 
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
-      {!mapError && !mapData.stale && !mapReady && <div className="map-loading"><span className="spinner" /> Wczytuję mapę i trasy…</div>}
+      {!mapError && !mapReady && <div className="map-loading"><span className="spinner" /> Wczytuję mapę i trasy…</div>}
 
       {(routeMode !== "idle" || routeError || routing) && (
         <div className="map-route-message" role="status">

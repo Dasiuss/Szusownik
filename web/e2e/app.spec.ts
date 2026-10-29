@@ -25,11 +25,7 @@ test("boot z danymi demo i nawigacja po zakładkach", async ({ page }) => {
   await expect(page.getByText("Wersja PWA")).toBeVisible();
 });
 
-test("mapa renderuje się z zamockowanym Overpass", async ({ page }) => {
-  await page.route("**/overpass-api.de/**", (route) =>
-    route.fulfill({ contentType: "application/json", body: JSON.stringify({ elements: [] }) }),
-  );
-
+test("mapa renderuje się na lokalnym snapshocie tras", async ({ page }) => {
   await page.goto("./#/mapa");
   await expect(page.locator('[aria-label="Mapa tras narciarskich Sölden"]')).toBeVisible({ timeout: 30_000 });
 });

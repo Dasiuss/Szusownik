@@ -17,9 +17,15 @@
     "gen:demo": "node ../scripts/gen-demo-ride.mjs"
   },
   "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
+    "@maplibre/vt-pbf": "^4.3.3",
+    "@protomaps/basemaps": "^5.7.2",
     "dexie": "^4.0.0",
+    "maplibre-contour": "^0.1.1",
     "maplibre-gl": "^6.10.0",
     "papaparse": "^5.4.0",
+    "pbf": "^5.1.2",
+    "pmtiles": "^4.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0",

@@ -237,13 +237,18 @@ na nagraniach z auta defaulty wystarczą.
 ## 9. Stack technologiczny (potwierdzony 2026-09-11, `web/package.json`)
 
 - **React 19 + TypeScript (strict) + Vite 6**.
-- **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik-v1`).
+- **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik`).
 - **Dexie.js 4** — IndexedDB, schemat v6 (surowe pliki + materializowane zjazdy +
   etykiety/tombstone'y + trwale pominięte pliki + kolejka ponowień + metadane).
 - **papaparse 5** — parsowanie + walidacja schematu CSV.
 - **Recharts 2** — wykresy (ComposedChart, `ReferenceArea` dla czerwonego pasma).
 - **MapLibre GL 6** — mapa: pełny widok (`MapView`) oraz mini-mapa śladu
   (`TraceMap`) nad wykresami; oba w osobnych, leniwie ładowanych chunkach.
+- **PMTiles + @protomaps/basemaps** — wektorowy podkład z lokalnego
+  `web/public/solden.pmtiles` (OSM, ODbL), styl `light`.
+- **maplibre-contour** — poziomice 50 m liczone w przeglądarce z lokalnego DEM.
+- **vite-plugin-pwa** — manifest + service worker; precache całej paczki mapy
+  (podkład, DEM, glify, sprity, snapshot tras), stabilny `cacheId`.
 - **react-router-dom 7 (HashRouter)** — dzień → zjazd → urządzenie; działa
   z GitHub Pages.
 - **Tailwind CSS v4** — styling.

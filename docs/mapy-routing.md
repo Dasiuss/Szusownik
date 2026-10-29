@@ -20,23 +20,70 @@ algorytmów tylko dlatego, że zmieni się język lub podział komponentów.
 
 ## 2. Źródła mapy i terenu
 
-| Źródło | URL | Typ | Zastosowanie |
-| --- | --- | --- | --- |
-| OpenTopoMap | `https://a.tile.opentopomap.org/{z}/{x}/{y}.png` | raster | podkład |
-| AWS Terrain Tiles | `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png` | raster-dem | teren 3D i wysokość |
-| Overpass | `https://overpass-api.de/api/interpreter` | JSON | trasy, wyciągi, relacje ośrodków |
-| MapLibre demo fonts | `https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf` | glyphs | etykiety |
+Wszystkie zasoby mapy są **lokalne (self-hosted)** i precache'owane przez
+service worker. Aplikacja nie odpytuje żadnego zewnętrznego dostawcy map.
 
-Zakres pobierania danych dla Sölden:
+| Zasób | Plik w `web/public/` | Typ | Zastosowanie |
+| --- | --- | --- | --- |
+| Podkład wektorowy | `solden.pmtiles` (OSM/Protomaps) | vector | podkład |
+| DEM | `dem/{z}/{x}/{y}.png` (AWS Terrain Tiles, terrarium) | raster-dem | teren 3D, cieniowanie, poziomice |
+| Glify | `fonts/{fontstack}/{range}.pbf` (Noto Sans: Regular, Medium, Bold, Italic) | glyphs | etykiety |
+| Sprity | `sprites/v4/light` | sprite | ikony POI |
+| Trasy i wyciągi | `overpass-solden.json` (snapshot OSM) | JSON | trasy, wyciągi, routing |
+
+Zasoby odtwarza `scripts/build-map-assets.mjs` (DEM, glify, sprity, snapshot).
+Kafelki podkładu buduje osobno CLI Protomaps (`pmtiles extract`).
+
+Komplet krojów musi odpowiadać wszystkim `text-font` użytym w `web/src`
+(Regular/Medium/Italic ze stylu Protomaps + Bold z własnych etykiet tras
+i wyciągów). `basemaps-assets` nie publikuje Bold, więc ten jeden krój
+pobiera fonty MapLibre demo (ten sam Noto Sans, OFL).
+Pilnuje tego `web/src/lib/mapFonts.test.ts`: brakujący albo podmieniony na HTML
+plik glifów wywala test, zamiast sypać w konsoli „Unimplemented type: 4".
+
+Poziomice liczy `maplibre-contour` z 3×3 kafelków DEM, a brak choćby jednego
+sąsiada wywala cały kafelek (dziura w środku obszaru). Dlatego DEM ma wokół
+bboxa pierścień „pustych" kafelków (biały PNG = brak danych, ~750 B każdy):
+sąsiad istnieje, ale nie rysuje poziomic poza obszarem. Bez tego pierścienia
+poziomice urywają się w połowie mapy, a z prawdziwym DEM wokół — wychodzą
+daleko poza bbox. Komplet sąsiadów pilnuje `web/src/lib/mapDem.test.ts`.
+
+Gotowa geometria poziomic jest dodatkowo przycinana do bboxa
+(`web/src/lib/tileClip.ts`): kafelek DEM na niskim zoomie obejmuje teren
+znacznie większy niż obszar mapy (z8 to ~1,4° szerokości), więc bez przycięcia
+linie leją się daleko poza dane przy oddaleniu widoku.
+
+Ten sam mechanizm przycina **podkład wektorowy**: `pmtiles extract --bbox`
+zostawia całe kafelki, więc drogi, woda i pokrycie terenu wystawałyby poza
+obszar. Protokół `pmtiles://` (`web/src/lib/pmtilesSource.ts`) przycina każdy
+kafelek do bboxa przed oddaniem go do MapLibre. Kafelki w całości wewnątrz
+obszaru wracają bez przetwarzania (koszt tylko na krawędziach).
+
+Testy pilnujące mapy (poza `protocol`/routingiem):
+
+| Test | Co chroni |
+| --- | --- |
+| `mapFonts.test.ts` | komplet glifów dla każdego kroju z `text-font` |
+| `mapDem.test.ts` | pierścień sąsiadów DEM (poziomice bez dziur) |
+| `tileClip.test.ts` | przycinanie linii, poligonów i punktów do bboxa |
+| `mapDataClip.test.ts` | przycinanie tras/wyciągów + odsiew wyciągów „w projekcie" |
+| `mapSnapshot.test.ts` | dane OSM: obszar, brak wyciągów w budowie, trasy 36/38/39/40 |
+| `e2e/app.spec.ts` | mapa renderuje się na lokalnym snapshocie (bez sieci) |
+
+Zakres danych mapy (bbox):
 
 ```js
-[10.75, 46.85, 11.05, 47.1] // west, south, east, north
+[10.905, 46.886957, 11.028039, 46.999242] // west, south, east, north
 ```
 
-Bounds są ustawione na źródłach raster i DEM i ograniczają pobieranie danych do
-obszaru Sölden. Nie są ograniczeniem interfejsu mapy: mapa celowo nie ma
-`maxBounds`, więc użytkownik może swobodnie przesuwać widok dalej, tylko zobaczy
-tło/fog poza obszarem danych.
+Bounds są ustawione na źródłach raster-dem i wektorowym i ograniczają pobieranie
+danych do obszaru Sölden. Nie są ograniczeniem interfejsu mapy: mapa celowo nie
+ma `maxBounds`, więc użytkownik może swobodnie przesuwać widok dalej, tylko
+zobaczy tło/fog poza obszarem danych.
+
+Licencje: dane OSM — ODbL (atrybucja i share-alike dla archiwum kafelków);
+glify — SIL OFL; sprity — MIT; DEM — AWS Open Data (Mapzen/Joerd) z wymaganą
+atrybucją (m.in. Austria DGM, EU-DEM, SRTM/USGS).
 
 Konfiguracja referencyjna:
 
@@ -49,22 +96,25 @@ Konfiguracja referencyjna:
 - sky/fog: `#a5d6f5`, `#f0f6fa`, `#e8eef2`;
 - worker MapLibre ładowany z bundla Vite przez `setWorkerUrl`.
 
-## 3. Zapytanie Overpass i normalizacja
+## 3. Dane OSM i normalizacja
 
-Zapytanie pobiera w jednym wywołaniu:
+Aplikacja **nie odpytuje Overpassa w czasie działania**. Snapshot tras powstaje
+przy budowie (`scripts/build-map-assets.mjs --refresh`) i leży w
+`web/public/overpass-solden.json`. Zapytanie obejmuje bbox mapy powiększony
+o 0,03° (żeby elementy przecinające granicę były kompletne):
 
 ```text
-[out:json][timeout:30];
+[out:json][timeout:90];
 (
-  way["piste:type"](46.85,10.75,47.10,11.05);
-  relation["piste:type"](46.85,10.75,47.10,11.05);
-  way["aerialway"](46.85,10.75,47.10,11.05);
-  relation["site"="piste"](46.85,10.75,47.10,11.05);
+  way["piste:type"](46.856957,10.875,47.029242,11.058039);
+  relation["piste:type"](46.856957,10.875,47.029242,11.058039);
+  way["aerialway"](46.856957,10.875,47.029242,11.058039);
+  relation["site"="piste"](46.856957,10.875,47.029242,11.058039);
 );
 out body geom;
 ```
 
-`overpassToLayers` zwraca dwa `FeatureCollection`: `pistes` i `lifts`.
+`normalizeSkiData` zwraca dwa `FeatureCollection`: `pistes` i `lifts`.
 
 Każdy element dostaje:
 
@@ -183,8 +233,8 @@ MapLibre z `MapView`) pokazuje nad wykresami w `RunView` i `DaySummaryView`
 trasy OSM, wyciągi i ślad GPS kolorowany prędkością. Kamera jest płaska i ma
 **stałą orientację** jak duża mapa: `pitch 0`, `maxPitch 0`, obrót wyłączony
 (`dragRotate` + `touchZoomRotate`/`keyboard` bez rotacji), `bearing -90`, ten
-sam podkład OpenTopoMap co duża mapa, ale bez terenu 3D (`dem`/`sky` nie są
-dodawane). W prawym górnym rogu kafelka jest przycisk powiększenia: przełącza
+sam wektorowy podkład co duża mapa oraz poziomice 50 m, ale bez terenu 3D
+i cieniowania (`dem`/`sky` nie są dodawane). W prawym górnym rogu kafelka jest przycisk powiększenia: przełącza
 wysokość mapy z 240 px na 75vh (ten sam przycisk zwija z powrotem).
 
 Warstwy (kolejność rysowania): `pistes-casing` (biała 4, opacity 0.55),
@@ -391,33 +441,44 @@ Menu:
 
 ## 8. Cache i offline
 
-Cache Overpass:
+Mapa jest w pełni offline po pierwszym wejściu. Wszystkie zasoby leżą w
+`web/public/` i są **precache'owane przez Workbox przy instalacji service
+workera** (czyli przy pierwszym otwarciu strony, nie w momencie „Dodaj do
+ekranu głównego"):
 
 ```text
-key: maptest:ski-data:v2
-TTL: 8 dni
-storage: localStorage
+solden.pmtiles, dem/**, fonts/**, sprites/**, overpass-solden.json
 ```
 
-Zachowanie:
+Konfiguracja: `vite.config.ts` → `workbox.globPatterns` oraz
+`maximumFileSizeToCacheInBytes` (10 MB, bo `.pmtiles` ma ~3 MB).
 
-- świeży cache: bez fetch;
-- przeterminowany: fetch i zapis nowej odpowiedzi;
-- błąd fetch + stary cache: użyj starego cache;
-- błąd fetch bez cache: błąd w konsoli.
+Cache jest **stabilny** (`cacheId: "szusownik"`), a Workbox używa rewizji
+poszczególnych plików. Aktualizacja PWA dociąga więc tylko zmienione zasoby,
+a nie całą paczkę mapy. `cleanupOutdatedCaches` usuwa stare cache.
 
-Cache przechowuje surową odpowiedź Overpass, nie gotowy GeoJSON. Po uruchomieniu
-jest ponownie normalizowana. Zmiana query albo formatu wymaga podbicia wersji
-klucza.
+Trasy i wyciągi pochodzą z lokalnego snapshotu (`overpass-solden.json`) —
+aplikacja **nie odpytuje Overpassa** i nie ma już cache w `localStorage` ani
+TTL. Snapshot jest przefiltrowany do bboxu mapy przy budowie
+(`scripts/build-map-assets.mjs`) ze źródła `scripts/data/overpass-pwa.json`
+(wycinek OSM dla PWA; `node scripts/build-map-assets.mjs --refresh` pobiera go
+z Overpassa). To osobny plik od cache HudRekawa (`overpass-solden.json`), bo
+ten miał mniejszy bbox i gubił trasy w południowo-zachodniej części ośrodka.
 
-Ośmiodniowy TTL dotyczy wektorowych danych tras i wyciągów z Overpass. Kafelkowy
-podkład i DEM mają osobną politykę cache, ponieważ nie są tym samym zbiorem danych.
-Sama mapa nie ma jeszcze pełnego cache kafelków. PWA jest instalowalne, ale nie
-daje pełnego offline dla map i danych sieciowych. Szusownik powinien rozdzielić:
+Przy wczytaniu snapshot jest normalizowany i przycinany do bboxa
+(`clipSkiDataToBounds`): trasy przecinające granicę kończą się na niej, a te
+całkowicie poza obszarem znikają — spójnie z podkładem i poziomicami.
+Wyciągi w statusie `proposed`/`construction`/`abandoned`/`disused`/`razed`
+nie są pokazywane (to projekty, nie czynne koleje).
 
-- offline dane użytkownika i ostatni znany model tras;
-- opcjonalny cache kafelków;
-- jawny komunikat, kiedy mapa/routing działa na danych nieaktualnych.
+**PMTiles i HTTP Range.** PMTiles normalnie czyta archiwum przez `Range`
+(206). Service worker precache'ujący plik zwraca go w całości (200), co psuje
+taki odczyt. Dlatego `web/src/lib/pmtilesSource.ts` wczytuje archiwum (~3 MB)
+do pamięci i rejestruje je w protokole `pmtiles://` — offline nie zależy od
+Range.
+
+Atrybucja na mapie: `Protomaps © OpenStreetMap` oraz teren
+(Mapzen/Joerd, EU-DEM, DGM Österreich, SRTM/USGS).
 
 ## 9. GPS, ślad i map-matching
 
@@ -577,7 +638,7 @@ Dobre decyzje do zachowania:
 
 - worker MapLibre;
 - bounds źródeł;
-- cache 8 dni;
+- lokalne (precache'owane) kafelki, DEM, glify i sprity;
 - osobne źródła tras i wyciągów;
 - szerokie hit-area zamiast skomplikowanych zapytań;
 - bbox przed dokładnym porównaniem segmentów;
@@ -589,7 +650,6 @@ Kosztowne miejsca:
 - wielokrotne `queryTerrainElevation`;
 - budowa grafu synchronicznie po kliknięciu celu;
 - sortowana tablica zamiast kopca w Dijkstrze;
-- serializacja dużej odpowiedzi Overpass do localStorage;
 - wszystkie warstwy i logika w jednym komponencie.
 
 Docelowa kolejność optymalizacji:

@@ -3,9 +3,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-// Czas builda: jedna chwila na cały build, wstrzykiwana do apki i do cacheId.
+// Czas builda: jedna chwila na cały build, wstrzykiwana do apki.
 const buildTime = new Date().toISOString();
-const cacheId = `szusownik-${buildTime.replace(/[:.]/g, "-")}`;
 
 export default defineConfig({
   // GitHub Pages (project site): https://dasiuss.github.io/Szusownik/
@@ -32,10 +31,17 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Wersja cache = wersja apki. Czas builda wymusza świeży cache przy
-        // każdym wydaniu; przy zmianie formatu danych / query podbij też klucze
-        // cache (docs/ustalenia-z-projektow-testowych.md §6).
-        cacheId,
+        // STABILNY cache (nie per build): Workbox precache używa rewizji
+        // pojedynczych plików, więc aktualizacja apki dociąga tylko zmienione
+        // zasoby. Wcześniej `cacheId` per build wymuszał ponowne pobranie całej
+        // paczki mapy (~12 MB) przy każdym wydaniu.
+        cacheId: "szusownik",
+        // Precache całej mapy offline: podkład (pmtiles), DEM (png), glify
+        // (pbf), sprity i snapshot tras (json).
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,pbf,json,pmtiles}"],
+        // `solden.pmtiles` ma ~3 MB, a domyślny limit Workbox to 2 MB.
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

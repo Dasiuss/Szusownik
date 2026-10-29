@@ -114,7 +114,8 @@ CSV      HUD             |
 - Cache'ować surową odpowiedź Overpass i ponownie przetwarzać ją lokalnie.
 - Zakres pobierania danych mapowych ograniczyć do Sölden, ale nie blokować
   użytkownikowi przesuwania widoku poza ten zakres.
-- Dane wektorowe tras i wyciągów przechowywać lokalnie przez 8 dni.
+- Dane wektorowe tras i wyciągów trzymać w lokalnym snapshocie precache'owanym
+  przez service worker (bez TTL i bez zapytań sieciowych w czasie działania).
 - Panel wyniku routingu ma być mały i pokazywać łączny dystans oraz kolorową
   sekwencję tras i wyciągów, bez dodatkowych statystyk.
 
@@ -252,16 +253,17 @@ Z `BleTest` należy zachować rozdzielenie:
 - wersja firmware;
 - wersja PWA.
 
-Zmiana wydania PWA wymaga podbicia wersji cache service workera i widocznej
-wersji. Zmiana formatu danych mapowych lub zapytania Overpass wymaga podbicia
-wersji klucza cache. Dane użytkownika w IndexedDB muszą mieć wersję schematu,
-aby migracja nie zależała od ręcznego czyszczenia przeglądarki.
+Zmiana wydania PWA nie wymaga podbijania wersji cache: `cacheId` Workbox jest
+stały, a o aktualności decydują rewizje pojedynczych plików w precache. Zmiana
+formatu danych mapowych wymaga natomiast podmiany pliku (Workbox wykryje zmianę
+po rewizji). Dane użytkownika w IndexedDB muszą mieć wersję schematu, aby
+migracja nie zależała od ręcznego czyszczenia przeglądarki.
 
 Wersja widoczna PWA to czas builda (data i godzina), a nie numer semantyczny.
 `vite.config.ts` liczy jedną chwilę (`new Date().toISOString()`) przy starcie
-builda i wstrzykuje ją przez `define` (`__BUILD_TIME__`). Ta sama chwila tworzy
-`cacheId` Workbox (prefiks `szusownik-` plus znacznik ISO z dwukropkami
-i kropkami zamienionymi na myślniki), więc każde wydanie ma świeży cache. Wartość jest prezentowana na ekranie Urządzenie →
+builda i wstrzykuje ją przez `define` (`__BUILD_TIME__`). Cache Workbox ma
+**stały** `cacheId` (`szusownik`), więc wydanie dociąga tylko zmienione zasoby
+(dzięki rewizjom precache), a nie całą paczkę mapy. Wartość jest prezentowana na ekranie Urządzenie →
 sekcja „Dane aplikacji" (`settings-meta`, etykieta „Wersja PWA") w formacie
 `pl-PL` w lokalnej strefie urządzenia. W `npm run dev` znacznik odpowiada
 startowi serwera dev.

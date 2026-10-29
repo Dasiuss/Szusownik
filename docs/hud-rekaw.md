@@ -290,7 +290,14 @@ node scripts/build-map.mjs --profile wroclaw    # profil Wrocław (testy)
 node scripts/build-map.mjs --refresh            # ponowne pobranie z Overpass
 ```
 
-Cache danych i raport kierunków lądują w `scripts/data/`. Mapa jest rysowana
+Cache danych i raport kierunków lądują w `scripts/data/`.
+
+Profil `solden` używa **tego samego obszaru i tego samego wycinka OSM co PWA**
+(bbox `10.905, 46.886957, 11.028039, 46.999242`, źródło
+`scripts/data/overpass-pwa.json`). Dzięki temu HUD ma te same trasy i wyciągi
+co aplikacja — wcześniej korzystał z osobnego cache z mniejszym bboxem i gubił
+południowo-zachodnią część ośrodka. Elementy spoza obszaru są odsiewane przy
+generowaniu, a statusy `proposed`/`construction`/`disused` pomijane. Mapa jest rysowana
 środkowo na rowerzyście z projekcją „rybiego oka"; przy profilu Wrocław nie ma
 tras narciarskich, więc widok pozostaje zorientowany na północ.
 

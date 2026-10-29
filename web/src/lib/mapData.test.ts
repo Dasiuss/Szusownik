@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { overpassElements } from "../../test/skiArea.ts";
 import { loadSkiData, normalizeSkiData } from "./mapData.ts";
 
-const data = normalizeSkiData(overpassElements(), false, "2026-01-01T00:00:00.000Z");
+const data = normalizeSkiData(overpassElements());
 
 describe("normalizeSkiData", () => {
   it("bierze tylko trasy downhill, pomijając grooming=no i freeride", () => {
@@ -32,8 +32,6 @@ describe("normalizeSkiData", () => {
   it("deduplikuje cechy po uid", () => {
     const duplicated = normalizeSkiData(
       [...overpassElements(), ...overpassElements()],
-      false,
-      "2026-01-01T00:00:00.000Z",
     );
     const ids = duplicated.pistes.features.map((feature) => feature.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -41,7 +39,7 @@ describe("normalizeSkiData", () => {
 });
 
 describe("loadSkiData", () => {
-  it("współbieżne wywołania wykonują jedno zapytanie Overpass", async () => {
+  it("współbieżne wywołania wczytują snapshot raz", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ elements: overpassElements() }),
