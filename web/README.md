@@ -5,8 +5,9 @@ Aplikacja web (PWA) do prezentacji i analizy przejazdów.
 - Stack: React 19 + TypeScript + Vite 6 (+ vite-plugin-pwa, Recharts, MapLibre GL,
   Dexie, papaparse, react-router-dom, Tailwind v4).
 - Dane demo: **generowany** ślad narciarski (`public/fixtures/ride.csv` z
-  `scripts/gen-demo-ride.mjs`) na prawdziwych trasach Sölden; docelowo transfer
-  BLE z urządzenia (faza C) + Supabase (faza D). Realne nagranie do testów:
+  `scripts/gen-demo-ride.mjs`) na prawdziwych trasach Sölden. Transfer BLE z
+  urządzenia należy do MVP; Supabase i Strava są planowane w kroku 2, poza MVP.
+  Realne nagranie do testów:
   `test data/20260926_181420.csv`.
 
 Struktura `src/`:
@@ -17,7 +18,8 @@ Struktura `src/`:
 - `lib/db.ts` — Dexie/IndexedDB, schemat v6 (surowe CSV, zjazdy, etykiety,
   tombstone'y, pominięte/oczekujące pliki, metadane).
 - `lib/data.ts` — seed demo, grupowanie dni, materializacja zjazdów i lokalne operacje danych.
-- `lib/mapData.ts` — normalizacja tras/wyciągów OSM (Overpass) + cache.
+- `lib/mapData.ts` — normalizacja lokalnego snapshotu OSM tras/wyciągów; bez
+  zapytań do Overpassa w runtime.
 - `lib/routeMatching.ts` — automatyczne dopasowanie zjazdu do tras (sekwencja + spany).
 - `lib/traceMap.ts` — przygotowanie śladu do mini-mapy (kolor wg prędkości, decymacja).
 - `lib/ble.ts` — transfer BLE i sprawdzanie nowych plików bez rozłączania sesji.

@@ -1,7 +1,8 @@
 # Szusownik — dokument koncepcyjny
 
-> Status: **WIP (draft)** — dokument żywy, aktualizowany w trakcie dyskusji.
-> Data ostatniej aktualizacji: 2026-08-19
+> Status: bieżący zakres produktu i roadmapa; szczegółowe decyzje techniczne są
+> opisane w dokumentach referencyjnych wskazanych w `AGENTS.md`.
+> Data ostatniej aktualizacji: 2026-11-01
 
 ## 1. Wizja i cel
 
@@ -11,29 +12,43 @@ Zestaw urządzenie + aplikacja do pomiaru i analizy prędkości narciarza, nasta
 Dwa główne elementy:
 
 1. **Urządzenie pomiarowe** (dedykowany sprzęt — GPS w telefonie jest zbyt wolny).
-2. **Aplikacja do analizy wyników** — PWA (web) + chmura.
+2. **Aplikacja do analizy wyników** — lokalna, offline-first PWA. Integracja
+   chmurowa jest planowana w kroku 2, poza MVP.
 
 ## 2. Zakres
 
-### MVP
-- Pomiar pozycji i prędkości (GPS, do 10 Hz).
-- Adaptacyjna częstotliwość próbkowania.
-- Feedback dźwiękowy (bipnięcia piezo) + sygnał rekordu.
-- Zapis surowy CSV na microSD.
-- Transfer BLE do PWA (Chrome, Windows/Android), podgląd offline (IndexedDB).
-- Warstwa prezentacyjna w PWA: spis zjazdów (czasy + max prędkość), po wejściu w zjazd — wykresy.
-- Generowanie FIT w PWA + wysyłka do Strava przez proxy serverless.
-- Baza w chmurze: Supabase.
+### MVP — bieżący zakres
 
-### Roadmapa
-- IMU + baro + fuzja (EKF), pomiar nachylenia i „bumpiness".
-- Kompresja danych przy transferze BLE.
-- RTK z lokalną bazą w ośrodku (na samym końcu).
-- Analiza: score tras — wskazywanie tras z potencjałem na rekord.
-- Wyliczanie współczynnika złożenia, ślizgu oraz teoretycznej prędkości maksymalnej.
-- Wykres prędkości na przekroju stoku na OLED — widać, gdzie wypadł max, żeby wiedzieć, gdzie „przycisnąć".
-- Dopracowanie score tras.
-- Wyliczanie kosztu zakrętu na podstawie zmiany trajektorii i zmiany prędkości.
+- Pomiar GNSS (do 10 Hz) z adaptacyjnym próbkowaniem, surowy zapis CSV na
+  microSD, sygnały dźwiękowe oraz transfer plików BLE do PWA.
+- Wymagany barometr BME280: wysokość GNSS ma zbyt małą dokładność pionową, by
+  samodzielnie zapewnić użyteczny profil wysokości i stabilną analizę zjazdów.
+  Bieżąca fuzja baro+GPS jest komplementarna; nie jest to jeszcze fuzja IMU/EKF.
+- Lokalny ekran statystyk OLED; PWA do analizy zjazdów, wykresów i pracy z
+  lokalnymi danymi mapowymi oraz routingiem.
+- Opcjonalny zewnętrzny moduł HudRekaw: osobny ekran mapy/statystyk i nawigacji.
+
+MVP nie obejmuje synchronizacji danych z chmurą ani eksportu do Stravy.
+
+### Krok 2 — chmura i eksport
+
+Planowana integracja, poza MVP:
+
+- generowanie FIT w PWA;
+- Supabase (uwierzytelnianie, baza i Edge Function);
+- OAuth i wysyłka aktywności do Stravy przez Edge Function.
+
+Szczegóły przepływu OAuth, przechowywania tokenów i obsługi ponowień trzeba
+ustalić przed implementacją (`docs/supabase.md`).
+
+### Dalsza roadmapa (poza MVP; kolejność do ustalenia)
+
+- **IMU:** pomiar nachylenia i „bumpiness"; ocena, czy rozszerzyć obecną fuzję
+  baro+GPS o IMU i filtr EKF. Barometr pozostaje wymaganym elementem MVP.
+- **Zaawansowana analityka:** ocena tras pod kątem potencjału na rekord, analiza
+  współczynnika złożenia i ślizgu, teoretycznej prędkości maksymalnej oraz kosztu
+  zakrętu na podstawie zmiany trajektorii i prędkości.
+- **RTK:** lokalna baza w ośrodku — długoterminowy, najpóźniejszy etap roadmapy.
 
 ## 3. Szczegóły implementacyjne
 
@@ -42,11 +57,14 @@ Dwa główne elementy:
 - **Moduł GNSS (u-blox, ≥10 Hz)** po UART — źródło pozycji i prędkości.
 - **Zapis surowego CSV na microSD** (SPI) w czasie rzeczywistym.
 - **Feedback dźwiękowy** przez **pasywny buzzer piezo** (tony generowane PWM).
-- **Wyświetlacz OLED 0,96" (SSD1306, I2C)** — jeden ekran statystyk: **max
+- **Barometr BME280 (I2C)** — wymagany; GNSS ma ograniczoną dokładność
+  wysokościową. Wysokość barometryczna jest łączona z GPS; firmware obsługuje
+  również BMP280.
+- **Wyświetlacz OLED 0,96" (SSD1306, I2C)** — ekran statystyk: **max
   ostatniego zjazdu** (hero, na żywo w zjeździe / zamrożony na wyciągu), **max
-  dnia**, **dystans dnia**, **wysokość** (fuzja baro+GPS) i **czas lokalny**.
-  Bez mapy na Szusowniku; layout i detekcja zjazdu w `docs/hud-display.md`.
-- **Osobny ekran HudRekaw** (ESP8266 + ST7789 240×240) dostaje przez **ESP-NOW**
+  od uruchomienia**, **dystans od uruchomienia**, **wysokość** (fuzja baro+GPS)
+  i **czas lokalny**. Layout w `docs/hud-display.md`.
+- **Opcjonalny, zewnętrzny ekran HudRekaw** (ESP8266 + ST7789 240×240) dostaje przez **ESP-NOW**
   (kanał 1) pozycję i statystyki: mapę z bieżącą pozycją na postoju albo ekran
   statystyk w ruchu (`docs/hud-rekaw.md`).
 - **Tryb nawigacji**: wyznaczona w PWA trasa trafia przez BLE do Szusownika
@@ -104,65 +122,48 @@ Dwa główne elementy:
 
 ### Dane i transfer
 - Pola CSV: timestamp (UTC z GPS), lat/lon, prędkość, wysokość GPS, heading,
-  wysokość barometryczna (BME280).
-- **Rotacja plików** na urządzeniu: domknięcie pliku na postoju (ochrona przed odcięciem zasilania) oraz przy żądaniu pobrania; PWA pobiera
-  pliki po nazwie (lista + porównanie), bez kasowania danych z karty.
+  wysokość barometryczna (wymagany barometr BME280; firmware rozpoznaje również
+  BMP280).
+- **Rotacja plików** na urządzeniu: domknięcie pliku po postoju i przed żądaniem
+  pobrania; nie powstaje osobny plik na każdy zjazd. PWA pobiera pliki po nazwie,
+  scala ich próbki przed cięciem zjazdów i nie usuwa ich po transferze. Najstarsze
+  pliki są usuwane FIFO dopiero po spadku wolnego miejsca poniżej minimum.
 - **Pliki z jazdą znaczone `.meta`**: plik `<nazwa>.csv.meta` powstaje po
   potwierdzonym ruchu; bez niego CSV jest „postojowy" i nie trafia na listę
   pobierania, więc PWA nie widzi śmieci z postoju.
-- **Cięcie trasy przy kliknięciu w PWA**: aktywność = dane od poprzedniego cięcia do bieżącego
-  kliknięcia. Ograniczenie: maksymalnie **bieżący dzień** — jeśli poprzednie cięcie było
-  wcześniejszego dnia, uwzględniane są tylko dane z dzisiaj (starsze zostają niewrzucone).
 - **Transfer BLE** do PWA (Chrome/Web Bluetooth), chunkowany.
-- **FIT generowane w PWA** (`@garmin-fit/sdk`).
-- **Dwie akcje w PWA**: (1) pobierz z urządzenia (BLE → IndexedDB),
-  (2) wyślij do Strava (FIT → Edge Function).
+- Dane urządzenia są przechowywane i analizowane lokalnie w PWA; integracja z
+  chmurą i eksport FIT/Strava należą do kroku 2.
 
-### PWA i chmura
+### PWA i integracje późniejsze
 - PWA serwowane z **GitHub Pages** (HTTPS).
-- **IndexedDB** — podgląd danych offline.
-- **Supabase**: baza + **Edge Function** jako proxy do Strava
-  (Edge Function = funkcja serverless hostowana w chmurze; trzyma `client_secret`,
-  robi OAuth + upload, omija CORS).
+- **IndexedDB** — lokalne przechowywanie danych i analiza offline.
+- W kroku 2: Supabase (baza + Edge Function jako proxy do Stravy, przechowujące
+  sekret po stronie serwera i obsługujące OAuth oraz upload).
 
 ## 4. Wstępna architektura
 
 ```
-[GNSS u-blox] ──► [ESP32-S3] ──► [buzzer piezo]
-                     │
-                     ├─► microSD (surowe CSV)
-                     ├─► OLED 0,96" (I2C)
-                     ├─► ESP-NOW ──► HudRekaw (ESP8266 + ST7789)
-                     └─► BLE ──► PWA (GitHub Pages, IndexedDB)
-                                    ├─► generowanie FIT
-                                    └─► Supabase Edge Function ──► Strava
+[GNSS u-blox] ────────┐
+[BME280, wymagany] ───┴─► [ESP32-S3] ──► buzzer piezo
+                               ├─► microSD (surowe CSV)
+                               ├─► OLED 0,96" (I2C)
+                               ├─► ESP-NOW ──► HudRekaw (opcjonalny ESP8266 + ST7789)
+                               └─► BLE ──► PWA (GitHub Pages, IndexedDB)
+                                              └─► krok 2: FIT → Supabase Edge Function → Strava
 ```
 
 - Moduł pomiarowy (GPS) wydzielony w kodzie — interfejs stabilny.
-- FIT generowane w PWA z surowego CSV.
+- Barometr jest częścią wymaganego zestawu MVP; IMU pozostaje rozszerzeniem
+  roadmapy.
 
-## 5. Otwarte punkty i kolejne kroki
+## 5. Status i następne etapy
 
-Punkty wymagające decyzji/projektu przed lub w trakcie budowy MVP. Każdy rozpisany
-na konkretne zadania.
+Główne przepływy MVP — rejestracja danych przez firmware, transfer BLE, lokalna
+analiza PWA, mapy i routing — są zaimplementowane. Szczegółowy stan testów
+automatycznych i walidacji sprzętowej opisują `docs/testy.md`,
+`docs/ble-transfer.md`, `docs/hud-display.md` i `docs/hud-rekaw.md`.
 
-### 1. Flow Strava: OAuth + upload przez Edge Function
-- **Co ustalić:** przepływ OAuth2 (Authorization Code + PKCE), gdzie przechowywać tokeny
-  (localStorage po stronie PWA vs po stronie Supabase), jak Edge Function wykonuje
-  `POST /uploads` (multipart z plikiem FIT), obsługa błędów/retry.
-- **Do zrobienia:** projekt przepływu + prototyp Edge Function (wymiana tokenu, upload
-  testowego FIT, logowanie błędów).
-
-### 2. Warstwa prezentacji (analiza offline)
-- **Co ustalić:** co pokazujemy w PWA offline — spis zjazdów (czas + max prędkość),
-  po wejściu w zjazd wykresy (prędkość/wysokość w funkcji czasu), ewentualne dodatkowe
-  metryki (średnia, przyrost, porównanie przejazdów).
-- **Do zrobienia:** szkic widoków i metryk → statyczny prototyp UI przed podpięciem danych.
-
-### Kolejność prac (aktualizacja 2026-09-11: komponenty dojechały, mock niepotrzebny)
-1. **PWA + warstwa prezentacji na rzeczywistym nagraniu z urządzenia** (punkt 2).
-2. **Firmware urządzenia** — DONE MVP1: pomiar (adaptacyjne próbkowanie), logowanie CSV,
-   buzzer, OLED, autokonfiguracja UBX oraz link ESP-NOW do HudRekaw; pozostał
-   streaming BLE (etap 2).
-3. **Integracja** urządzenie → PWA (BLE) → Supabase.
-4. **Flow Strava** (punkt 1) — na samym końcu.
+Następnym wydzielonym etapem produktowym jest **krok 2: Supabase i Strava**.
+IMU, zaawansowana analityka oraz RTK pozostają dalszą roadmapą, poza MVP i bez
+ustalonych terminów.

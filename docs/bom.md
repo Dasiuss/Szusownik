@@ -10,11 +10,23 @@ Bez konkretnych marek/modeli (poza wskazanymi wymaganiami).
 | 4 | **Karta microSD** | np. 8–32 GB |
 | 5 | **Buzzer piezo (pasywny)** | mały, sterowany PWM (ton + głośność) |
 | 6 | **Wyświetlacz OLED 0,96"** | |
-| 7 | **Power bank** | min. **5000 mAh**, **tryb low-current**, USB-C |
-| 8 | **Kabel USB-C** | power bank → MCU; odporny na zimno, odpowiednia długość |
-| 9 | **Płytka prototypowa (perfboard) lub PCB** | do montażu i lutowania |
-| 10 | **Przewody/złącza** | połączenia UART/SPI/I2C, koszulki termokurczliwe |
-| 11 | **Obudowa na kask** | pudełko (druk 3D lub gotowe) + bezpieczne/łamliwe mocowanie |
-| 12 | **Materiały montażowe** | rzepy, taśmy |
+| 7 | **Barometr BME280 (I2C)** | wymagany w zestawie MVP; wysokość z GNSS ma zbyt małą dokładność pionową do wiarygodnej fuzji wysokości i analizy zjazdów. Firmware rozpoznaje też BMP280, ale rekomendowany jest BME280. |
+| 8 | **Power bank** | min. **5000 mAh**, **tryb low-current**, USB-C |
+| 9 | **Kabel USB-C** | power bank → MCU; odporny na zimno, odpowiednia długość |
+| 10 | **Płytka prototypowa (perfboard) lub PCB** | do montażu i lutowania |
+| 11 | **Przewody/złącza** | połączenia UART/SPI/I2C, koszulki termokurczliwe |
+| 12 | **Obudowa na kask** | pudełko (druk 3D lub gotowe) + bezpieczne/łamliwe mocowanie |
+| 13 | **Materiały montażowe** | rzepy, taśmy |
 
-**Roadmapa (nie MVP):** IMU (MPU-6xxx / ICM-xxx).
+## Opcjonalny moduł zewnętrzny: HudRekaw
+
+HudRekaw jest osobnym, opcjonalnym wyświetlaczem. Nie należy do wymaganego
+zestawu MVP Szusownika.
+
+| Podzespół | Wymagania / uwagi |
+|---|---|
+| **ESP8266 (ESP-12F / NodeMCU)** | flash 4 MB |
+| **Wyświetlacz ST7789** | 1,54", 240×240; moduł GeekMagic SmallTV / SmallTV-Ultra |
+
+IMU pozostaje poza BOM-em MVP; kandydatów i pozostałą roadmapę opisuje
+`docs/koncepcja.md`.

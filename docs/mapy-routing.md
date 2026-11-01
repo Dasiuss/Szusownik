@@ -454,10 +454,12 @@ Menu:
 
 ## 8. Cache i offline
 
-Mapa jest w pełni offline po pierwszym wejściu. Wszystkie zasoby leżą w
+Po udanym pierwszym otwarciu online i zakończeniu instalacji service workera
+mapa korzysta z lokalnych zasobów i działa offline. Wszystkie zasoby leżą w
 `web/public/` i są **precache'owane przez Workbox przy instalacji service
 workera** (czyli przy pierwszym otwarciu strony, nie w momencie „Dodaj do
-ekranu głównego"):
+ekranu głównego"). Pierwsze otwarcie bez sieci, przed pobraniem cache, nie jest
+obsługiwane.
 
 ```text
 solden.pmtiles, dem/**, fonts/**, sprites/**, overpass-solden.json
@@ -675,16 +677,30 @@ Docelowa kolejność optymalizacji:
 
 ## 11. Testy akceptacyjne routingu
 
-- start i cel na tej samej trasie;
-- start i cel na różnych trasach połączonych bezpośrednio;
+### Pokryte automatycznie
+
+`web/src/lib/mapRouting.test.ts` sprawdza:
+
+- start i cel na tej samej trasie oraz na dwóch trasach połączonych bezpośrednio;
 - połączenie przez wyciąg;
-- alternatywa: dłuższa trasa bez dodatkowego wyciągu kontra krótsza z wyciągiem;
-- wariant z backcountry/mogul;
-- wariant z czarną trasą;
-- połączenie do 15 m w górę i ponad 15 m w górę;
-- brak danych DEM (`null`);
-- klik w polygon, linię i hit-area wyciągu;
-- brak ścieżki;
-- duplikaty odcinków tej samej nazwy;
-- pusta odpowiedź Overpass i użycie starego cache;
-- test mobilny z dużymi hit-area i panelem wyników.
+- brak ścieżki i odrzucenie punktu oddalonego o ponad 100 m od trasy;
+- wybór łatwiejszej, nawet dłuższej trasy zamiast krótszej czarnej;
+- `snapToRoute` i przycinanie przebytej części przez `trimRoute`;
+- podstawową relację wysokości na trasie testowej.
+
+Testy mapy i danych obejmują też normalizację (`mapData.test.ts`), zawartość
+lokalnego snapshotu (`mapSnapshot.test.ts`) oraz render mapy na tym snapshocie
+(`web/e2e/app.spec.ts`). W runtime PWA nie odpytuje Overpassa.
+
+### Nadal wymagają osobnej kontroli
+
+- wybór trasy w wariantach z backcountry/mogul oraz alternatywie „mniej wyciągów
+  kontra krótsza trasa";
+- granica tolerancji wysokości 15 m i przypadek braku DEM (`null`);
+- klikalność polygonu, linii i hit-area wyciągu, duplikaty etykiet oraz test
+  mobilnego układu i dużych hit-area;
+- działanie mapy offline po wcześniejszym pobraniu cache. Nie ma osobnego testu
+  e2e symulującego utratę sieci; pierwsze otwarcie offline nie jest obsługiwane.
+
+Te przypadki są kryteriami dalszej akceptacji, a nie twierdzeniem, że routing
+nie ma testów automatycznych. Zestawienie warstw testów: `docs/testy.md`.

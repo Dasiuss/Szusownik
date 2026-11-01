@@ -5,9 +5,12 @@ izolowanej logiki**. Testy są
 uruchamiane **lokalnie** — nie ma joba testowego w GitHub Actions (deploy Pages
 buduje tylko PWA). Pokrycie mierzymy dla orientacji, bez progu minimalnego.
 
-Zasada: testy sprzętowe z `docs/ble-transfer.md` §12, `docs/hud-display.md` §10 i
-`docs/mapy-routing.md` §11 pozostają **manualne** (wymagają ESP32/telefonu/GPU).
-Automatyzacja pokrywa wszystko poniżej tego progu.
+Testy wymagające realnego sprzętu pozostają **manualne**: akceptacja BLE na
+urządzeniu i telefonie (`docs/ble-transfer.md` §12) oraz render i odczyt OLED
+(`docs/hud-display.md` §7). Routing i przetwarzanie danych mapowych mają testy
+automatyczne; lista w `docs/mapy-routing.md` §11 rozróżnia pokryte scenariusze
+od pozostałych kontroli UI. Nie ma osobnego testu e2e wymuszającego tryb offline
+po zainstalowaniu cache mapy.
 
 ## Warstwy
 
@@ -16,7 +19,7 @@ Automatyzacja pokrywa wszystko poniżej tego progu.
 | Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, routeMatching, traceMap, routeTransfer (kod trasy), czyste helpery BLE |
 | Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y, wysyłka trasy |
 | Kontrakt | `web/src/lib/protocol.test.ts`, `hudProtocol.test.ts`, `routeProtocol.test.ts` | Vitest | zgodność wygenerowanych plików z `protocol/ble-file-v1.json`, `hud-espnow-v1.json`, `route-v1.json` |
-| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, mapa i mini-mapa śladu (mock Overpass) |
+| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, render mapy na lokalnym snapshocie i mini-mapa na danych testowych (bez zapytań do Overpass w runtime) |
 | Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/` + CRC32 z goldenem z urządzenia + golden bloba trasy |
 
 ## PWA — komendy (katalog `web/`)

@@ -1,10 +1,9 @@
 # Szusownik - HUD i wyświetlacz OLED
 
-> Status: layout i render zaimplementowane w firmware (`firmware/Szusownik/src/hud/`,
-> `src/core/run_tracker`, `src/core/hud_format`). Mapa/trasa/bitmapy/animation
-> usunięte z planu (greenfield). Linia trasy z PWA: **transport, dane i render
-> zaimplementowane** (Szusownik trzyma trasę + `segmentIndex`, dolna linia pokazuje
-> kolejne odcinki).
+> Status: ekran statystyk i linia kolejnych odcinków trasy są zaimplementowane
+> w firmware (`firmware/Szusownik/src/hud/`, `src/core/run_tracker`,
+> `src/core/hud_format`). Trasa z PWA jest przesyłana i przechowywana w
+> Szusowniku; dolna linia pokazuje odcinki od bieżącego.
 
 ## 1. Zasada działania
 
@@ -123,7 +122,7 @@ Implementacja: `src/core/run_tracker.*` — strumieniowy port algorytmu z PWA
 
 1. **Filtr komplementarny wysokości** (baro daje kształt, GPS kotwiczy wartość
    absolutną; `SZ_RUN_ALT_TAU_S = 10 s`). Bez barometru (`altBaro = 0`) wynik
-   zbiega do GPS.
+   zbiega do GPS; jest to tryb zdegradowany, nie konfiguracja MVP.
 2. **Średnia ruchoma MA5** na wysokości z fuzji.
 3. **ZigZag z histerezą** `SZ_RUN_REVERSAL_M = 5 m`: śledzi trend (szczyt/dołek)
    i wykrywa zwroty. Dołek = koniec zjazdu (zamrożenie hero). Przerwa
@@ -137,12 +136,10 @@ SSOT cięcia zjazdów pozostaje w PWA (`docs/wymagania-PWA.md` §6/§7, `AGENTS.
 pkt 13). Port urządzeniowy używa tej samej reguły wysokościowej, żeby hero było
 spójne z numeracją zjazdów w PWA.
 
-## 6. Co usunięto z planu
+## 6. Zakres ekranu
 
-- mapa i warstwy bitmapowe na Szusowniku (mapę ma osobny HudRekaw, `docs/hud-rekaw.md`);
-- algorytm kolejności pikseli trasy i animowanych przerw;
-- protokół małych pakietów HUD z DisplayTest (`M`/`R`, chunki);
-- separator `x=87` i pusty panel mapy 40 px.
+OLED Szusownika pokazuje statystyki opisane w §3–5. Gdy PWA przekaże trasę,
+dolna linia zastępuje część układu statystyk i wyświetla kolejne odcinki.
 
 ## 7. Testy
 

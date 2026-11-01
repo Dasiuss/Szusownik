@@ -91,7 +91,7 @@ ESP32-S3-Zero (Waveshare). Uwagi do pinów: **GPIO21** = dioda RGB (nie używać
   (DEBUG) z `die=..C air=..C`. Domyślnie INFO pokazuje tylko zdarzenia.
   Deep sleep nie odcina 3V3 (GNSS dalej pobiera) — OLED trzyma obraz po uśpieniu.
 
-Kod w `Szusownik/` (MVP1: GPS+UBX, CSV, buzzer, OLED, BLE streaming — patrz moduły).
+Kod w `Szusownik/` obejmuje pomiar GNSS, surowe CSV, buzzer, HUD OLED, BLE oraz link ESP-NOW do opcjonalnego HudRekaw.
 
 ## Budowanie (arduino-cli, bez VS Code / PlatformIO)
 
@@ -104,10 +104,14 @@ Waveshare S3-Zero nie ma osobnego wpisu w core — używamy generycznego
 `esp32s3` (potwierdzone na sprzęcie: flash 4 MB, PSRAM 2 MB Quad, USB-CDC na boot):
 
 ```powershell
-arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc" firmware/Szusownik
-arduino-cli upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc" firmware/Szusownik
-arduino-cli monitor -p COMx -c baudrate=115200
+arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc" --output-dir build/szusownik firmware/Szusownik
+arduino-cli upload -p COM7 --fqbn "esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc" --input-dir build/szusownik firmware/Szusownik
 ```
+
+Przed wgrywaniem zamknij monitor COM7 i użyj jawnego `--output-dir build/szusownik`
+oraz `--input-dir build/szusownik`, aby wgrać właśnie ten build. Monitor uruchamiaj
+po wgraniu przez `monitor_COM7.cmd`. Pełna, obowiązująca kolejność jest w
+`AGENTS.md`.
 
 Struktura: `Szusownik.ino` + `src/config/` (piny, stałe, UUID BLE v1),
 `src/gnss/` (NEO-M8N, NMEA, adaptacyjne próbkowanie ±3 km/h),
@@ -116,7 +120,7 @@ Struktura: `Szusownik.ino` + `src/config/` (piny, stałe, UUID BLE v1),
 `src/baro/` (BME280: wysokość barometryczna),
 `src/health/` (termika SoC: alarm + deep sleep),
 `src/link/` (nadajnik ESP-NOW do HudRekaw),
-`src/ble/` (INFO/CTRL/DATA/STATUS; streaming ramek 244 B + miniz — etap 2).
+`src/ble/` (INFO/CTRL/DATA/STATUS; transfer plików w ramkach 244 B + miniz).
 
 ## HudRekaw (ESP8266 + ST7789) — odbiornik HUD
 
@@ -134,9 +138,12 @@ Moduły (`firmware/HudRekaw/src/`):
 - `map/map_data.h` — wygenerowana mapa (`scripts/build-map.mjs`).
 
 ```powershell
-arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
-arduino-cli upload -p COMx --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
+arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --output-dir build/hudrekaw firmware/HudRekaw
 ```
+
+HudRekaw wgrywa się **wyłącznie przez OTA (Wi-Fi), nigdy po kablu**. Pełna
+procedura, w tym niezawodne wgrywanie przez HTTP `/update`, znajduje się w
+`docs/hud-rekaw.md` §6 i w runbooku `AGENTS.md`.
 
 Pełny opis (pinout, protokół ESP-NOW, kanał 1, OTA, generator mapy):
 `docs/hud-rekaw.md`.

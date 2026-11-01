@@ -45,9 +45,9 @@ CSV      HUD             |
                           |
              parser / cięcie zjazdów / statystyki
                           |
-                 MapLibre + routing + ślad GPS
-                          |
-                    Supabase / Strava
+                  MapLibre + routing + ślad GPS
+                           |
+               krok 2: Supabase / Strava
 ```
 
 ### Firmware ESP32
@@ -65,13 +65,14 @@ CSV      HUD             |
 - tnie aktywność na zjazdy;
 - liczy statystyki, wykresy, nachylenie i rekordy;
 - pobiera dane mapowe, renderuje trasy i wykonuje routing;
-- w późniejszym etapie wysyła FIT do Stravy przez Supabase Edge Function.
+- w kroku 2 ma wysyłać FIT do Stravy przez Supabase Edge Function.
 
 ### Supabase
 
-- przechowuje dane użytkowników i zsynchronizowane zjazdy;
-- wymusza izolację użytkowników przez RLS `user_id = auth.uid()`;
-- przechowuje sekrety Stravy wyłącznie po stronie Edge Function.
+- należy do **kroku 2**, poza MVP: wtedy może przechowywać dane użytkowników i
+  zsynchronizowane zjazdy;
+- izolacja przez RLS `user_id = auth.uid()` i sekrety Stravy po stronie Edge
+  Function są wymaganiami tego przyszłego etapu, nie bieżącą funkcją.
 
 ## 3. Decyzje, które należy zachować
 
@@ -91,8 +92,9 @@ CSV      HUD             |
 
 - Renderować HUD lokalnie na ESP32, a nie przesyłać gotowego framebufferu przy
   każdej zmianie.
-- Szusownik ma **jeden ekran statystyk** (bez mapy/bitmap/animacji): max zjazdu
-  (hero), max dnia, dystans dnia, wysokość (fuzja baro+GPS) i czas lokalny.
+- Szusownik ma **jeden ekran statystyk**: max zjazdu (hero), max od uruchomienia,
+  dystans od uruchomienia,
+  wysokość (fuzja baro+GPS) i czas lokalny. Aktywna trasa dodaje linię kroków.
   Layout: `docs/hud-display.md`.
 - Detekcja zjazdu na urządzeniu to port reguły wysokościowej z PWA (ZigZag);
   SSOT cięcia zjazdów pozostaje w PWA.
@@ -101,8 +103,8 @@ CSV      HUD             |
 
 ### Mapy i routing
 
-- Pobierać dane tras wektorowo z Overpass, a podkład i teren z kafelków raster/
-  raster-dem.
+- Budować wektorowy snapshot tras z danych OSM/Overpass; podkład i teren brać
+  z kafelków vector/raster-dem.
 - Trzymać dane tras i wyciągów w osobnych źródłach MapLibre.
 - Używać `feature-state` do zaznaczania grup odcinków, zamiast kopiować dane do
   kolejnych źródeł.
@@ -111,11 +113,13 @@ CSV      HUD             |
 - Koszt routingu ma być leksykograficzny: najpierw bezpieczeństwo i unikanie
   jazdy wyciągiem w dół, potem liczba wyciągów, ostrzeżenia, trudność, transfery
   i dopiero długość.
-- Cache'ować surową odpowiedź Overpass i ponownie przetwarzać ją lokalnie.
+- W czasie budowania cache'ować źródło Overpass i generować lokalny snapshot;
+  PWA używa snapshotu i innych precache'owanych zasobów, bez zapytań do
+  dostawców map w runtime.
 - Zakres pobierania danych mapowych ograniczyć do Sölden, ale nie blokować
   użytkownikowi przesuwania widoku poza ten zakres.
 - Dane wektorowe tras i wyciągów trzymać w lokalnym snapshocie precache'owanym
-  przez service worker (bez TTL i bez zapytań sieciowych w czasie działania).
+  przez service worker (bez TTL i bez zapytań sieciowych w runtime).
 - Panel wyniku routingu ma być mały i pokazywać łączny dystans oraz kolorową
   sekwencję tras i wyciągów, bez dodatkowych statystyk.
 
@@ -140,14 +144,18 @@ To jest lepszy kontrakt dla wersji finalnej niż testowy NMEA z `BleTest`. NMEA
 może pozostać formatem wejściowym na etapie diagnostyki, ale plik przeznaczony
 do codziennej synchronizacji powinien mieć stabilny schemat CSV i nagłówek.
 
-Urządzenie powinno:
+Aktualny kontrakt urządzenia:
 
-1. zamknąć aktualny plik przed udostępnieniem go do pobrania;
-2. zwrócić listę plików: nazwa, rozmiar i czas startu;
-3. pozwolić PWA porównać nazwy z IndexedDB;
-4. nie kasować plików po udanym transferze;
-5. rotować pliki po każdym wykrytym podjeździe (jeden zjazd na plik) oraz na żądanie pobrania;
-6. usuwać najstarsze pliki dopiero przy braku miejsca na karcie.
+1. zamykać plik po wykrytym postoju oraz przed synchronizacją BLE, by pliki
+   udostępniane do pobrania były kompletne;
+2. listować nazwę i rozmiar CSV; PWA porównuje nazwy z IndexedDB;
+3. nie kasować plików po udanym transferze — pozostają kopią na karcie;
+4. nie tworzyć osobnego pliku na każdy podjazd/zjazd. PWA scala próbki z plików
+   i sama tnie wspólną oś czasu na zjazdy;
+5. listować tylko pliki CSV z towarzyszącym `.meta` (potwierdzony ruch);
+   nieukończone pliki postojowe zostają na karcie, ale są ukryte przed PWA;
+6. usuwać najstarsze CSV wraz z `.meta` przez FIFO dopiero wtedy, gdy wolne
+   miejsce spadnie poniżej wymaganego minimum.
 
 ### Przetwarzanie zjazdów
 
@@ -175,26 +183,28 @@ Po stronie PWA pozostają ustalenia z `docs/wymagania-PWA.md`:
   może wskazać inny punkt startowy;
 - ostatnie pięć minut próbek z plików jest rysowane jako surowy ślad względem
   czasu telefonu, bez map-matchingu;
-- zapis śladu lokalnie;
+- przechowywanie surowych próbek lokalnie w IndexedDB jako pliki CSV;
 - dopasowanie śladu do geometrii tras (zaimplementowane jako uproszczone
   przypisanie **zjazd → trasy** przy materializacji; patrz
   `docs/mapy-routing.md` §9). To nie jest pełny map-matching per próbka;
 - mini-mapa 2D w szczegółach zjazdu i w „Całym dniu" rysuje trasy OSM, wyciągi
   i ślad zjazdu/dnia kolorowany prędkością (bez wyróżniania dopasowanych tras);
   patrz `docs/mapy-routing.md` §5;
-- określenie pokrycia trasy i zaliczenia przejazdu — **nadal nie**.
+- uproszczone pokrycie tras na podstawie dopasowanych odcinków jest
+  **zaimplementowane** (`docs/mapy-routing.md` §9); pełne map-matching per
+  próbka i automatyczne zaliczenie całej trasy nadal nie są dostępne.
 
 Nie należy udawać, że obecny routing jest już map-matchingiem. Obecny graf
 wyznacza przejście po geometrii OSM, ale nie przypisuje rzeczywistych próbek GPS
 do tras.
 
-## 5. Proponowana granica protokołów finalnych
+## 5. Granice protokołów bieżącej implementacji
 
-Najmniej ryzykowne jest rozdzielenie dwóch funkcji:
+Aktualna implementacja rozdziela dwa kanały:
 
 ### Duże pliki
 
-Dla CSV użyć sprawdzonego transportu z `BleTest`:
+Pliki CSV są przesyłane sprawdzonym transportem wywodzącym się z `BleTest`:
 
 ```text
 lista plików -> wybór pliku -> START -> zlib/DEFLATE -> ramki sekwencyjne
@@ -215,35 +225,17 @@ retry limit:        3
 input refill:     512 B
 ```
 
-### Małe aktualizacje HUD
-
-Stan ekranu może używać osobnych krótkich pakietów, ale nie wolno przejąć
-bezpośrednio niepotwierdzonego protokołu `DisplayTest` jako protokołu
-produkcyjnego. W finalnej wersji trzeba dodać co najmniej:
-
-- wersję protokołu;
-- typ i długość pakietu;
-- sekwencję;
-- CRC lub inną walidację;
-- atomową podmianę kompletnej bitmapy;
-- retry albo jawny status zastosowania danych.
-
 UUID-y z projektów testowych są identyfikatorami testowymi. Dla Szusownika
 zdefiniowano GATT v1 (2026-09-11, `3f9a…`, jeden service + INFO/CTRL/DATA/STATUS)
 opisany w `docs/ble-transfer.md` §10 i zaimplementowany po obu stronach.
-Nie mieszać charakterystyki `DisplayTest` z transportem plików bez formalnego
-kontraktu (małe pakiety HUD — roadmapa).
+Transfer plików BLE oraz trasa nawigacyjna mają osobne kanały i kontrakty.
+Protokół plików jest opisany w `docs/ble-transfer.md` §10; protokół trasy
+wykorzystuje dedykowaną charakterystykę BLE i SSOT `protocol/route-v1.json`.
 
-Osobne urządzenie z ekranem (HudRekaw) nie używa BLE do podglądu: Szusownik
-nadaje do niego pozycję i statystyki przez ESP-NOW (kanał 1, unicast do
-sparowanego Huda; broadcast tylko w parowaniu).
-Protokół `'S'` (telemetria)/`'L'` (pozycja + tryb) i reguła trybu wg prędkości są
-w `docs/hud-rekaw.md`.
-
-Szusownik **nie dostaje już małych pakietów HUD** (mapa/bitmapy/animacja usunięte
-z planu). Jedyny kanał w tę stronę to wysłanie trasy z PWA do urządzenia; jest
-zaimplementowany, a dolna linia OLED pokazuje kolejne odcinki (`docs/hud-display.md`
-§3.2).
+OLED Szusownika renderuje lokalnie statystyki i — po odebraniu trasy z PWA —
+kroki nawigacyjne w dolnej linii (`docs/hud-display.md` §3.2). Opcjonalny
+HudRekaw jest osobnym wyświetlaczem: odbiera telemetrię, pozycję i trasę przez
+ESP-NOW; szczegóły są w `docs/hud-rekaw.md`.
 
 ## 6. Wersjonowanie i cache
 
@@ -268,17 +260,19 @@ sekcja „Dane aplikacji" (`settings-meta`, etykieta „Wersja PWA") w formacie
 `pl-PL` w lokalnej strefie urządzenia. W `npm run dev` znacznik odpowiada
 startowi serwera dev.
 
-## 7. Ryzyka do rozwiązania przed wersją finalną
+## 7. Ograniczenia i nadal otwarta walidacja
 
 ### BLE
 
-- `notify()` nie zwraca statusu przyjęcia pakietu przez NimBLE.
-- Brak osobnego kanału raportowania błędu firmware do PWA.
-- Wykryto możliwy problem z ponownym ACK end markera po jego duplikacie.
-- W PWA błąd transferu nie zawsze wysyła `STOP` do urządzenia.
-- Nie ma pełnej walidacji pól metadanych.
-- Nie wykonano pełnego testu MTU 23, 247 i 517 ani wielu modeli Androida.
-- Profil `v5` wymaga ponownego testu sprzętowego, mimo że bazuje na teście `v4.5`.
+- `notify()` może zgłosić, że NimBLE nie przyjęło ramki; ACK/NACK i replay
+  obsługują retransmisję. Przyjęcie przez NimBLE nie jest równoznaczne
+  z dostarczeniem do aplikacji — szczegóły i diagnostyka są w
+  `docs/ble-transfer.md`.
+- Kanał STATUS z kodami błędów istnieje, a PWA wysyła `STOP` po zakończeniu
+  lub błędzie transferu.
+- Nadal otwarte pozostają pełne testy akceptacyjne utraty ramek/end markera,
+  profili MTU 23/247/517 i wielu modeli Androida. Nie należy uznawać ich za
+  potwierdzone tylko na podstawie testów symulatora.
 
 ### HUD
 
@@ -290,29 +284,35 @@ startowi serwera dev.
 
 ### Mapy
 
-- Overpass i DEM są zależnościami sieciowymi; trzeba mieć zachowanie offline.
+- W runtime PWA nie odpytuje Overpassa; lokalny snapshot, podkład i DEM są
+  precache'owane. Pierwsze pobranie zasobów wymaga sieci, a osobny e2e trybu
+  offline po zainstalowaniu cache nie istnieje (`docs/mapy-routing.md` §8).
 - Uproszczona obsługa relacji OSM nie obejmuje pełnych multipolygonów.
 - Brak DEM może dopuścić zły kierunek połączenia.
 - Graf i routing blokują główny wątek dla dużej liczby tras.
 - Graf routingu nie jest map-matchingiem śladu GPS. Dopasowanie zjazdu do tras
   jest osobną, uproszczoną logiką (`routeMatching.ts`, `docs/mapy-routing.md` §9)
   — bez HMM/ciągłości per próbka i bez pokrycia całej trasy.
-- Nie ma jeszcze testów automatycznych algorytmu grafu, kosztu i progów snapowania.
+- Routing, normalizacja map i lokalny snapshot mają testy automatyczne
+  (`mapRouting.test.ts`, `mapData.test.ts`, `mapSnapshot.test.ts`). Pokrycie
+  konkretnych scenariuszy i brakujące kontrole są opisane w
+  `docs/mapy-routing.md` §11.
 
-## 8. Minimalna bramka jakości przed użyciem produkcyjnym
+## 8. Walidacja przed uznaniem funkcji za potwierdzoną
 
-Przed uznaniem funkcji za gotową trzeba mieć:
+Testy automatyczne i sprzętowe weryfikują różne warstwy. Nadal wymagają
+sprawdzenia na właściwych urządzeniach:
 
-1. test kompletnego pliku z SD, większego niż RAM urządzenia;
-2. test poprawnego CRC i liczby linii po dekompresji;
-3. kontrolowany test utraty, duplikacji i zmiany kolejności ramek;
-4. test timeoutu, `STOP`, rozłączenia i ponownego połączenia;
-5. test różnych MTU i co najmniej dwóch telefonów Android;
-6. test renderu HUD dla skrajnych wartości (0, 999, clamp, brak fixa, czas `--:--`);
-7. test hero „max zjazdu" na realnym śladzie (live/zamrożony, przerwa w danych);
-8. test routingu na trasach z wyciągiem, połączeniem, ostrzeżeniem i brakiem DEM;
-9. test GPS na rzeczywistym śladzie w kilku ośrodkach;
-10. pomiar pamięci, czasu CPU, czasu transferu i opóźnienia UI.
+1. BLE: duże kompletne pliki z SD, kontrolowana utrata/replay, rozłączenie,
+   różne MTU i telefony — `docs/ble-transfer.md` §12;
+2. rzeczywisty render OLED i odczyt na urządzeniu, w tym na realnym śladzie —
+   `docs/hud-display.md` §7;
+3. łącze ESP-NOW, parowanie, trasę i OTA na zestawie ESP32-S3 + ESP8266 —
+   ograniczenia sprzętowe opisuje `docs/hud-rekaw.md`;
+4. akceptację pozostałych scenariuszy routingu/UI oraz pracy offline wymienionych
+   w `docs/mapy-routing.md` §11;
+5. nagrania na stoku i pomiary zasobów/latencji przed wnioskami o dokładności
+   i wydajności.
 
 ## 9. Źródła i mapa plików
 
@@ -326,9 +326,9 @@ Przed uznaniem funkcji za gotową trzeba mieć:
 
 ### DisplayTest
 
-- `DisplayTest/agents.md` - layout OLED, animacja i protokół pakietów.
-- `DisplayTest/firmware/hud_display/hud_display.ino` - rendering i BLE.
-- `DisplayTest/pwa/src/main.js` - podgląd, edytor bitmap i BLE.
+- `DisplayTest/agents.md` - archiwalne ustalenia projektu testowego wyświetlacza.
+- `DisplayTest/firmware/hud_display/hud_display.ino` - prototyp firmware wyświetlacza.
+- `DisplayTest/pwa/src/main.js` - prototyp PWA projektu testowego.
 
 ### MapyTest
 

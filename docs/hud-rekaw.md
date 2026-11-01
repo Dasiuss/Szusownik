@@ -357,23 +357,40 @@ ze wspólnej transliteracji `web/src/lib/asciiFold.mjs`: niemieckie `ä/ö/ü`�
 `ß`→`ss`, polskie `ł`→`l` i pokrewne. Bez tego znaki bez rozkładu NFD (np. `ß`,
 `ł`) byłyby po prostu wyrzucane, a oba wyświetlacze mają czcionki tylko ASCII.
 
-## 6. Budowanie i wgrywanie
+## 6. Budowanie i wgrywanie (wyłącznie OTA)
+
+HudRekaw wgrywa się **tylko przez OTA po Wi-Fi**. Nie używaj wgrywania
+szeregowego ani portu COM — urządzenie nie ma w projekcie ścieżki programowania
+po kablu.
+
+1. Ustal adres IP przez `arduino-cli board list` albo `http://hud-rekaw.local/`
+   i sprawdź dostępność: `curl.exe http://<ip>/`.
+2. Skompiluj do jawnego katalogu wyjściowego:
 
 ```powershell
-# kompilacja
-arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
-
-# wgranie po kablu
-arduino-cli upload -p COMx --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" firmware/HudRekaw
-
-# albo OTA (po WiFi, hasło z secrets.h, użytkownik admin)
-arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
-
-# UWAGA: espota bywa zawodne — po "Authenticating...OK" kończy się
-# "No response from device". Niezawodnie działa wgranie przez HTTP /update:
 arduino-cli compile --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --output-dir build/hudrekaw firmware/HudRekaw
-curl -u admin:<OTA_PASSWORD> -F "firmware=@build/hudrekaw/HudRekaw.ino.bin" http://<ip>/update
 ```
+
+3. Możesz spróbować OTA przez `arduino-cli` (espota):
+
+```powershell
+arduino-cli upload -p <ip> --fqbn "esp8266:esp8266:nodemcuv2:eesz=4M1M" --upload-field password=<OTA_PASSWORD> firmware/HudRekaw
+```
+
+```
+
+Espota może zakończyć się po `Authenticating...OK` błędem `No response from device`.
+Wtedy użyj niezawodnego endpointu HTTP `/update`:
+
+```powershell
+curl.exe -u admin:<OTA_PASSWORD> -F "firmware=@build/hudrekaw/HudRekaw.ino.bin" http://<ip>/update
+```
+
+Sukces: `Update Success! Rebooting...`. Po restarcie odczekaj około 15–30 s i
+sprawdź `curl.exe http://<ip>/` (nagłówek `HudRekaw v1`). Przy braku
+`secrets.h` urządzenie uruchamia SoftAP `HudRekaw` / `hudrekaw` pod
+`192.168.4.1`; OTA wykonuje się wtedy pod tym adresem. Pełne warunki sieci i
+hasła są w `AGENTS.md`.
 
 Biblioteki: `Adafruit GFX`, `Adafruit ST7735 and ST7789`, `ESP8266WiFi`,
 `ESP8266WebServer`, `ESP8266HTTPUpdateServer`, `ESP8266mDNS`, `ArduinoOTA`

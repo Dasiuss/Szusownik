@@ -5,7 +5,7 @@ przesyłania i analizowania zjazdów narciarskich. Projekt korzysta z ustaleń
 wypracowanych w trzech projektach testowych:
 
 - `BleTest` - niezawodny transfer większych plików przez BLE.
-- `DisplayTest` - lokalny HUD na OLED SSD1306 oraz bitmapowy protokół ekranu.
+- `DisplayTest` - prototyp lokalnego HUD-u na OLED SSD1306.
 - `MapyTest` - wizualizacja tras narciarskich i lokalny routing.
 
 ## Charakter projektu
@@ -28,8 +28,8 @@ najnowszej wersji firmware i PWA. Dlatego:
   granice odpowiedzialności, ryzyka i plan integracji.
 - `docs/ble-transfer.md` - szczegóły sprawdzonego transferu BLE, kompresji,
   okna ramek, ACK/NACK i zapisu po stronie PWA.
-- `docs/hud-display.md` - OLED Szusownika: layout jednego ekranu statystyk, hero
-  „max zjazdu" (port ZigZag z PWA), formatowanie; bez mapy/bitmap/animacji.
+- `docs/hud-display.md` - OLED Szusownika: ekran statystyk, hero „max zjazdu"
+  (port ZigZag z PWA), formatowanie i linia kroków nawigacyjnych.
 - `docs/hud-rekaw.md` - odbiornik HudRekaw (ESP8266 + ST7789), link ESP-NOW
   z Szusownikiem, protokół `S`/`L` i generator mapy.
 - `docs/mapy-routing.md` - źródła danych mapowych, warstwy MapLibre, graf tras,

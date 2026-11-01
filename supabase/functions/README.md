@@ -2,6 +2,7 @@
 
 Tu trafiają **Edge Functions** (każda w osobnym podfolderze z `index.ts`).
 
-Planowane: `strava-upload/` — proxy do Strava (OAuth + upload FIT), na końcu.
+Planowane w kroku 2: `strava-upload/` — proxy do Stravy (OAuth + upload FIT).
 
-Wdrażane automatycznie przez integrację Supabase ↔ GitHub przy push na `main`.
+Po skonfigurowaniu integracji Supabase ↔ GitHub w kroku 2 funkcje będą
+wdrażane automatycznie przy pushu na `main`.

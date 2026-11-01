@@ -1,18 +1,22 @@
 # Wymagania ESP32 (urządzenie)
 
-> Status: **MVP1 zaimplementowane i przetestowane sprzętowo 2026-09-11**
-> (`firmware/Szusownik/`, arduino-cli). Dokument żywy — niżej co jest,
-> a co w roadmapie.
-> Data: 2026-08-18
+> Status: główne funkcje firmware Szusownika są zaimplementowane. Zakres
+> weryfikacji sprzętowej zależy od funkcji; otwarte testy są wymienione niżej
+> oraz w `docs/testy.md`.
+> Data ostatniej aktualizacji: 2026-11-01
 
 ## 1. Cel
 
-Urządzenie (ESP32-S3) zbiera dane GPS (później IMU), daje feedback dźwiękowy (buzzer),
-zapisuje surowe CSV na microSD i przesyła dane do PWA przez BLE.
+Urządzenie (ESP32-S3) zbiera dane GNSS, korzysta z wymaganego barometru do
+pomiaru wysokości, daje feedback dźwiękowy (buzzer), zapisuje surowe CSV na
+microSD i przesyła dane do PWA przez BLE. IMU należy do dalszej roadmapy.
 
 ## 2. Zbieranie danych
 
 - **GPS (u-blox, ≥10 Hz)** po UART: pozycja, prędkość (Doppler), wysokość, heading, czas UTC.
+- **Barometr BME280 — wymagany w konfiguracji MVP.** Wysokość GNSS ma zbyt małą
+  dokładność pionową, by być jedynym źródłem profilu wysokości; fuzja baro+GPS
+  poprawia jej kształt i stabilność. Firmware rozpoznaje również BMP280.
 - **Adaptacyjne próbkowanie** (tabela + histereza ±3 km/h, patrz `docs/koncepcja.md`).
 - **Wyzwalacz zapisu = próbka, nie zegar pętli.** Wiersz CSV powstaje na nadejście
   nowej epoki GNSS (commit RMC, `Gnss::consumeNewSample()`), z bramką `hasFix()`.

@@ -1,7 +1,8 @@
 # Wymagania PWA — analiza i prezentacja
 
-> Status: **WIP (draft)** — dokument żywy.
-> Data: 2026-08-18
+> Status: wymagania bieżącej PWA oraz planowanej integracji w kroku 2.
+> Supabase i eksport do Stravy nie należą do MVP i nie są jeszcze zaimplementowane.
+> Data ostatniej aktualizacji: 2026-11-01
 
 ## 1. Cel
 
@@ -17,7 +18,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Mapa / Urządzenie**.
 - Kierunek wizualny: jasny outdoor, wysoki kontrast i szybki odczyt wyników.
 
-## 3. Auth i użytkownicy
+## 3. Krok 2 — auth i użytkownicy (poza MVP)
 
 - Logowanie przez **Supabase Auth** (email + hasło).
 - **2 użytkowników**; każdy widzi **tylko swoje** dane — po stronie bazy wymusza to **RLS**
@@ -144,7 +145,7 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - Oś dystansu na wykresie **„Cały dzień"** liczona jest po `cumDistM` próbek
   (z wyciągami), więc jest ciągła i nie cofa się na granicach zjazdów. Nie używać
   do tego `distanceM` (bo nie zawiera wyciągów).
-- **Cięcie dla Strava** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
+- **Krok 2 — cięcie dla Stravy** (klik „wyślij"): aktywność = dane od poprzedniego cięcia do bieżącego
   kliknięcia, maksymalnie **bieżący dzień**.
 
 ### Dopasowanie zjazdu do tras (auto)
@@ -254,7 +255,8 @@ na nagraniach z auta defaulty wystarczą.
 - **Tailwind CSS v4** — styling.
 - Deploy: GitHub Pages przez `.github/workflows/deploy.yml` (build `web/`,
   `base: /Szusownik/`).
-- `@supabase/supabase-js` — DOPIERO faza D (nie instalować przedwcześnie).
+- `@supabase/supabase-js` — krok 2 (poza MVP; nie instalować przed rozpoczęciem
+  integracji chmurowej).
 
 ## 10. Ekran urządzenia (`#/urzadzenie`, alias `#/ustawienia`, niezależny od dnia)
 

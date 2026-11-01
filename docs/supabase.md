@@ -1,6 +1,7 @@
 # Supabase — integracja z repozytorium
 
-> Status: WIP. Data: 2026-08-18
+> Status: **krok 2 — poza MVP**. Integracja nie jest jeszcze zaimplementowana.
+> Data ostatniej aktualizacji: 2026-11-01
 
 ## Co to jest Supabase
 
@@ -52,7 +53,7 @@ supabase/
 ## U nas
 
 - `supabase/migrations/` — schemat bazy (użytkownik, zjazdy, próbki/metadane).
-- `supabase/functions/strava-upload/` — proxy do Strava (OAuth + upload FIT), na końcu.
+- `supabase/functions/strava-upload/` — planowane proxy do Stravy (OAuth + upload FIT) w kroku 2.
 
 PWA łączy się z bazą przez `@supabase/supabase-js`:
 `createClient(url, publishableKey)` + `supabase.functions.invoke('strava-upload', ...)`.
