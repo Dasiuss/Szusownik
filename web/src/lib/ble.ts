@@ -1,6 +1,7 @@
 import { db } from "./db.ts";
 import { DEVICE_CSV_V2_HEADER } from "./csv.ts";
 import { GattQueue } from "./gattQueue.ts";
+import { isUtcSampleTimestamp } from "./globalRecord.ts";
 import { ROUTE_BLE_CHUNK, ROUTE_BLE_HEADER_SIZE, SZ_UUID_ROUTE } from "./routeProtocol.ts";
 import {
   SZ_BEEP_GAP_MAX_MS,
@@ -24,6 +25,7 @@ import {
   SZ_CMD_SETFREQ_LONG,
   SZ_CMD_SETFREQ_SHORT,
   SZ_CMD_SETMINBEEP,
+  SZ_CMD_SETRECORD,
   SZ_CMD_SETTIMING_GAP,
   SZ_CMD_SETTIMING_INTERVAL,
   SZ_CMD_SETTIMING_LONG,
@@ -36,6 +38,7 @@ import {
   SZ_FREQ_MAX_HZ,
   SZ_FREQ_MIN_HZ,
   SZ_ST_ERR,
+  SZ_ST_RECORD_OK,
   SZ_UUID_CTRL,
   SZ_UUID_DATA,
   SZ_UUID_INFO,
@@ -629,6 +632,22 @@ export class SzusownikBle {
     const v = Math.max(SZ_BEEP_MIN_KMH_MIN, Math.min(SZ_BEEP_MIN_KMH_MAX, Math.round(value)));
     const status = await this.settingStatus(`${SZ_CMD_SETMINBEEP}${v}`, /beep min=\d+/);
     return SzusownikBle.parseMinBeep(status);
+  }
+
+  /** Synchronizuje globalny, potwierdzony rekord PWA oraz watermark jej analizy. */
+  async setGlobalRecord(confirmedMaxKmh: number, analyzedThrough: string): Promise<void> {
+    if (!Number.isFinite(confirmedMaxKmh)) throw new Error("Nieprawidłowy globalny rekord PWA");
+    const tenths = Math.max(500, Math.min(65535, Math.round(confirmedMaxKmh * 10)));
+    const through = analyzedThrough || "-";
+    if (through !== "-" && !isUtcSampleTimestamp(through)) {
+      throw new Error("Nieprawidłowy watermark analizy rekordu");
+    }
+    const expected = `${SZ_ST_RECORD_OK}${tenths} ${through}`;
+    const status = await this.settingStatus(
+      `${SZ_CMD_SETRECORD}${tenths}:${through}`,
+      new RegExp(`^${escapeRegex(expected)}$`),
+    );
+    if (status !== expected) throw new Error(`Urządzenie nie zsynchronizowało rekordu (${status})`);
   }
 
   /**

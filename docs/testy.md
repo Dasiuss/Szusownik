@@ -16,11 +16,11 @@ po zainstalowaniu cache mapy.
 
 | Warstwa | Gdzie | Runner | Co pokrywa |
 |---|---|---|---|
-| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, mapData, mapRouting, routeMatching, traceMap, routeTransfer (kod trasy), czyste helpery BLE |
-| Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, etykiety/tombstone'y, wysyłka trasy |
+| Unit | `web/src/lib/*.test.ts` | Vitest (node) | csv, geo, runs, globalny rekord PWA, mapData, mapRouting, routeMatching, traceMap, routeTransfer (kod trasy), czyste helpery BLE |
+| Integracja | `web/src/lib/*.integration.test.ts` | Vitest + `fake-indexeddb` | `SzusownikBle` z symulatorem urządzenia, zapis do IndexedDB, materializacja zjazdów, globalny rekord i jego sync, etykiety/tombstone'y, wysyłka trasy |
 | Kontrakt | `web/src/lib/protocol.test.ts`, `hudProtocol.test.ts`, `routeProtocol.test.ts` | Vitest | zgodność wygenerowanych plików z `protocol/ble-file-v1.json`, `hud-espnow-v1.json`, `route-v1.json` |
-| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem, widoki, rename/delete, render mapy na lokalnym snapshocie i mini-mapa na danych testowych (bez zapytań do Overpass w runtime) |
-| Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/` + CRC32 z goldenem z urządzenia + golden bloba trasy |
+| E2E UI | `web/e2e/*.spec.ts` | Playwright (Chromium) | boot z demo, sync z symulatorem (także połączenie bez nowych plików), widoki, rename/delete, render mapy na lokalnym snapshocie i mini-mapa na danych testowych (bez zapytań do Overpass w runtime) |
+| Host firmware | `firmware/test/host/test_*.cpp`, `firmware/test/host/hudrekaw/test_*.cpp` | Catch2 + g++ | czysta logika `Szusownik/src/core/` + `HudRekaw/src/core/`, próg/histereza rekordu i jego stan SD, melodyjka, CRC32 z goldenem z urządzenia + golden bloba trasy |
 
 ## PWA — komendy (katalog `web/`)
 
@@ -56,9 +56,10 @@ nagłówek, a Catch2 jest prekompilowany raz. Powtórne uruchomienie bez zmian t
 
 Czysta, testowalna logika firmware mieszka w `firmware/Szusownik/src/core/` i
 `firmware/HudRekaw/src/core/` (bez `Arduino.h`): pasma GNSS, bufor listy, rotacja
-pliku, format linii CSV, wzorce buzzera, progi termiczne, kodowanie pakietów
+pliku, format linii CSV, wzorce zwykłego buzzera i rekordu, progi termiczne, kodowanie pakietów
 ESP-NOW HUD, detekcja zjazdu `RunTracker` (fuzja baro+GPS + ZigZag) i
-formatowanie HUD (`hud_format`) oraz logika trasy (dekod bloba, indeks odcinka,
+formatowanie HUD (`hud_format`), globalny rekord z histerezą/cooldownem i format
+stanu SD oraz logika trasy (dekod bloba, indeks odcinka,
 dotarcie, linia kroków); a po stronie odbiorcy dekodowanie pakietów, dekod trasy,
 matematyka mapy (projekcja/fisheye, kolory, labele) i format TOT. `src/` deleguje do `core/`, a
 testy hostowe linkują tylko `core/` + `src/ble/crc32.h`. `run.ps1` buduje dwa

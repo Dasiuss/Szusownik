@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { materializeAll } from "./data.ts";
+import { getGlobalRecordSnapshot, materializeAll } from "./data.ts";
 import { db } from "./db.ts";
 import { emptyRouteBlob } from "./routeTransfer.ts";
 import {
@@ -130,8 +130,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     infoRef.current = connectedInfo;
     setInfo(connectedInfo);
     setState("checking");
+    let discovered: FileMeta[] | null = null;
     try {
       const fresh = await client.collectNewFiles();
+      discovered = fresh;
       setPendingFiles(fresh);
     } catch (caught) {
       // Łącze padło w trakcie sprawdzania — obsłuży to onDisconnected/handleDrop,
@@ -145,8 +147,21 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
           "Możesz pobrać to, co już wiemy, albo spróbować ponownie.",
       );
     }
+    if (discovered?.length === 0) {
+      try {
+        await syncGlobalRecord(client);
+      } catch (caught) {
+        if (caught instanceof DeviceDisconnectedError) throw caught;
+        setError(`Nie udało się zsynchronizować globalnego rekordu: ${errorMessage(caught)}`);
+      }
+    }
     setState("connected");
     armIdleTimer();
+  }
+
+  async function syncGlobalRecord(client: SzusownikBle): Promise<void> {
+    const snapshot = await getGlobalRecordSnapshot();
+    await client.setGlobalRecord(snapshot.confirmedMaxSpeed, snapshot.analyzedThrough);
   }
 
   // --- Synchronizacja trasy nawigacyjnej (PWA -> Szusownik) ---
@@ -266,6 +281,13 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       await routeIdleRef.current;
       const { transient, corrupt } = await client.downloadFiles(pendingFiles, setProgress);
       await materializeAll();
+      let recordSyncError: string | null = null;
+      try {
+        await syncGlobalRecord(client);
+      } catch (caught) {
+        if (caught instanceof DeviceDisconnectedError) throw caught;
+        recordSyncError = errorMessage(caught);
+      }
       // Trwale uszkodzone pliki zapamiętujemy, żeby nie wracały w każdej synchronizacji.
       for (const { meta, reason } of corrupt) {
         await db.ignoredFiles.put({
@@ -287,12 +309,19 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       if (transient.length > 0) {
         notices.push(`Nie udało się pobrać ${transient.length} plików — spróbuj ponownie.`);
       }
+      if (recordSyncError) {
+        notices.push(`Nie udało się zsynchronizować globalnego rekordu: ${recordSyncError}`);
+      }
       if (notices.length > 0) setError(notices.join(" "));
       setLastSyncAt(new Date().toISOString());
       setDataRevision((revision) => revision + 1);
       setState("connected");
       armIdleTimer();
     } catch (caught) {
+      if (caught instanceof DeviceDisconnectedError) {
+        forgetConnection();
+        return;
+      }
       setState("connected");
       setError(errorMessage(caught));
       armIdleTimer();

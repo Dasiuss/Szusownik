@@ -13,6 +13,7 @@
 import { deflateSync } from "node:zlib";
 import { crc32 } from "../test/crc32.ts";
 import { SZ_UUID_ROUTE } from "../src/lib/routeProtocol.ts";
+import { parseGlobalRecordPayload } from "../src/lib/globalRecord.ts";
 import {
   SZ_BEEP_GAP_DEFAULT_MS,
   SZ_BEEP_INTERVAL_DEFAULT_MS,
@@ -31,6 +32,7 @@ import {
   SZ_CMD_SETFREQ_LONG,
   SZ_CMD_SETFREQ_SHORT,
   SZ_CMD_SETMINBEEP,
+  SZ_CMD_SETRECORD,
   SZ_CMD_SETTIMING_GAP,
   SZ_CMD_SETTIMING_INTERVAL,
   SZ_CMD_SETTIMING_LONG,
@@ -44,6 +46,7 @@ import {
   SZ_ERR_PAIR_MULTI,
   SZ_ERR_PAIR_NONE,
   SZ_ERR_READ,
+  SZ_ERR_RECORD,
   SZ_FREQ_LONG_DEFAULT,
   SZ_FREQ_SHORT_DEFAULT,
   SZ_ST_DONE,
@@ -51,6 +54,7 @@ import {
   SZ_ST_OK,
   SZ_ST_PAIRED,
   SZ_ST_PAIR_WAIT,
+  SZ_ST_RECORD_OK,
   SZ_ST_STREAMING,
   SZ_UUID_CTRL,
   SZ_UUID_DATA,
@@ -218,6 +222,8 @@ export class DeviceEmulator {
   private beepGapMs = SZ_BEEP_GAP_DEFAULT_MS;
   private signalGapMs = SZ_BEEP_INTERVAL_DEFAULT_MS;
   private minBeepKmh = SZ_BEEP_MIN_KMH_DEFAULT;
+  globalRecordTenthsKmh = 500;
+  recordAnalyzedThrough = "";
 
   // Trasa (RAM): ostatni odebrany blob i jego tożsamość (CRC32).
   private routeBuffer = new Uint8Array(0);
@@ -407,6 +413,17 @@ export class DeviceEmulator {
     } else if (command.startsWith(SZ_CMD_SETMINBEEP)) {
       this.minBeepKmh = this.clamp(Number(command.slice(SZ_CMD_SETMINBEEP.length)), 60, 120);
       this.setStatus(`beep min=${this.minBeepKmh}`);
+    } else if (command.startsWith(SZ_CMD_SETRECORD)) {
+      const parsed = parseGlobalRecordPayload(command.slice(SZ_CMD_SETRECORD.length));
+      if (!parsed) {
+        this.setStatus(SZ_ERR_RECORD);
+      } else {
+        this.globalRecordTenthsKmh = parsed.confirmedTenthsKmh;
+        this.recordAnalyzedThrough = parsed.analyzedThrough;
+        this.setStatus(
+          `${SZ_ST_RECORD_OK}${parsed.confirmedTenthsKmh} ${parsed.analyzedThrough || "-"}`,
+        );
+      }
     } else if (command.startsWith(SZ_CMD_PAIR)) {
       this.startPair();
     }

@@ -280,7 +280,16 @@ SETTIMING:LONG:<40-500>        — długość długiego tonu w ms (NVS) + 3 sygn
 SETTIMING:GAP:<0-500>          — przerwa między tonami wzoru w ms (NVS) + 3 sygnały 120
 SETTIMING:INTERVAL:<100-5000>  — przerwa między wzorami w ms (NVS) + 3 sygnały 120
 SETMINBEEP:<60-120>            — minimalna prędkość pikania w km/h (NVS) + 3 sygnały 120
+SETRECORD:<tenths>:<through>   — globalny rekord PWA w 0,1 km/h + najnowszy
+                                przeanalizowany timestamp ISO UTC (albo `-`)
 ```
+
+`SETRECORD` zwraca `record ok <tenths> <through>` po trwałym zapisie rekordu
+potwierdzonego PWA i rozstrzygnięciu prowizorycznych kandydatów do watermarka.
+`err:record` oznacza niedostępny/uszkodzony stan rekordu albo błędny argument;
+`err:no-storage` oznacza brak karty SD. PWA wysyła tę komendę po materializacji
+syncu i po połączeniu bez nowych plików. Stan pozostaje poza protokołem ramek
+transferu, więc zamrożony profil BLE plików się nie zmienia.
 
 Ponowne wysłanie `SETVOL`, `SETFREQ`, `SETTIMING` lub `SETMINBEEP` z tą samą wartością również
 odtwarza feedback. `SETTIMING` odtwarza trzy pełne wzory 120 km/h, aby można było

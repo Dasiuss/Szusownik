@@ -215,6 +215,23 @@ na nagraniach z auta defaulty wystarczą.
   `routeSpans`, `routeName` (patrz §6). Pola nie są indeksowane, a wersja logiki
   dopasowania wchodzi do podpisu materializacji (`MATCHING_VERSION`).
 
+### Globalny rekord dźwiękowy
+
+- Źródłem jest maksimum `confirmedMaxSpeed` z aktualnie materializowanych,
+  potwierdzonych, realnych zjazdów w lokalnym IndexedDB (`getAllRuns()`). Demo,
+  wyniki niepotwierdzone i zjazdy usunięte z historii są pomijane; bez wyniku
+  stosujemy bazę **50,0 km/h**. Nie jest to rekord chmurowy.
+- Watermark najnowszej próbki realnych plików jest liczony przy materializacji
+  śladu i cache'owany w `db.meta`; samo połączenie nie parsuje ponownie całej historii.
+- Po analizie plików PWA wysyła globalną wartość do Szusownika przez BLE CTRL:
+  `SETRECORD:<km/h × 10>:<najnowszy czas próbki ISO>`; watermark pusty zapisuje się
+  jako `-`. Wysyłka następuje po syncu, a także po połączeniu, gdy nowych plików
+  do pobrania nie ma.
+- Werdykt globalny, a nie maksimum pojedynczego zjazdu, aktualizuje potwierdzoną
+  bazę urządzenia. Watermark pozwala urządzeniu cofnąć prowizoryczny rekord z już
+  przeanalizowanych próbek i zachować nowsze próbki. Sam sync nie odtwarza
+  spóźnionego sygnału dźwiękowego.
+
 ## 8. Dane demo (generowany ślad na prawdziwych trasach)
 
 - Fixture `web/public/fixtures/ride.csv` jest **generowany** przez

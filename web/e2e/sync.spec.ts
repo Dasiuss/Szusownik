@@ -40,10 +40,26 @@ test("pobiera plik z symulatora i dodaje zjazd do dnia", async ({ page }) => {
   await page.getByRole("button", { name: /Pobierz dane/ }).click();
   await expect(page.locator(".sync-card-ready")).toHaveCount(0);
   await expect(page.locator(".run-card")).toHaveCount(runsBefore + 1);
+  await expect(page.getByText(/Nie udało się zsynchronizować globalnego rekordu/)).toHaveCount(0);
 
   // Zjazd z urządzenia nie ma etykiety — w szczegółach tytuł musi mieć numerek.
   await page.locator(".run-card").filter({ hasText: /Zjazd \d/ }).first().click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Zjazd \d+$/);
+});
+
+test("połączenie bez nowych plików synchronizuje globalny rekord", async ({ page }) => {
+  const config = buildDeviceConfig("20261003_121000.csv", todayCsv());
+  config.list = [];
+  config.transfers = {};
+  await page.addInitScript(deviceInitScript, config);
+  await page.goto("./#/urzadzenie");
+
+  await page.getByRole("button", { name: /^Połącz$/ }).click();
+  await expect(page.getByText("Połączenie aktywne")).toBeVisible();
+  const commands = await page.evaluate(
+    () => (window as Window & { __szRecordSyncs?: string[] }).__szRecordSyncs,
+  );
+  expect(commands).toEqual(["SETRECORD:500:-"]);
 });
 
 test("po połączeniu ustawienia dźwięku są odblokowane", async ({ page }) => {

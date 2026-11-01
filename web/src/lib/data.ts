@@ -3,6 +3,14 @@ import { parseDeviceCsv, serializeDeviceCsvV2, type Sample } from "./csv.ts";
 import { getSkiDataForMatching } from "./mapData.ts";
 import { matchRunRoutes, type RunRouteMatch } from "./routeMatching.ts";
 import {
+  confirmedGlobalRecord,
+  DEMO_SOURCE_FILE,
+  isDemoFile,
+  latestAnalyzedTimestamp,
+} from "./globalRecord.ts";
+
+export { DEMO_SOURCE_FILE } from "./globalRecord.ts";
+import {
   analyzeDay,
   analyzeMergedSamples,
   localDayKey,
@@ -15,9 +23,9 @@ import {
 
 export { localDayKey, runNumbers };
 
-export const DEMO_SOURCE_FILE = "demo-ride.csv";
 const DEMO_SEEDED_KEY = "demo-seeded-v6";
-const MATERIALIZED_KEY = "materialized-v1";
+const MATERIALIZED_KEY = "materialized-v2";
+const ANALYZED_THROUGH_KEY = "record-analyzed-through-v1";
 const MATCHING_OSM_KEY = "matching-osm-v1";
 /** Wersja logiki dopasowania tras; podbicie wymusza ponowną materializację. */
 export const MATCHING_VERSION = 1;
@@ -197,10 +205,10 @@ export async function materializeAll(force = false): Promise<void> {
   const pistes = getSkiDataForMatching()?.lines;
   const matchFor = (run: Run): RunRouteMatch => pistes ? matchRunRoutes(pistes, run.samples) : NO_ROUTE_MATCH;
 
-  const realFiles = files.filter((file) => file.name !== DEMO_SOURCE_FILE);
-  const realDays = analyzeMergedSamples(
-    realFiles.map((file) => ({ file: file.name, samples: parseFileSamples(file) })),
-  );
+  const realFiles = files.filter((file) => !isDemoFile(file.name));
+  const realSamplesByFile = realFiles.map((file) => ({ file: file.name, samples: parseFileSamples(file) }));
+  const analyzedThrough = latestAnalyzedTimestamp(realSamplesByFile.flatMap((entry) => entry.samples));
+  const realDays = analyzeMergedSamples(realSamplesByFile);
   for (const day of realDays) {
     for (const run of day.runs) {
       const id = stableRunId(day.dayKey, run.startT);
@@ -209,7 +217,7 @@ export async function materializeAll(force = false): Promise<void> {
     }
   }
 
-  const demoFile = files.find((file) => file.name === DEMO_SOURCE_FILE);
+  const demoFile = files.find((file) => isDemoFile(file.name));
   if (demoFile) {
     for (const run of analyzeDay(parseFileSamples(demoFile)).runs) {
       const dayKey = localDayKey(run.startT);
@@ -223,6 +231,7 @@ export async function materializeAll(force = false): Promise<void> {
     await db.runs.clear();
     if (records.length > 0) await db.runs.bulkPut(records);
     await db.meta.put({ key: MATERIALIZED_KEY, value: signature });
+    await db.meta.put({ key: ANALYZED_THROUGH_KEY, value: analyzedThrough });
     await db.meta.put({ key: MATCHING_OSM_KEY, value: pistes ? "1" : "0" });
   });
 }
@@ -241,7 +250,7 @@ export async function ensureRouteMatchingBackfill(): Promise<void> {
 
 async function purgeStaleDemoData(): Promise<void> {
   const stale = (await db.files.toArray()).filter(
-    (file) => file.name.startsWith("demo-") && file.name !== DEMO_SOURCE_FILE,
+    (file) => file.name.replace(/^\/+/, "").startsWith("demo-") && !isDemoFile(file.name),
   );
   // Zjazdy przeliczy materializeAll (podpis zbioru się zmieni).
   for (const file of stale) await db.files.delete(file.name);
@@ -279,6 +288,26 @@ export async function getAllRuns(): Promise<StoredRun[]> {
     (run) => run.analysisVersion === QUALITY_ANALYSIS_VERSION,
   );
   return runs.sort((a, b) => Date.parse(b.startT) - Date.parse(a.startT));
+}
+
+export interface GlobalRecordSnapshot {
+  confirmedMaxSpeed: number;
+  analyzedThrough: string;
+}
+
+/**
+ * Globalny rekord PWA do synchronizacji z urządzeniem. Liczymy z bieżących
+ * materializowanych realnych zjazdów; demo i tombstone'y nie biorą udziału.
+ */
+export async function getGlobalRecordSnapshot(): Promise<GlobalRecordSnapshot> {
+  const [runs, watermark] = await Promise.all([
+    getAllRuns(),
+    db.meta.get(ANALYZED_THROUGH_KEY),
+  ]);
+  return {
+    confirmedMaxSpeed: confirmedGlobalRecord(runs),
+    analyzedThrough: watermark?.value ?? "",
+  };
 }
 
 export async function getAllStoredSamples(): Promise<Sample[]> {

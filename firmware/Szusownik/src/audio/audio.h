@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "../config/config.h"
 #include "../core/beeper_pattern.h"
+#include "../core/record_signal.h"
 
 // Pasywny buzzer piezo (GPIO10, LEDC 8-bit, głośność przez duty).
 // Mapowanie prędkości: poniżej ustawionego progu cisza; 60-69:1, 70-79:2,
@@ -18,6 +19,8 @@ class Beeper {
  public:
   void begin();  // wczytuje audio z NVS, podpina LEDC
   void tick(float kmh, unsigned long nowMs);
+  // Osobny sygnał prowizorycznego rekordu; zastępuje zwykły wzór prędkości.
+  void playRecordSignal(float kmh);
   void playBoot();  // blokujące, setup: sygnał 120 (1 długi + 2 krótkie)
                     // przy głośności 60. Wywołać PO begin().
   // Alarm termiczny (Health): nieblokujący, ciągły ton na maks. głośności
@@ -63,6 +66,9 @@ class Beeper {
   bool toneOn_ = false;
   bool patternLoaded_ = false;
   bool oneShot_ = false;
+  bool recordSignalPlaying_ = false;
+  bool recordSignalPending_ = false;
+  float recordSignalKmh_ = 50.0f;
   uint8_t patternsRemaining_ = 0;
   uint8_t volLow_ = 20;
   uint8_t volHigh_ = 70;
@@ -75,6 +81,7 @@ class Beeper {
   uint8_t minBeepKmh_ = SZ_BEEP_MIN_KMH_DEFAULT;
   uint8_t playVol_ = 20;  // głośność bieżącej sekwencji
   void buildPattern(float kmh);
+  void buildRecordPattern(float kmh);
   void build120Pattern();
   void playShort();  // one-shot: 1 krótki (sygnał 60)
   void playLong2();  // one-shot: 1 długi + 2 krótkie (sygnał 120)

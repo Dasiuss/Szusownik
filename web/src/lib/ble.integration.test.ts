@@ -73,6 +73,21 @@ describe("transfer pojedynczego pliku", () => {
   });
 });
 
+describe("synchronizacja globalnego rekordu", () => {
+  it("wysyła potwierdzony wynik PWA i watermark przeanalizowanych próbek", async () => {
+    const emulator = new DeviceEmulator({ files: [] });
+    useEmulator(emulator);
+    const ble = new SzusownikBle();
+    await ble.connect();
+
+    await ble.setGlobalRecord(123.4, "2026-10-29T10:00:03.200Z");
+
+    expect(emulator.commands).toContain("SETRECORD:1234:2026-10-29T10:00:03.200Z");
+    expect(emulator.globalRecordTenthsKmh).toBe(1234);
+    expect(emulator.recordAnalyzedThrough).toBe("2026-10-29T10:00:03.200Z");
+  });
+});
+
 describe("lista plików i kursor", () => {
   it("stronicuje LIST echem kursora powyżej jednej strony", async () => {
     const unique = Array.from({ length: 15 }, (_, index) => ({

@@ -354,7 +354,10 @@ void BleFiles::handleCommand(const String& cmd) {
     // Żądanie sync: zamknij bieżący plik, żeby transfer czytał kompletny plik.
     // Bez refreshInfo(): close() nie zmienia widoczności plików, a skan SD
     // (~0,8 s) opóźniał odpowiedź na LIST i psuł listowanie w PWA.
-    if (storage_) storage_->rotateForSync();
+    if (storage_) {
+      storage_->rotateForSync();
+      storage_->beginRecordSync();
+    }
     setStatus(SZ_ST_OK);
   } else if (cmd.startsWith(SZ_CMD_DRYRUN)) {
     String name = cmd.substring((unsigned int)strlen(SZ_CMD_DRYRUN));
@@ -435,6 +438,31 @@ void BleFiles::handleCommand(const String& cmd) {
     } else {
       setStatus(SZ_ERR_NO_BEEPER);
     }
+  } else if (cmd.startsWith(SZ_CMD_SETRECORD)) {
+    if (transferring_) {
+      setStatus(SZ_ERR_BUSY);
+      return;
+    }
+    if (!storage_ || !storage_->isReady()) {
+      setStatus(SZ_ERR_NO_STORAGE);
+      return;
+    }
+    const String payload = cmd.substring((unsigned int)strlen(SZ_CMD_SETRECORD));
+    core::PwaRecordUpdate recordUpdate;
+    if (!core::recordCommandParse(payload.c_str(), recordUpdate)) {
+      setStatus(SZ_ERR_RECORD);
+      return;
+    }
+    if (!storage_->applyPwaRecord(recordUpdate.confirmedTenthsKmh,
+                                  recordUpdate.analyzedThrough)) {
+      setStatus(SZ_ERR_RECORD);
+      return;
+    }
+    char msg[80];
+    snprintf(msg, sizeof(msg), SZ_ST_RECORD_OK "%u %s",
+             static_cast<unsigned>(storage_->confirmedRecordTenthsKmh()),
+             recordUpdate.analyzedThrough[0] ? recordUpdate.analyzedThrough : "-");
+    setStatus(String(msg));
   } else if (cmd.startsWith(SZ_CMD_PAIR)) {
     // Parowanie HUD: główna pętla woła HudLink::requestPairing() (takePairRequest),
     // a wynik wraca przez reportHudPair(). Bez dodatkowego statusu tutaj — PWA

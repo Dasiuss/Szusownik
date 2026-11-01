@@ -98,6 +98,8 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
   const decoder = new TextDecoder();
   const toDV = (bytes: Uint8Array) => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const b64 = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  const recordSyncs: string[] = [];
+  Object.defineProperty(window, "__szRecordSyncs", { value: recordSyncs, configurable: true });
 
   let status = "ok";
   let streaming = false;
@@ -133,6 +135,13 @@ export function deviceInitScript(config: E2eDeviceConfig): void {
       if (command.startsWith("ROTATE") || command.startsWith("STOP")) {
         streaming = false;
         status = "ok";
+      } else if (command.startsWith("SETRECORD:")) {
+        recordSyncs.push(command);
+        const payload = command.slice("SETRECORD:".length);
+        const separator = payload.indexOf(":");
+        const tenths = separator < 0 ? payload : payload.slice(0, separator);
+        const through = separator < 0 ? "-" : payload.slice(separator + 1);
+        status = `record ok ${tenths} ${through}`;
       } else if (command.startsWith("LIST:")) {
         const since = command.slice(5);
         const echo = since || "0";

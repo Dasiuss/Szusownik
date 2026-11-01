@@ -11,12 +11,123 @@
 
 static File logFile;
 static File readFile;
+static const char* RECORD_STATE_PATH = "/record.state";
 
 bool Storage::begin() {
   SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
   // Jawny mountpoint = SZ_SD_MOUNT; listowanie używa go wprost (patrz config.h).
   ready_ = SD.begin(PIN_SD_CS, SPI, 20000000, SZ_SD_MOUNT);
+  if (ready_) {
+    recordStateLoaded_ = loadRecordState();
+    if (!recordReady()) SZ_LOGWF("SD rekord: oczekuje na zapis/werdykt PWA; sygnal rekordu wylaczony");
+  }
   return ready_;
+}
+
+bool Storage::loadRecordState() {
+  if (!ready_) return false;
+  const auto recoverFromInvalidState = [this]() {
+    core::RecordState recovered;
+    recovered.needsPwaSync = true;
+    recordTracker_.reset(recovered);
+    recordStateLoaded_ = true;
+    recordDirty_ = true;
+    SZ_LOGWF("SD rekord: niepoprawny plik — inicjuje 50,0 km/h i czeka na PWA");
+    persistRecordState();
+    return true;
+  };
+
+  if (!SD.exists(RECORD_STATE_PATH)) {
+    recordTracker_.reset();  // pierwsze uruchomienie: 50,0 km/h
+    recordStateLoaded_ = true;
+    recordDirty_ = true;
+    persistRecordState();
+    return true;
+  }
+
+  File stateFile = SD.open(RECORD_STATE_PATH, FILE_READ);
+  if (!stateFile) return recoverFromInvalidState();
+  const size_t size = stateFile.size();
+  if (size == 0 || size >= core::RECORD_STATE_BUFFER_SIZE) {
+    stateFile.close();
+    return recoverFromInvalidState();
+  }
+  char buffer[core::RECORD_STATE_BUFFER_SIZE];
+  const size_t read = stateFile.read(reinterpret_cast<uint8_t*>(buffer), size);
+  stateFile.close();
+  if (read != size) return recoverFromInvalidState();
+  buffer[size] = '\0';
+
+  core::RecordState state;
+  if (!core::recordStateParse(buffer, state)) return recoverFromInvalidState();
+  recordTracker_.reset(state);
+  recordStateLoaded_ = true;
+  recordPersistFailing_ = false;
+  recordDirty_ = false;
+  recordLastSaveMs_ = millis();
+  return true;
+}
+
+bool Storage::saveRecordState() {
+  if (!ready_) return false;
+  char buffer[core::RECORD_STATE_BUFFER_SIZE];
+  const size_t size = core::recordStateFormat(recordTracker_.state(), buffer, sizeof(buffer));
+  if (size == 0) return false;
+
+  File stateFile = SD.open(RECORD_STATE_PATH, FILE_WRITE);
+  if (!stateFile) return false;
+  const size_t written = stateFile.write(reinterpret_cast<const uint8_t*>(buffer), size);
+  stateFile.flush();
+  stateFile.close();
+  if (written != size) return false;
+  return true;
+}
+
+bool Storage::persistRecordState() {
+  if (!ready_ || !recordStateLoaded_) return false;
+  if (!saveRecordState()) {
+    if (!recordPersistFailing_) SZ_LOGEF("SD rekord: zapis stanu nieudany — ponowie przy kolejnym sync/close");
+    recordPersistFailing_ = true;
+    recordDirty_ = true;
+    return false;
+  }
+  if (recordPersistFailing_) SZ_LOGIF("SD rekord: zapis stanu odzyskany");
+  recordPersistFailing_ = false;
+  recordDirty_ = false;
+  recordLastSaveMs_ = millis();
+  return true;
+}
+
+core::RecordUpdate Storage::updateRecord(float kmh, const char* timestamp, unsigned long nowMs) {
+  core::RecordUpdate update;
+  if (!recordReady()) return update;
+  update = recordTracker_.update(kmh, timestamp, nowMs);
+  if (!update.changed) return update;
+  recordDirty_ = true;
+
+  // Zapis natychmiast przy sygnale; pozostałe wzrosty maksimum grupujemy do
+  // okresowego flush/close, aby nie blokować SD na każdej próbce GNSS.
+  const bool periodicSaveDue =
+      static_cast<unsigned long>(nowMs - recordLastSaveMs_) >= SZ_SD_COMMIT_MS;
+  if ((update.signal || periodicSaveDue) && !persistRecordState()) update.signal = false;
+  return update;
+}
+
+void Storage::beginRecordSync() {
+  if (!recordStateLoaded_) return;
+  recordTracker_.beginSync();
+  recordDirty_ = true;
+  // ROTATE ma szybko odpowiedzieć na CTRL; syncActive może poczekać na zwykły
+  // commit SD, close przed START_FILE albo trwałą odpowiedź PWA.
+}
+
+bool Storage::applyPwaRecord(uint16_t confirmedTenthsKmh, const char* analyzedThrough) {
+  if (!ready_ || !recordStateLoaded_ ||
+      !recordTracker_.reconcilePwaRecord(confirmedTenthsKmh, analyzedThrough)) {
+    return false;
+  }
+  recordDirty_ = true;
+  return persistRecordState();
 }
 
 bool Storage::openLog(const String& stamp) {
@@ -38,9 +149,9 @@ bool Storage::openLog(const String& stamp) {
   return true;
 }
 
-void Storage::writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
+bool Storage::writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                           float hdg, float altBaro, const GnssSampleQuality& quality) {
-  if (!ready_ || !fileOpen_) return;
+  if (!ready_ || !fileOpen_) return false;
   core::CsvQuality q{};
   q.fixValid = quality.fixValid;
   q.fixAgeValid = quality.fixAgeValid;
@@ -64,7 +175,9 @@ void Storage::writeSample(const String& utc, double lat, double lon, float kmh, 
       SZ_LOGEF("SD write error #%lu (got=%u want=%u)", (unsigned long)writeErrors_,
                (unsigned)got, (unsigned)want);
     }
+    return false;
   }
+  return true;
 }
 
 void Storage::sync() {
@@ -72,7 +185,9 @@ void Storage::sync() {
   // FATFS f_sync, czyli domyka wpis katalogowy i FAT na karcie. Sam flush
   // wystarcza — okresowe close()+open() nic nie dodaje poza ponownym
   // przejściem łańcucha FAT przy następnym dopisaniu (koszt rośnie z plikiem).
-  if (!ready_ || !fileOpen_) return;
+  if (!ready_) return;
+  if (recordStateLoaded_ && recordDirty_) persistRecordState();
+  if (!fileOpen_) return;
   uint32_t t0 = millis();
   logFile.flush();
   uint32_t dt = millis() - t0;
@@ -87,6 +202,11 @@ void Storage::close() {
     fileOpen_ = false;
     metaWritten_ = false;
   }
+  if (ready_ && recordStateLoaded_ && recordDirty_) persistRecordState();
+}
+
+void Storage::rotateForSync() {
+  close();
 }
 
 void Storage::updateFileRotation(float kmh, bool fixValid) {

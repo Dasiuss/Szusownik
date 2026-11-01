@@ -68,6 +68,7 @@
     "SZ_CMD_SETTIMING_GAP": "SETTIMING:GAP:",
     "SZ_CMD_SETTIMING_INTERVAL": "SETTIMING:INTERVAL:",
     "SZ_CMD_SETMINBEEP": "SETMINBEEP:",
+    "SZ_CMD_SETRECORD": "SETRECORD:",
     "SZ_CMD_PAIR": "PAIR",
     "SZ_ST_PAIRED": "paired",
     "SZ_ST_PAIR_WAIT": "pair wait",
@@ -76,6 +77,7 @@
     "SZ_ST_STREAMING": "streaming ",
     "SZ_ST_DONE": "done ",
     "SZ_ST_DRYRUN": "dryrun ",
+    "SZ_ST_RECORD_OK": "record ok ",
     "SZ_ST_ERR": "err:",
     "SZ_ERR_OPEN": "err:open",
     "SZ_ERR_READ": "err:read",
@@ -85,6 +87,7 @@
     "SZ_ERR_NO_STORAGE": "err:no-storage",
     "SZ_ERR_NOMEM": "err:nomem",
     "SZ_ERR_NO_BEEPER": "err:no-beeper",
+    "SZ_ERR_RECORD": "err:record",
     "SZ_ERR_PAIR_NONE": "err:pair-none",
     "SZ_ERR_PAIR_MULTI": "err:pair-multi"
   }

@@ -11,6 +11,7 @@ import {
   ensureLocalData,
   ensureRouteMatchingBackfill,
   getAllRuns,
+  getGlobalRecordSnapshot,
   materializeAll,
   renameRun,
   stableRunId,
@@ -91,6 +92,29 @@ describe("materializeAll", () => {
     const runs = await getAllRuns();
     expect(runs).toHaveLength(1);
     expect(runs[0].samples.length).toBe(first.length + second.length - 1);
+  });
+
+  it("builds the device record from confirmed real runs and excludes demo samples", async () => {
+    const start = Date.parse("2026-01-15T12:00:00.000Z");
+    const realSamples = Array.from({ length: 11 }, (_, index) =>
+      syntheticSample(index, {
+        t: new Date(start + index * 200).toISOString(),
+        speed: 55 + (5 - Math.abs(index - 5)) * 2,
+        altGps: 1000 - index * 2,
+        altBaro: 1000 - index * 2,
+        lat: 51.05 + index * 0.0001,
+      }),
+    );
+    await seed("20260115_120000.csv", serializeDeviceCsvV2(realSamples), RECEIVED);
+    await seed(DEMO_SOURCE_FILE, demoRideCsv(), RECEIVED);
+    await materializeAll();
+
+    const realRun = (await getAllRuns()).find((run) => !run.demo);
+    const snapshot = await getGlobalRecordSnapshot();
+    expect(realRun?.confirmedMaxSpeed).not.toBeNull();
+    expect(snapshot.confirmedMaxSpeed).toBe(realRun!.confirmedMaxSpeed);
+    expect(snapshot.analyzedThrough).toBe(realSamples.at(-1)!.t);
+    expect((await db.meta.get("record-analyzed-through-v1"))?.value).toBe(realSamples.at(-1)!.t);
   });
 
   it("grupuje po lokalnym dniu i tnie osobno", async () => {

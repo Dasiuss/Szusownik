@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "../gnss/gnss.h"
 #include "../core/list_buffer.h"
+#include "../core/record_tracker.h"
 #include "../core/rotation.h"
 
 // Zapis SUROWEGO CSV na microSD (bez filtrowania). Rotacja: domknięcie pliku na
@@ -17,18 +18,26 @@ class Storage {
   bool begin();
   bool isReady() const { return ready_; }  // inicjalizacja SD powiodla sie przy starcie
   bool openLog(const String& stamp);  // stamp = YYYYMMDD_HHMMSS; pusty => nie tworzy pliku
-  void writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
+  bool writeSample(const String& utc, double lat, double lon, float kmh, float altGps,
                    float hdg, float altBaro, const GnssSampleQuality& quality);
   void sync();
   void close();
   bool isOpen() const { return fileOpen_; }
   String currentName() const { return currentName_; }
+  bool recordReady() const {
+    return recordStateLoaded_ && !recordPersistFailing_ && !recordTracker_.state().needsPwaSync;
+  }
+  bool recordStateLoaded() const { return recordStateLoaded_; }
+  core::RecordUpdate updateRecord(float kmh, const char* timestamp, unsigned long nowMs);
+  void beginRecordSync();
+  bool applyPwaRecord(uint16_t confirmedTenthsKmh, const char* analyzedThrough);
+  uint16_t confirmedRecordTenthsKmh() const { return recordTracker_.confirmedRecordTenths(); }
   uint32_t countCsv() const;  // liczba CSV z .meta (widocznych dla PWA)
   // Do maxCount najstarszych nazw > since (rosnąco, filtr .meta). Nazwy
   // YYYYMMDD_HHMMSS sortują się chronologicznie, więc zwracany jest kolejny
   // fragment listy: PWA pyta dalej z since = ostatnia nazwa, aż dostanie pustą.
   uint32_t listCsv(const String& since, uint32_t maxCount, StorageEntry* out) const;
-  void rotateForSync() { close(); }  // nowy otworzy się przy kolejnej próbce
+  void rotateForSync();  // nowy otworzy się przy kolejnej próbce
   // Rolka na postoju: gdy prędkość < SZ_ROLL_STOP_BELOW_KMH przez SZ_ROLL_HOLD_MS
   // (tylko przy poprawnym fixie), domyka plik; ponowne uzbrojenie po prędkości
   // > SZ_ROLL_REARM_ABOVE_KMH przez SZ_ROLL_HOLD_MS. Wołane z pętli co iterację.
@@ -66,4 +75,13 @@ class Storage {
   unsigned long syncMaxMs_ = 0;
   core::RotationState rotation_;   // rolka na postoju (czysta logika w src/core)
   bool metaWritten_ = false;        // .meta bieżącego pliku już utworzony
+  core::RecordTracker recordTracker_;
+  bool recordStateLoaded_ = false;
+  bool recordPersistFailing_ = false;
+  bool recordDirty_ = false;
+  unsigned long recordLastSaveMs_ = 0;
+
+  bool loadRecordState();
+  bool saveRecordState();
+  bool persistRecordState();
 };

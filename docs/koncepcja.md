@@ -20,7 +20,8 @@ Dwa główne elementy:
 ### MVP — bieżący zakres
 
 - Pomiar GNSS (do 10 Hz) z adaptacyjnym próbkowaniem, surowy zapis CSV na
-  microSD, sygnały dźwiękowe oraz transfer plików BLE do PWA.
+  microSD, sygnały dźwiękowe (w tym prowizoryczny sygnał nowego globalnego rekordu)
+  oraz transfer plików BLE do PWA.
 - Wymagany barometr BME280: wysokość GNSS ma zbyt małą dokładność pionową, by
   samodzielnie zapewnić użyteczny profil wysokości i stabilną analizę zjazdów.
   Bieżąca fuzja baro+GPS jest komplementarna; nie jest to jeszcze fuzja IMU/EKF.
@@ -119,6 +120,21 @@ ustalić przed implementacją (`docs/supabase.md`).
 - Reguła: poniżej 100 — 1/2/3/4 krótkie piknięcia dla przedziałów 60–69/70–79/80–89/90–99;
   powyżej 100 — kolejne długie piknięcie co **50 km/h** (100 → 1, 150 → 2, 200 → 3…),
   a krótkie piknięcia liczą dziesiątki ponad aktualnym progiem.
+
+### Sygnał globalnego rekordu
+- Rekord jest globalny dla urządzenia/PWA, a nie dla pojedynczego zjazdu ani dnia.
+  PWA wyznacza go z potwierdzonych maksimów realnych zjazdów dostępnych w lokalnej
+  historii; demo jest wykluczone. Wartość początkowa wynosi **50 km/h**.
+- Podczas jazdy urządzenie porównuje świeżą próbkę Dopplera z maksimum i sygnalizuje
+  natychmiast nowe maksimum. Sygnał jest prowizoryczny do czasu analizy CSV przez
+  PWA; niepotwierdzony pik może zostać cofnięty przy następnym syncu BLE.
+- Kolejny sygnał: wzrost o co najmniej **5 km/h** ponad ostatni zasygnalizowany rekord
+  może zagrać wcześniej; jeśli przez **60 s** nie padł kolejny sygnał, wystarczy
+  następny nowy rekord niezależnie od wielkości wzrostu. Blokada jest tylko w RAM.
+- Melodyjka rekordu omija minimalny próg zwykłego pikania. Przerywa bieżący wzór
+  prędkości; po niej wraca zwykły harmonogram. Alarm termiczny ma wyższy priorytet.
+  Szczegóły stanu SD i synchronizacji opisują `docs/wymagania-ESP.md` §5 oraz
+  `docs/wymagania-PWA.md` §7.
 
 ### Dane i transfer
 - Pola CSV: timestamp (UTC z GPS), lat/lon, prędkość, wysokość GPS, heading,

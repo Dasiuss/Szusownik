@@ -153,6 +153,13 @@ void Beeper::buildPattern(float kmh) {
   seqLen_ = (uint8_t)core::beeperBuildPattern(kmh, settings, seq_, 8);
 }
 
+void Beeper::buildRecordPattern(float kmh) {
+  seqLen_ = (uint8_t)core::recordSignalBuildPattern(seq_, 8);
+  seqIdx_ = 0;
+  playVol_ = volumeFor(kmh);
+  patternLoaded_ = true;
+}
+
 void Beeper::build120Pattern() {
   seqLen_ = 0;
   seq_[seqLen_++] = {freqLong_, beepLongMs_, beepGapMs_};
@@ -165,6 +172,7 @@ void Beeper::build120Pattern() {
 void Beeper::startOneShot(uint8_t vol, uint8_t repeats) {
   ledcWrite(PIN_BUZZER, 0);
   toneOn_ = false;
+  recordSignalPlaying_ = false;
   playVol_ = vol;
   seqIdx_ = 0;
   patternLoaded_ = true;
@@ -173,6 +181,17 @@ void Beeper::startOneShot(uint8_t vol, uint8_t repeats) {
   unsigned long now = millis();
   stepEnd_ = now;  // start natychmiast w najbliższym tick()
   nextTick_ = now;
+}
+
+void Beeper::playRecordSignal(float kmh) {
+  recordSignalKmh_ = kmh;
+  if (alarmUntil_ != 0 || recordSignalPlaying_) {
+    recordSignalPending_ = true;
+    return;
+  }
+  buildRecordPattern(kmh);
+  startOneShot(playVol_);
+  recordSignalPlaying_ = true;
 }
 
 void Beeper::playShort() {
@@ -223,9 +242,15 @@ void Beeper::alarm(uint16_t ms) {
   // nad wzorcem prędkości. Anuluje trwający wzorzec; tick() dogasi po ms.
   ledcWriteTone(PIN_BUZZER, freqLong_);
   ledcWrite(PIN_BUZZER, dutyFromVol(100));
+  if (recordSignalPlaying_) {
+    recordSignalPending_ = true;
+    recordSignalPlaying_ = false;
+  }
   toneOn_ = false;
   patternLoaded_ = false;
   seqIdx_ = 0;
+  oneShot_ = false;
+  patternsRemaining_ = 0;
   alarmUntil_ = millis() + ms;
 }
 
@@ -254,6 +279,13 @@ void Beeper::tick(float kmh, unsigned long nowMs) {
     seqIdx_ = 0;
     nextTick_ = nowMs + signalGapMs_;
   }
+  if (recordSignalPending_ && alarmUntil_ == 0 && !patternLoaded_) {
+    recordSignalPending_ = false;
+    buildRecordPattern(recordSignalKmh_);
+    startOneShot(playVol_);
+    recordSignalPlaying_ = true;
+    return;
+  }
   if (toneOn_ && nowMs >= stepEnd_) {
     ledcWrite(PIN_BUZZER, 0);
     toneOn_ = false;
@@ -271,6 +303,7 @@ void Beeper::tick(float kmh, unsigned long nowMs) {
   }
   if (patternLoaded_ && seqIdx_ >= seqLen_ && !toneOn_ && nowMs >= stepEnd_) {
     patternLoaded_ = false;
+    recordSignalPlaying_ = false;
     if (oneShot_ && patternsRemaining_ > 1) {
       patternsRemaining_--;
       nextTick_ = nowMs + signalGapMs_;

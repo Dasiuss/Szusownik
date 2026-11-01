@@ -77,6 +77,32 @@ microSD i przesyła dane do PWA przez BLE. IMU należy do dalszej roadmapy.
   trzymana w NVS jako `minBeep`, zakres 60..120 km/h, domyślnie 60 km/h. Próg tylko
   wycisza niższe prędkości; nie zmienia liczby tonów dla prędkości, która już pika.
 
+### Sygnał globalnego rekordu
+
+- Wartość potwierdzona pochodzi z PWA; firmware nie wykonuje analizy jakości GNSS
+  ani nie potwierdza piku. Na pierwszym uruchomieniu plik `/record.state` na SD
+  inicjuje globalny rekord na **50,0 km/h**.
+- Dla próbki Dopplera zapisanej do CSV firmware aktualizuje prowizoryczne maksimum.
+  Nowe maksimum wyzwala osobny sygnał; stan prowizoryczny jest zapisywany na SD.
+  Histereza dźwięku: kolejny sygnał może wystąpić przy wzroście o **≥5,0 km/h** od
+  ostatniego sygnału; po **60 s** wystarczy dowolny kolejny nowy rekord. Timer i
+  poziom ostatniego sygnału są tylko w RAM i resetują się po restarcie.
+- Wzór jest stały i niezależny od ustawień zwykłych tonów: **659, 784, 988, 1175,
+  988, 1175, 1480 Hz**, każdy ton 65 ms, przerwy 28 ms (bez przerwy po ostatnim),
+  łącznie 623 ms. Głośność jest adaptacyjna jak dla bieżącej prędkości. Sygnał
+  omija `minBeepKmh`.
+- Sygnał rekordu zastępuje i przerywa aktualny wzór prędkości; kolejne wzory wracają
+  do zwykłego harmonogramu. Alarm termiczny pozostaje nadrzędny; oczekujący sygnał
+  rekordu jest odtwarzany po zakończeniu alarmu.
+- Po syncu PWA odsyła globalny potwierdzony wynik oraz watermark analizy. Firmware
+  aktualizuje potwierdzoną bazę i rozstrzyga prowizoryczne próbki nie nowsze niż
+  watermark. Po błędzie zapisu sygnał rekordu jest wstrzymany, a zapis ponawiany
+  przy kolejnym okresowym sync/close SD; po udanym ponowieniu wraca. Uszkodzony stan
+  jest inicjowany od 50 km/h, ale sygnał pozostaje wstrzymany do pierwszego
+  potwierdzenia z PWA. Brak SD wyłącza tylko ten sygnał; zwykłe sygnały i CSV działają.
+- Czysta logika progów i formatu stanu jest w `src/core/record_tracker.*` i ma
+  testy hostowe. Odsłuch i trwałość SD wymagają jeszcze weryfikacji sprzętowej.
+
 ## 6. Zapis CSV + rotacja plików
 
 - Pola: `timestamp (UTC), lat, lon, speed, altitude_gps, heading, altitude_baro`.
@@ -140,6 +166,9 @@ microSD i przesyła dane do PWA przez BLE. IMU należy do dalszej roadmapy.
   (np. ruch tuż po starcie urządzenia).
 - Pliki bez `.meta` **nie są kasowane** — zostają na karcie. FIFO
   (`ensureFreeSpace`) kasuje CSV razem z jego `.meta`.
+- `/record.state` leży w katalogu głównym SD, nie ma pliku `.meta` i nie trafia
+  na listę plików PWA. FIFO usuwa tylko CSV wraz z `.meta`, więc stan rekordu
+  pozostaje na karcie.
 - Rolka na podjazd (wysokościowa) **usunięta** — jeden mechanizm, nie dwa.
   Cięcie na zjazdy robi PWA (własna metoda, `web/src/lib/runs.ts`).
 - Progi do dostrojenia (patrz „Otwarte punkty").

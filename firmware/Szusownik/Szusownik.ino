@@ -228,10 +228,14 @@ void loop() {
       }
       if (storage.isReady() && storage.isOpen()) {
         const GnssSampleQuality quality = gnss.sampleQuality();
-        storage.writeSample(gnss.csvStamp(), gnss.lat(), gnss.lon(), kmh, gnss.altM(),
-                            gnss.headingDeg(), baroAlt, quality);
-        totalSamples++;
-        windowSamples++;
+        const String sampleStamp = gnss.csvStamp();
+        if (storage.writeSample(sampleStamp, gnss.lat(), gnss.lon(), kmh, gnss.altM(),
+                                gnss.headingDeg(), baroAlt, quality)) {
+          totalSamples++;
+          windowSamples++;
+          const core::RecordUpdate record = storage.updateRecord(kmh, sampleStamp.c_str(), now);
+          if (record.signal) beeper.playRecordSignal(kmh);
+        }
       }
     }
   }
