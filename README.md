@@ -14,14 +14,14 @@ i bicia rekordów prędkości. Wcześniejsza nazwa robocza projektu to `GpsSpeed
 | `web/`      | PWA (React + TS + Vite) — prezentacja i analiza |
 | `firmware/` | Firmware urządzeń: Szusownik (ESP32-S3) i HudRekaw (ESP8266 + ST7789) |
 | `protocol/` | SSOT protokołów (BLE plikowy, ESP-NOW HUD) |
-| `supabase/` | Szkielet planowanej integracji z Supabase w kroku 2 (poza MVP) |
+| `supabase/` | Edge Functions; bazą zarządzamy preferencyjnie przez Supabase MCP |
 
 ## Dokumentacja
 
 - `docs/koncepcja.md` — wizja, bieżący zakres MVP i roadmapa.
 - `docs/wymagania-PWA.md` — wymagania PWA (analiza i prezentacja).
 - `docs/wymagania-ESP.md` — wymagania urządzenia (ESP32).
-- `docs/supabase.md` — planowana integracja Supabase w kroku 2 (auth, baza, Edge Functions).
+- `docs/supabase.md` — architektura Supabase, Auth, RLS i preferowany przepływ MCP.
 - `docs/bom.md` — lista podzespołów (MVP).
 - `docs/ustalenia-z-projektow-testowych.md` — synteza wiedzy z `BleTest`, `DisplayTest` i `MapyTest`.
 - `docs/ble-transfer.md` — sprawdzony transfer BLE, kompresja i retransmisje.

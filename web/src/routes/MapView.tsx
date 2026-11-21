@@ -11,6 +11,9 @@ import { routeCoverage } from "../lib/routeCoverage.ts";
 import { encodeRoute } from "../lib/routeTransfer.ts";
 import { routeSyncNotice } from "../lib/routeSyncNotice.ts";
 import { gpsNotice } from "../lib/geolocationNotice.ts";
+import { SupabaseAuthProvider } from "../lib/supabase/auth.tsx";
+import { useLiveLocations } from "../lib/supabase/useLiveLocations.ts";
+import type { VisiblePeerLocation } from "../lib/supabase/locationPolicy.ts";
 import type { StoredRun } from "../lib/db.ts";
 import {
   AERIALWAY_LABELS,
@@ -31,6 +34,15 @@ interface GeoJsonPointCollection {
   features: Array<{
     type: "Feature";
     properties: { role: "current" };
+    geometry: { type: "Point"; coordinates: Position };
+  }>;
+}
+
+interface GeoJsonPeerCollection {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: { label: string; color: string };
     geometry: { type: "Point"; coordinates: Position };
   }>;
 }
@@ -90,6 +102,7 @@ const NAVIGATION_MAX_ACCURACY_M = 50;
 const TRANSIENT_ALERT_MS = 2000;
 const EMPTY_COLLECTION: GeoJsonLineCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_POINTS: GeoJsonPointCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_PEER_POINTS: GeoJsonPeerCollection = { type: "FeatureCollection", features: [] };
 const LINE_GEOMETRY_FILTER = ["==", ["geometry-type"], "LineString"] as never;
 const POLYGON_GEOMETRY_FILTER = ["==", ["geometry-type"], "Polygon"] as never;
 // Base label filters so the route effect can rebuild them with exclusions.
@@ -160,6 +173,20 @@ function pointCollection(position: DevicePosition | null): GeoJsonPointCollectio
   const features: GeoJsonPointCollection["features"] = [];
   if (position) features.push({ type: "Feature", properties: { role: "current" }, geometry: { type: "Point", coordinates: position.coordinate } });
   return { type: "FeatureCollection", features };
+}
+
+function peerPointCollection(peers: VisiblePeerLocation[]): GeoJsonPeerCollection {
+  return {
+    type: "FeatureCollection",
+    features: peers.map((peer) => ({
+      type: "Feature",
+      properties: {
+        label: peer.ageLabel ? `${peer.displayName} · ${peer.ageLabel}` : peer.displayName,
+        color: peer.color,
+      },
+      geometry: { type: "Point", coordinates: peer.coordinate },
+    })),
+  };
 }
 
 function recentTrace(samples: Sample[], now: number): GeoJsonLineCollection {
@@ -334,6 +361,10 @@ function withinBounds(position: Position): boolean {
 }
 
 export default function MapView() {
+  return <SupabaseAuthProvider><MapViewContent /></SupabaseAuthProvider>;
+}
+
+function MapViewContent() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const highlightedRef = useRef<SelectedFeature | null>(null);
@@ -369,11 +400,16 @@ export default function MapView() {
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [coverageOn, setCoverageOn] = useState(false);
   const device = useDevice();
+  const liveLocations = useLiveLocations(now);
+  const reportGpsFixRef = useRef(liveLocations.reportGpsFix);
   // Najświeższa funkcja syncRoute bez wywoływania efektu przy każdym renderze.
   const syncRouteRef = useRef(device.syncRoute);
   useEffect(() => {
     syncRouteRef.current = device.syncRoute;
   });
+  useEffect(() => {
+    reportGpsFixRef.current = liveLocations.reportGpsFix;
+  }, [liveLocations.reportGpsFix]);
 
   const deviceStart = position && withinBounds(position.coordinate) ? position.coordinate : null;
   const start = manualStart ?? deviceStart;
@@ -484,7 +520,7 @@ export default function MapView() {
   }, [device.dataRevision]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 15000);
+    const timer = window.setInterval(() => setNow(Date.now()), 10000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -497,6 +533,12 @@ export default function MapView() {
       (next) => {
         setGpsError(null);
         setPosition({ coordinate: [next.coords.longitude, next.coords.latitude], accuracy: next.coords.accuracy });
+        reportGpsFixRef.current({
+          latitude: next.coords.latitude,
+          longitude: next.coords.longitude,
+          accuracyM: next.coords.accuracy,
+          timestamp: next.timestamp,
+        });
       },
       (error) => setGpsError(gpsNotice(error.code)),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
@@ -559,9 +601,10 @@ export default function MapView() {
       if (cancelled) return;
        map.addSource("pistes", { type: "geojson", data: mapData.pistes as never, promoteId: "uid" });
        map.addSource("lifts", { type: "geojson", data: mapData.lifts as never, promoteId: "uid" });
-       map.addSource("recent-trace", { type: "geojson", data: EMPTY_COLLECTION as never });
-       map.addSource("map-points", { type: "geojson", data: EMPTY_POINTS as never });
-       map.addSource("route-result", { type: "geojson", data: EMPTY_COLLECTION as never });
+        map.addSource("recent-trace", { type: "geojson", data: EMPTY_COLLECTION as never });
+        map.addSource("map-points", { type: "geojson", data: EMPTY_POINTS as never });
+        map.addSource("peer-points", { type: "geojson", data: EMPTY_PEER_POINTS as never });
+        map.addSource("route-result", { type: "geojson", data: EMPTY_COLLECTION as never });
        map.addLayer({ id: "pistes-area-fill", type: "fill", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, paint: { "fill-color": COLOR_EXPRESSION, "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.5, 0.26] as never } });
        map.addLayer({ id: "pistes-area-outline", type: "line", source: "pistes", filter: POLYGON_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", COLOR_EXPRESSION] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 3, 1.5] as never } });
        map.addLayer({ id: "pistes-casing", type: "line", source: "pistes", filter: LINE_GEOMETRY_FILTER, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#facc15", "#ffffff"] as never, "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 10, 6] as never } });
@@ -583,7 +626,9 @@ export default function MapView() {
        map.addLayer({ id: "lifts-names", type: "symbol", source: "lifts", filter: ["all", ...LIFTS_LABEL_CONDITIONS] as never, layout: { "symbol-placement": "line-center", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-anchor": "left", "text-offset": [1.8, 0], "text-allow-overlap": false }, paint: { "text-color": "#7f1d1d", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
        map.addLayer({ id: "route-piste-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "piste"], ["has", "label"]], layout: { "symbol-placement": "line", "symbol-spacing": 260, "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#1557b0", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
        map.addLayer({ id: "route-lift-labels", type: "symbol", source: "route-result", filter: ["all", ["==", ["get", "kind"], "lift"], ["has", "label"]], layout: { "symbol-placement": "line-center", "icon-image": LIFT_ICON_IMAGE_EXPRESSION as never, "icon-size": 0.85, "icon-anchor": "right", "icon-offset": [-6, 0], "icon-keep-upright": true, "icon-allow-overlap": true, "icon-ignore-placement": true, "text-anchor": "left", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 16, "text-letter-spacing": 0.05, "text-offset": [1.8, 0], "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#5b21b6", "text-halo-color": "#ffffff", "text-halo-width": 3, "text-halo-blur": 0.2 } });
-       map.addLayer({ id: "map-points", type: "circle", source: "map-points", paint: { "circle-color": "#1976d2", "circle-radius": 8, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+        map.addLayer({ id: "map-points", type: "circle", source: "map-points", paint: { "circle-color": "#1976d2", "circle-radius": 8, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+        map.addLayer({ id: "peer-points", type: "circle", source: "peer-points", paint: { "circle-color": ["get", "color"], "circle-radius": 9, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
+        map.addLayer({ id: "peer-labels", type: "symbol", source: "peer-points", layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-anchor": "top", "text-offset": [0, 1.45], "text-allow-overlap": false, "text-optional": true }, paint: { "text-color": "#17363b", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
       map.on("click", (event) => {
         const activeRouteMode = routeModeRef.current;
         const hit = map.queryRenderedFeatures(event.point, { layers: ["pistes-hit", "pistes-area-fill", "lifts-hit"] });
@@ -678,6 +723,12 @@ export default function MapView() {
     if (!map || !mapReady) return;
     sourceData(map, "map-points", pointCollection(position));
   }, [mapReady, position]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    sourceData(map, "peer-points", peerPointCollection(liveLocations.peers));
+  }, [liveLocations.peers, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -961,6 +1012,7 @@ export default function MapView() {
       {mapError && <div className="map-alert"><Icon name="x" size={16} /><span>{mapError}. Mapa może nie zawierać tras.</span><button className="map-alert-close" type="button" onClick={() => setMapError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && gpsError && <div className="map-alert"><Icon name="x" size={16} /><span>{gpsError}</span><button className="map-alert-close" type="button" onClick={() => setGpsError(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
       {!mapError && !gpsError && transientAlert && <div className="map-alert" role="status"><Icon name="x" size={16} /><span>{transientAlert}</span><button className="map-alert-close" type="button" onClick={() => setTransientAlert(null)} aria-label="Zamknij komunikat"><Icon name="x" size={15} /></button></div>}
+      {!mapError && !gpsError && !transientAlert && liveLocations.error && <div className="map-alert" role="status" title={liveLocations.error}><Icon name="x" size={16} /><span>Nie udało się zsynchronizować pozycji grupy. Ponowię próbę.</span></div>}
       {!mapError && basemapReady === false && (
         <div className="map-alert" role="status">
           <Icon name="x" size={16} />

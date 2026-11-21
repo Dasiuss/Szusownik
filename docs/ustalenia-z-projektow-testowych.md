@@ -69,10 +69,16 @@ CSV      HUD             |
 
 ### Supabase
 
-- należy do **kroku 2**, poza MVP: wtedy może przechowywać dane użytkowników i
-  zsynchronizowane zjazdy;
-- izolacja przez RLS `user_id = auth.uid()` i sekrety Stravy po stronie Edge
-  Function są wymaganiami tego przyszłego etapu, nie bieżącą funkcją.
+- obecnie obsługuje opcjonalny Auth i wyłącznie udostępnianie ostatniej pozycji
+  grupy w osobnym schemacie `szusownik`;
+- `profiles` i `live_locations` są czytelne dla zalogowanych, a zapis/usuwanie
+  ogranicza RLS do własnego `user_id`; przyszłe dane osobiste pozostają
+  właścicielskie (`user_id = auth.uid()`);
+- PWA nadal przechowuje analizę, pliki, rekordy i trasy lokalnie — ich
+  synchronizacja z chmurą jest przyszłym, osobnym zakresem;
+- bazę obsługujemy preferencyjnie przez projektowo ograniczony Supabase MCP;
+  nie utrzymujemy lokalnego katalogu `supabase/migrations/`;
+- klucze serwerowe Stravy wyłącznie po stronie przyszłej Edge Function.
 
 ## 3. Decyzje, które należy zachować
 

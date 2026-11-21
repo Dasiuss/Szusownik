@@ -18,11 +18,31 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Mapa / Urządzenie**.
 - Kierunek wizualny: jasny outdoor, wysoki kontrast i szybki odczyt wyników.
 
-## 3. Krok 2 — auth i użytkownicy (poza MVP)
+## 3. Konto i lokalizacje grupy
 
-- Logowanie przez **Supabase Auth** (email + hasło).
-- **2 użytkowników**; każdy widzi **tylko swoje** dane — po stronie bazy wymusza to **RLS**
-  (`user_id = auth.uid()`), lokalnie dane w IndexedDB też są oznaczone użytkownikiem.
+- Supabase Auth (e-mail + hasło) jest **opcjonalne** i dostępne w Ustawieniach;
+  PWA oraz lokalne dane działają także bez logowania.
+- Brak publicznej rejestracji w PWA i w Supabase Auth. Konta grupy są wcześniej
+  zapraszane/tworzone w panelu Supabase; obecna grupa liczy **4 osoby**.
+  Ustawienie publicznego signup w konfiguracji projektu musi być wyłączone.
+- Po zalogowaniu użytkownik widzi profile i lokalizacje wszystkich zalogowanych
+  osób z włączonym udostępnianiem. RLS pozwala czytać grupowe dane w schemacie
+  `szusownik`, ale modyfikować tylko własny profil i własną lokalizację.
+- Nazwa wyświetlana ma domyślnie pierwsze trzy znaki części e-maila przed `@`;
+  można ją zmienić w Ustawieniach. Udostępnianie lokalizacji jest domyślnie ON
+  dla nowego profilu i ma niezależny przełącznik.
+- Tylko widok Mapy nasłuchuje GPS do udostępniania: pierwszy fix wysyłamy od razu,
+  kolejne najwyżej co 10 s, zachowując najnowszy fix. Timestamp to czas pomiaru
+  GPS (`GeolocationPosition.timestamp`), a nie czas zapisu w bazie.
+- Mapa odpytywana jest co 10 s przy otwartej mapie i dostępnej sieci. Pokazuje
+  ostatnią pozycję innej osoby do 1 h; wiek w minutach pojawia się od 3:00.
+  Przechowujemy tylko jeden bieżący punkt na osobę, bez historii trasy i bez
+  automatycznego czyszczenia starych wierszy. Po wyłączeniu udostępniania lub
+  wylogowaniu PWA usuwa własny punkt; jeśli nie ma Internetu, nie kolejkuje
+  operacji usunięcia.
+- Jest to best-effort: PWA nie gwarantuje aktualizacji GPS przy zablokowanym
+  ekranie ani w tle. Lokalna analiza przejazdów nie jest synchronizowana do
+  Supabase w tym zakresie.
 
 ## 4. Ekran główny (aktywność / dzień)
 
@@ -252,7 +272,7 @@ na nagraniach z auta defaulty wystarczą.
 - **Realne nagranie z urządzenia** (używane przez testy jednostkowe) to
   `test data/20260926_181420.csv`; to nie jest demo PWA.
 
-## 9. Stack technologiczny (potwierdzony 2026-09-11, `web/package.json`)
+## 9. Stack technologiczny (aktualizacja 2026-11-21, `web/package.json`)
 
 - **React 19 + TypeScript (strict) + Vite 6**.
 - **vite-plugin-pwa** — manifest + service worker + offline (cacheId `szusownik`).
@@ -272,8 +292,8 @@ na nagraniach z auta defaulty wystarczą.
 - **Tailwind CSS v4** — styling.
 - Deploy: GitHub Pages przez `.github/workflows/deploy.yml` (build `web/`,
   `base: /Szusownik/`).
-- `@supabase/supabase-js` — krok 2 (poza MVP; nie instalować przed rozpoczęciem
-  integracji chmurowej).
+- `@supabase/supabase-js` — jeden klient w `src/lib/supabase/`; bieżący moduł
+  lokalizacji grupowej i Auth, z miejscem na osobne moduły synchronizacji danych.
 
 ## 10. Ekran urządzenia (`#/urzadzenie`, alias `#/ustawienia`, niezależny od dnia)
 

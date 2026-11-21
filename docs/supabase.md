@@ -1,59 +1,86 @@
-# Supabase — integracja z repozytorium
+# Supabase — architektura i sposób pracy
 
-> Status: **krok 2 — poza MVP**. Integracja nie jest jeszcze zaimplementowana.
-> Data ostatniej aktualizacji: 2026-11-01
+> Aktualizacja: 2026-11-21. Supabase jest rozwijane modułowo; aktualnie obsługuje
+> opcjonalne logowanie i udostępnianie bieżącej pozycji na mapie.
 
-## Co to jest Supabase
+## Preferowany sposób pracy: Supabase MCP
 
-Zarządzany **Postgres** + warstwy wokół: **Auth**, **Storage**, **Edge Functions**,
-**Realtime**. Nad bazą automatycznie wystawia REST (PostgREST) i GraphQL.
+**MCP jest preferowaną formą interakcji z projektem Supabase.** Połączenie
+`supabase-szusownik` w OpenCode jest ograniczone do Project Ref Szusownika,
+używa OAuth i nie przechowuje tokenów w repozytorium.
 
-## Jak działa połączenie z GitHubem (bez instalowania nic lokalnie)
+- Zanim zmienisz bazę, sprawdź przez MCP istniejące schematy, tabele, polityki
+  RLS i uprawnienia. Nie zakładaj, że schemat `public` należy do Szusownika.
+- Operacje DDL wykonuj przez narzędzie MCP `apply_migration`; zapytania
+  inspekcyjne wykonuj przez `execute_sql`. Historia tych zmian jest zapisywana
+  bezpośrednio w projekcie Supabase.
+- **Nie używamy lokalnego `supabase/migrations/` ani automatycznego wdrażania
+  schematu przez integrację GitHub.** Katalog migracji w repozytorium został
+  usunięty. Zmiany aplikacji i ich dokumentację nadal wersjonujemy w Git.
+- Do połączenia PWA używaj wyłącznie klucza **publishable**. Klucz `service_role`
+  nigdy nie trafia do kodu przeglądarkowego ani repozytorium.
+- Nie uruchamiaj publicznej rejestracji. Konta są tworzone/zapraszane z panelu
+  Supabase; ustawienie Auth „Allow new users to sign up” musi pozostać wyłączone.
 
-- W dashboardzie Supabase: **Project Settings → Integrations → GitHub** (lub przycisk
-  „Connect to GitHub" na stronie projektu).
-- Autoryzujesz Supabase do dostępu do repo i wybierasz **repo + branch** (np. `main`).
-- Supabase czyta folder **`supabase/`** z tego brancha i przy każdym **push**:
-  - aplikuje migracje z `supabase/migrations/*.sql`,
-  - wdraża Edge Functions z `supabase/functions/*`.
-- **Nie potrzebujesz Docker ani CLI** — definicje żyją w repo, Supabase pobiera je sam.
+MCP może zmieniać zdalną bazę, dlatego przed DDL sprawdź zakres i SQL. Nie
+wykonuj operacji na danych lub tabelach niezwiązanych z bieżącym zadaniem.
 
-### A co to były komendy `supabase start`?
+## Namespace i API
 
-`supabase start` (oraz `supabase init`, `db push`, `functions deploy`) to **CLI do
-lokalnego developmentu** — odpala cały stack w Dockerze na Twoim komputerze (offline).
-To **opcjonalne**. Przy integracji z GitHubem **pomijasz to całkowicie**: commit → push →
-Supabase w chmurze sam to aplikuje.
+- Dane Szusownika trafiają do osobnego schematu PostgreSQL **`szusownik`**, nie
+  do `public`.
+- Schemat musi być dodany w Dashboardzie w **Project Settings → API → Exposed
+  schemas**. W bazie nadajemy dostęp do schematu wyłącznie roli
+  `authenticated`; tabele mają RLS. Anonimowy klient nie odczytuje tych danych.
+- Istniejące tabele w `public` (np. `public.meetings`) są poza zakresem tej
+  aplikacji i nie należy ich zmieniać.
 
-## Struktura folderu `supabase/`
+## Aktualny zakres: profile i pozycje grupy
 
-```
-supabase/
-├── config.toml          # konfiguracja (generowana przez supabase init / dashboard)
-├── migrations/          # *.sql — wersjonowane zmiany schematu bazy
-├── functions/           # Edge Functions (np. strava-upload/index.ts)
-└── seed.sql             # dane startowe (opcjonalnie)
-```
+PWA pozostaje użyteczna bez logowania i działa lokalnie/offline. Logowanie
+Supabase Auth e-mail/hasło jest opcjonalne i dostępne w Ustawieniach. Obecna
+grupa liczy cztery osoby. PWA nie ma formularza rejestracji; konta dodaje się
+przez zaproszenie.
 
-## Auth i użytkownicy (RLS)
+Schemat `szusownik` ma obecnie dwie tabele:
 
-- **Supabase Auth** dostarcza użytkowników (email + hasło).
-- **2 użytkowników**; każdy widzi **tylko swoje** dane.
-- **RLS (Row Level Security)** na tabelach: wiersze mają `user_id`, polityka
-  `user_id = auth.uid()` — filtrowanie po stronie bazy (nie w kodzie PWA).
-- PWA: ekran logowania; zapytania przez `supabase-js` są automatycznie filtrowane przez RLS.
+- **`profiles`** — `user_id`, nazwa wyświetlana i `share_enabled`. Pierwsza nazwa
+  to trzy pierwsze znaki części e-maila przed `@`; można ją edytować. Udostępnianie
+  jest domyślnie włączone dla nowego profilu.
+- **`live_locations`** — jeden rekord na użytkownika, nadpisywany kolejnym
+  zaakceptowanym fixem. Zawiera szerokość, długość, dokładność oraz
+  `recorded_at` równy czasowi pomiaru GPS (`GeolocationPosition.timestamp`).
+  Nie gromadzimy historii śladu.
 
-## Klucze i sekrety
+Wszystkie zalogowane konta mogą czytać profile oraz pozycje osób, które mają
+włączone udostępnianie. Użytkownik może zmieniać i usuwać wyłącznie własny
+profil/rekord lokalizacji. To celowy wyjątek RLS dla danych grupowych; pozostałe
+przyszłe dane osobiste powinny domyślnie pozostać właścicielskie
+(`user_id = auth.uid()`).
 
-- **Publishable key** — bezpieczny, trafia do PWA (`@supabase/supabase-js`).
-- **Secret key** — tylko serwer / Edge Function.
-- `client_secret` Strava trzymasz jako **secret projektu** (Edge Function → Dashboard →
-  Edge Functions → Secrets), **nie** w kodzie.
+Wysyłanie działa best-effort tylko na widoku Mapy, po zalogowaniu i przy
+włączonym udostępnianiu: pierwszy fix od razu, kolejne najwyżej co 10 s z
+zachowaniem najnowszego odczytu. Pozycje pozostałych są odpytywane co 10 s, gdy
+mapa jest otwarta i jest Internet. Na mapie pokazujemy ostatni punkt nie starszy
+niż 1 h; etykieta wieku pojawia się od 3 min. Po wyłączeniu udostępniania lub
+wylogowaniu PWA próbuje usunąć własny rekord. Nie kolejkujemy usunięcia offline.
 
-## U nas
+Nie ma okresowego czyszczenia rekordów: pozycje starsze niż godzinę są pomijane
+przez PWA, ale mogą pozostać w bazie do nadpisania lub jawnego usunięcia. Brak
+GPS, sieci, uśpienie strony lub ograniczenia systemu mogą zatrzymać aktualizacje.
 
-- `supabase/migrations/` — schemat bazy (użytkownik, zjazdy, próbki/metadane).
-- `supabase/functions/strava-upload/` — planowane proxy do Stravy (OAuth + upload FIT) w kroku 2.
+## Moduł PWA i dalszy rozwój
 
-PWA łączy się z bazą przez `@supabase/supabase-js`:
-`createClient(url, publishableKey)` + `supabase.functions.invoke('strava-upload', ...)`.
+Cała integracja kliencka jest zamknięta w **`web/src/lib/supabase/`**. Widoki
+korzystają z modułów domenowych, a nie wywołują `supabase-js` bezpośrednio.
+Obecne obszary to klient, Auth, profile i pozycje na żywo. Przyszłe synchronizacje
+rekordów, tras, nagrań i ustawień dodawaj jako osobne moduły domenowe w tym
+katalogu, z osobnymi typami, politykami RLS i testami. Nie zmieniaj obecnej
+polityki współdzielenia lokalizacji w ogólną regułę odczytu wszystkich przyszłych
+danych.
+
+Klient korzysta z `@supabase/supabase-js` i klucza publishable w PWA. Sekrety
+Stravy i inne klucze serwerowe mogą być używane wyłącznie po stronie Edge
+Function. `supabase/functions/` pozostaje miejscem na przyszłe funkcje
+serwerowe; plan kroku 2 zakłada ich automatyczne wdrażanie po skonfigurowaniu
+integracji Supabase ↔ GitHub, niezależnie od zarządzania schematem przez MCP.

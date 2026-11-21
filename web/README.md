@@ -5,10 +5,10 @@ Aplikacja web (PWA) do prezentacji i analizy przejazdów.
 - Stack: React 19 + TypeScript + Vite 6 (+ vite-plugin-pwa, Recharts, MapLibre GL,
   Dexie, papaparse, react-router-dom, Tailwind v4).
 - Dane demo: **generowany** ślad narciarski (`public/fixtures/ride.csv` z
-  `scripts/gen-demo-ride.mjs`) na prawdziwych trasach Sölden. Transfer BLE z
-  urządzenia należy do MVP; Supabase i Strava są planowane w kroku 2, poza MVP.
-  Realne nagranie do testów:
-  `test data/20260926_181420.csv`.
+  `scripts/gen-demo-ride.mjs`) na prawdziwych trasach Sölden; transfer BLE z
+  urządzenia należy do MVP i zapisuje dane lokalnie. Supabase obsługuje obecnie
+  opcjonalne logowanie i best-effort udostępnianie pozycji na mapie; Strava
+  pozostaje w roadmapie. Realne nagranie do testów: `test data/20260926_181420.csv`.
 
 Struktura `src/`:
 
@@ -24,13 +24,17 @@ Struktura `src/`:
 - `lib/traceMap.ts` — przygotowanie śladu do mini-mapy (kolor wg prędkości, decymacja).
 - `lib/ble.ts` — transfer BLE i sprawdzanie nowych plików bez rozłączania sesji.
 - `lib/device.tsx` — wspólna sesja BLE, reconnect i limit bezczynności 10 minut.
+- `lib/supabase/` — jeden klient Supabase i osobne moduły Auth, profili oraz
+  lokalizacji na żywo; przyszłe synchronizacje (rekordy, trasy, nagrania,
+  ustawienia) dodaj jako kolejne moduły domenowe. Opis: `docs/supabase.md`.
 - `routes/DayView.tsx` — karta nowych plików, statystyki dnia i lista zjazdów.
 - `routes/HistoryView.tsx` — historia aktywności pogrupowana po lokalnych dniach.
 - `routes/RunView.tsx` — nazwa, usuwanie, mini-mapa, trasy zjazdu i wykresy.
 - `routes/DaySummaryView.tsx` — połączone statystyki, mini-mapa i wykresy dnia.
 - `components/TraceMap.tsx` — mini-mapa 2D (MapLibre): trasy, wyciągi i ślad GPS.
 - `routes/SettingsView.tsx` — status urządzenia, ustawienia dźwięku i widoczna
-  wersja PWA (czas builda) w sekcji „Dane aplikacji".
+  wersja PWA (czas builda), logowanie opcjonalne, profil grupowy i udostępnianie
+  lokalizacji.
 - `lib/version.ts` — odczyt `__BUILD_TIME__` (wstrzykiwany w `vite.config.ts`)
   i formatowanie czasu builda w `pl-PL`.
 

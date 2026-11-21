@@ -148,14 +148,21 @@ ustalić przed implementacją (`docs/supabase.md`).
   potwierdzonym ruchu; bez niego CSV jest „postojowy" i nie trafia na listę
   pobierania, więc PWA nie widzi śmieci z postoju.
 - **Transfer BLE** do PWA (Chrome/Web Bluetooth), chunkowany.
-- Dane urządzenia są przechowywane i analizowane lokalnie w PWA; integracja z
-  chmurą i eksport FIT/Strava należą do kroku 2.
+- Dane urządzenia są przechowywane i analizowane lokalnie w PWA. Opcjonalne
+  logowanie i udostępnianie ostatniej pozycji grupie na Mapie to obecna,
+  ograniczona funkcja chmurowa (Supabase; best-effort).
+- Synchronizacja rekordów, tras i nagrań oraz eksport FIT/Strava pozostają
+  osobnymi, przyszłymi etapami.
 
 ### PWA i integracje późniejsze
 - PWA serwowane z **GitHub Pages** (HTTPS).
 - **IndexedDB** — lokalne przechowywanie danych i analiza offline.
-- W kroku 2: Supabase (baza + Edge Function jako proxy do Stravy, przechowujące
-  sekret po stronie serwera i obsługujące OAuth oraz upload).
+- **Supabase**: obecnie opcjonalny Auth i udostępnianie ostatniej lokalizacji
+  grupy w osobnym schemacie `szusownik`; rekordy, trasy, nagrania i ustawienia
+  pozostają lokalne do czasu osobnych decyzji o synchronizacji.
+- Bezpośrednie zmiany projektu Supabase wykonujemy preferencyjnie przez
+  projektowo ograniczony MCP. Edge Function pozostaje planowanym proxy do Stravy
+  (trzyma `client_secret`, realizuje OAuth i upload FIT).
 
 ## 4. Wstępna architektura
 
@@ -166,7 +173,9 @@ ustalić przed implementacją (`docs/supabase.md`).
                                ├─► OLED 0,96" (I2C)
                                ├─► ESP-NOW ──► HudRekaw (opcjonalny ESP8266 + ST7789)
                                └─► BLE ──► PWA (GitHub Pages, IndexedDB)
-                                              └─► krok 2: FIT → Supabase Edge Function → Strava
+                                               ├─► lokalna analiza i IndexedDB
+                                               ├─► opcjonalnie Supabase Auth + pozycje grupy
+                                               └─► roadmapa: FIT → Edge Function → Strava
 ```
 
 - Moduł pomiarowy (GPS) wydzielony w kodzie — interfejs stabilny.
@@ -180,6 +189,7 @@ analiza PWA, mapy i routing — są zaimplementowane. Szczegółowy stan testów
 automatycznych i walidacji sprzętowej opisują `docs/testy.md`,
 `docs/ble-transfer.md`, `docs/hud-display.md` i `docs/hud-rekaw.md`.
 
-Następnym wydzielonym etapem produktowym jest **krok 2: Supabase i Strava**.
-IMU, zaawansowana analityka oraz RTK pozostają dalszą roadmapą, poza MVP i bez
-ustalonych terminów.
+Udostępnianie lokalizacji grupy przez Supabase jest zaimplementowane jako
+osobny moduł; przyszłe etapy chmurowe to synchronizacja rekordów, tras i nagrań
+oraz Strava przez Edge Function. IMU, zaawansowana analityka i RTK pozostają
+dalszą roadmapą, poza bieżącym zakresem i bez ustalonych terminów.

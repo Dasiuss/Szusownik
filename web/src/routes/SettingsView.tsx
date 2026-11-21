@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon.tsx";
+import { SupabaseAccountSettings } from "../components/SupabaseAccountSettings.tsx";
 import {
   SZ_BEEP_GAP_DEFAULT_MS,
   SZ_BEEP_GAP_MAX_MS,
@@ -37,10 +38,16 @@ import {
 import { useDevice } from "../lib/device.tsx";
 import type { Freq, Timing, Volume } from "../lib/ble.ts";
 import { clearPwaData } from "../lib/reset.ts";
+import { SupabaseAuthProvider, useSupabaseAuth } from "../lib/supabase/auth.tsx";
 import { formatBuildTime, PWA_BUILD_TIME } from "../lib/version.ts";
 
 export default function SettingsView() {
+  return <SupabaseAuthProvider><SettingsContent /></SupabaseAuthProvider>;
+}
+
+function SettingsContent() {
   const device = useDevice();
+  const supabaseAuth = useSupabaseAuth();
   const [volume, setVolume] = useState<Volume | null>(null);
   const [frequency, setFrequency] = useState<Freq | null>(null);
   const [timing, setTiming] = useState<Timing | null>(null);
@@ -216,6 +223,7 @@ export default function SettingsView() {
     setResetError(null);
     try {
       device.disconnect();
+      if (supabaseAuth.user) await supabaseAuth.signOut();
       await clearPwaData();
       window.location.reload();
     } catch (caught) {
@@ -268,6 +276,8 @@ export default function SettingsView() {
         </div>
         <span className={`status-pill${connected ? " status-pill-connected" : ""}`}><span className="status-dot" /> {connected ? "Połączono" : "Offline"}</span>
       </header>
+
+      <SupabaseAccountSettings />
 
       {!connected ? (
         <section className="device-connect-card">

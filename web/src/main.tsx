@@ -8,9 +8,9 @@ import DayView from "./routes/DayView.tsx";
 import DaySummaryView from "./routes/DaySummaryView.tsx";
 import HistoryView from "./routes/HistoryView.tsx";
 import RunView from "./routes/RunView.tsx";
-import SettingsView from "./routes/SettingsView.tsx";
 
 const MapView = lazy(() => import("./routes/MapView.tsx"));
+const SettingsView = lazy(() => import("./routes/SettingsView.tsx"));
 
 // HashRouter: działa z GitHub Pages i z pliku bez serwera SPA-fallback.
 const router = createHashRouter([
@@ -24,8 +24,8 @@ const router = createHashRouter([
       { path: "historia", element: <HistoryView /> },
       { path: "mapa", element: <Suspense fallback={<div className="loading-card"><span className="spinner" /> Wczytuję moduł mapy…</div>}><MapView /></Suspense> },
       { path: "zjazd/:runId", element: <RunView /> },
-      { path: "urzadzenie", element: <SettingsView /> },
-      { path: "ustawienia", element: <SettingsView /> },
+      { path: "urzadzenie", element: <Suspense fallback={<div className="loading-card"><span className="spinner" /> Wczytuję ustawienia…</div>}><SettingsView /></Suspense> },
+      { path: "ustawienia", element: <Suspense fallback={<div className="loading-card"><span className="spinner" /> Wczytuję ustawienia…</div>}><SettingsView /></Suspense> },
     ],
   },
 ]);

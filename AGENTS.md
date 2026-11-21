@@ -37,6 +37,8 @@ najnowszej wersji firmware i PWA. Dlatego:
 - `docs/koncepcja.md` - wizja produktu i zakres funkcjonalny.
 - `docs/wymagania-ESP.md` - wymagania sprzętu i firmware.
 - `docs/wymagania-PWA.md` - wymagania PWA, analiza zjazdów i widoki.
+- `docs/supabase.md` - architektura Supabase, RLS, granice modułów i preferowany
+  przepływ pracy przez MCP.
 - `docs/jakosc-danych.md` - przepływ pól jakości GNSS, algorytm potwierdzania
   rekordów, miejsca implementacji i aktualny status weryfikacji.
 
@@ -70,6 +72,9 @@ najnowszej wersji firmware i PWA. Dlatego:
    Zawsze dopisz, co to za pakiet, np. `'Q' (odpowiedź na parowanie)` zamiast
    samo „pakiet Q". Użytkownik nie pamięta liter — litera bez opisu jest dla
    niego bezużyteczna.
+10. Zmiany w projekcie Supabase wykonuj preferencyjnie przez projektowo
+   ograniczony MCP, zgodnie z `docs/supabase.md`. Repozytorium nie używa lokalnego
+   `supabase/migrations/` ani automatycznego wdrażania schematu przez GitHub.
 
 ## Procedura wgrywania firmware (obowiązkowa)
 

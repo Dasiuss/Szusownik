@@ -21,6 +21,10 @@ test("boot z danymi demo i nawigacja po zakładkach", async ({ page }) => {
 
   await bottomNav(page).getByRole("link", { name: "Urządzenie" }).click();
   await expect(page.getByRole("heading", { name: "Urządzenie", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Konto i lokalizacja" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "E-mail" })).toBeVisible();
+  await expect(page.getByLabel("Hasło")).toBeVisible();
+  await expect(page.getByText(/formularza rejestracji nie ma w PWA/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Połącz urządzenie" })).toBeVisible();
   await expect(page.getByText("Wersja PWA")).toBeVisible();
 });
