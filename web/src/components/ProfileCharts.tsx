@@ -21,6 +21,7 @@ import { Icon } from "./Icon.tsx";
 import { getDistanceAxisForDomain, type DistanceDomain } from "../lib/chart.ts";
 import { accelDomain, findNearestIndex, type ProfilePoint } from "../lib/chartSeries.ts";
 import { readChartMode, writeChartMode, type ChartMode } from "../lib/chartMode.ts";
+import { TEXT_CAP_PX, scaledTextPx } from "../lib/textScale.ts";
 
 type SeriesKey = "speed" | "altitude" | "accel";
 
@@ -51,7 +52,10 @@ export interface ProfileChartsProps {
 }
 
 const TOOLTIP_STYLE = { background: "#17363b", border: 0, borderRadius: 10, color: "#fff" };
-const AXIS_TICK = { fill: "#71858a", fontSize: 11 };
+// Etykiety osi to drobny tekst interfejsu, więc rosną z systemowym rozmiarem
+// tekstu — z tym samym sufitem co `min(rem, 22px)` w index.css. Wartość liczymy
+// przy renderze, bo zmiana rozmiaru w Androidzie nie przeładowuje apki.
+const axisTick = () => ({ fill: "#71858a", fontSize: scaledTextPx(11, TEXT_CAP_PX.tiny) });
 const CROSSHAIR = "#17363b";
 const BOUNDARY = "#8fb7ac";
 
@@ -188,7 +192,7 @@ export function ProfileCharts({
         height={withTicks ? 30 : 8}
         interval="preserveStartEnd"
         minTickGap={18}
-        tick={withTicks ? AXIS_TICK : false}
+        tick={withTicks ? axisTick() : false}
         tickFormatter={formatDistanceTick}
         tickLine={false}
         ticks={distanceAxis.ticks}
@@ -202,7 +206,7 @@ export function ProfileCharts({
       <YAxis
         axisLine={false}
         domain={[0, speedMaxKmh]}
-        tick={AXIS_TICK}
+        tick={axisTick()}
         tickLine={false}
         tickMargin={4}
         width={44}
@@ -217,7 +221,7 @@ export function ProfileCharts({
         axisLine={false}
         domain={altDomain}
         orientation="right"
-        tick={AXIS_TICK}
+        tick={axisTick()}
         tickLine={false}
         tickMargin={4}
         width={44}
@@ -330,7 +334,7 @@ export function ProfileCharts({
             <YAxis
               axisLine={false}
               domain={key === "speed" ? [0, speedMaxKmh] : key === "altitude" ? altDomain : aDomain}
-              tick={AXIS_TICK}
+              tick={axisTick()}
               tickLine={false}
               tickMargin={4}
               width={44}

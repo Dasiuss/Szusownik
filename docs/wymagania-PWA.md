@@ -2,7 +2,7 @@
 
 > Status: wymagania bieżącej PWA oraz planowanej integracji w kroku 2.
 > Supabase i eksport do Stravy nie należą do MVP i nie są jeszcze zaimplementowane.
-> Data ostatniej aktualizacji: 2026-11-01
+> Data ostatniej aktualizacji: 2026-11-22
 
 ## 1. Cel
 
@@ -17,6 +17,24 @@ Prezentacja i analiza przejazdów: **dzień → zjazdy → wykresy**. Aplikacja 
 - **Język PL**. Jednostki i formaty: prędkość **km/h**, dystans **km**, czas **min:sec**, zegar **24 h**.
 - UX mobile-first na Androidzie; główna nawigacja: **Dzisiaj / Historia / Mapa / Urządzenie**.
 - Kierunek wizualny: jasny outdoor, wysoki kontrast i szybki odczyt wyników.
+- **Typografia idzie za systemowym rozmiarem tekstu Androida.** Rozmiary czcionek
+  piszemy **wyłącznie w `rem`** (1 rem = 16 px przy skali 100%), a napisy, które
+  są już duże, mają sufit `min(<rem>, <px>)`:
+  **22 px** drobny tekst (eyebrow, podpisy, metadane), **24 px** tekst i wartości
+  (`h3`, wiersze list), **26 px** nagłówki i tytuły kart (`h2`), **18 px** dolna
+  nawigacja (cztery długie etykiety w jednym rzędzie).
+  `h1`, licznik prędkości i `h1` w szczegółach zjazdu zostają w `px` — są już
+  duże i nie mają puchnąć. `<meta name="text-scale" content="scale">` w
+  `index.html` sprawia, że Chromium (Chrome 146+, także zainstalowana PWA)
+  skaluje bazowy rozmiar dokumentu razem z ustawieniem systemowym: przy 100%
+  wygląd jest identyczny, przy 150% tekst rośnie proporcjonalnie, przy 200%
+  dobija do sufitu. **Nie ustawiamy `font-size` na `html`/`:root`/`body`** — to
+  blokuje cały mechanizm. Tekst rysowany poza CSS (etykiety osi wykresów,
+  etykiety tras, wyciągów i znajomych na mapie) liczy ten sam sufit w
+  `src/lib/textScale.ts`; etykiety podkładu mapy (Protomaps) są celowo bez zmian.
+  Layout jest sprawdzony do 200% przy 320 px szerokości. Reguły pilnuje
+  `src/lib/typography.test.ts` (brak `px` w `font-size`, sufity, brak nadpisania
+  rozmiaru bazowego), a zachowanie skalowania — `e2e/text-scale.spec.ts`.
 
 ## 3. Konto i lokalizacje grupy
 

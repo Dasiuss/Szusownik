@@ -19,6 +19,7 @@ import {
 } from "../lib/mapData.ts";
 import { buildMapStyle } from "../lib/basemapStyle.ts";
 import { prepareBasemap } from "../lib/pmtilesSource.ts";
+import { TEXT_CAP_PX, scaledTextPx } from "../lib/textScale.ts";
 import { buildTraceCollection, traceBounds, type TracePoint } from "../lib/traceMap.ts";
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -95,7 +96,7 @@ function addMiniLayers(map: maplibregl.Map): void {
       "symbol-placement": "line",
       "symbol-spacing": 160,
       "text-field": ["get", "label"] as never,
-      "text-size": 11,
+      "text-size": scaledTextPx(11, TEXT_CAP_PX.tiny),
       "text-font": ["Noto Sans Bold"],
       "text-allow-overlap": false,
       "text-optional": true,
