@@ -416,23 +416,26 @@ przycięty odcinek. `clearRoute` wysyła `CLEAR`, a po ponownym połączeniu PWA
 porównuje wersję trasy urządzenia z własną i dosyła raz tylko przy różnicy
 (restart Szusownika nie wymaga ponownego planowania). Wiersz stanu w panelu trasy
 runda się z `web/src/lib/routeSyncNotice.ts` i pokazuje kolejno: „Łączę z
-urządzeniem…" (w trakcie próby połączenia przycisk „Połącz" jest schowany),
-„Połączono, sprawdzam urządzenie…", „Wysyłam trasę na urządzenie…", a bez
-połączenia „Połącz, aby wysłać trasę na urządzenie" z przyciskiem. Nieudane
-łączenie pokazuje powód zamiast ciszy, z „Połącz" do ponowienia. Udana wysyłka
-nie ma komunikatu: domyślnie zakładamy, że trasa dotarła — dzięki temu automatyczne
-dosyłki (np. `trimRoute` w nawigacji) nie migają komunikatem.
+urządzeniem…", „Połączono, sprawdzam urządzenie…", „Wysyłam trasę na urządzenie…"
+oraz błędy wysyłki lub łączenia. Bez połączenia wiersz nie renderuje się wcale
+(stała podpowiedź offline z przyciskiem „Połącz" została usunięta, bo trasa i tak
+dosyła się automatycznie po połączeniu — zajmowała tylko miejsce na telefonie).
+Udana wysyłka nie ma komunikatu: domyślnie zakładamy, że trasa dotarła — dzięki
+temu automatyczne dosyłki (np. `trimRoute` w nawigacji) nie migają komunikatem.
 
 Ciche zerwanie łącza (urządzenie wyłączone albo poza zasięgiem, bez „Rozłącz"
 z PWA) jest wykrywane po `gattserverdisconnected`: `SzusownikBle` zgłasza je
 przez `onDisconnected`, `DeviceProvider` wraca do stanu rozłączonego, a brak
-łącza wyprzedza dotknięcie GATT (`DeviceDisconnectedError`) — panel trasy
-pokazuje wtedy podpowiedź offline z przyciskiem, a nie surowy błąd Web Bluetooth.
-Dalsza droga trasy (Szusownik -> HudRekaw) i rysowanie są w `docs/hud-rekaw.md`.
+łącza wyprzedza dotknięcie GATT (`DeviceDisconnectedError`) — panel trasy nie
+pokazuje wtedy surowego błędu Web Bluetooth, a trasa dosyła się po ponownym
+połączeniu. Dalsza droga trasy (Szusownik -> HudRekaw) i rysowanie są w
+`docs/hud-rekaw.md`.
 
 Karta zaznaczonej trasy pokazuje `opening_hours`, `grooming`, długość oraz bezwzględną różnicę
 między najniższą i najwyższą próbką geometrii z DEM. Ma również przycisk
 `Nawiguj`, który używa pozycji GPS jako startu lub markera domu przy braku GPS.
+Po udanym wyznaczeniu trasy karta szczegółów zamyka się razem z panelem
+wyszukiwania; przy błędzie (brak trasy w pobliżu celu) karta zostaje otwarta.
 Po zaznaczeniu kliknięciem na mapie prowadzi do dokładnego miejsca kliknięcia;
 wybór z listy używa punktu referencyjnego w środku geometrii.
 

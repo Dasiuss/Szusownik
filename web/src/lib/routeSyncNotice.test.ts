@@ -9,11 +9,10 @@ const base = {
 };
 
 describe("wiersz stanu wysyłki trasy", () => {
-  it("pokazuje postęp łączenia i chowa przycisk ponowienia", () => {
+  it("pokazuje postęp łączenia", () => {
     expect(routeSyncNotice({ ...base, deviceState: "connecting", routeSync: "offline" })).toEqual({
       tone: "pending",
       text: "Łączę z urządzeniem…",
-      retry: false,
     });
   });
 
@@ -35,7 +34,6 @@ describe("wiersz stanu wysyłki trasy", () => {
     expect(routeSyncNotice({ ...base, routeSync: "sending" })).toEqual({
       tone: "sending",
       text: "Wysyłam trasę na urządzenie…",
-      retry: false,
     });
   });
 
@@ -43,24 +41,18 @@ describe("wiersz stanu wysyłki trasy", () => {
     expect(routeSyncNotice({ ...base, routeSync: "error", routeSyncError: "Urządzenie odrzuciło trasę (err:crc)" })).toEqual({
       tone: "error",
       text: "Urządzenie odrzuciło trasę (err:crc)",
-      retry: false,
     });
   });
 
-  it("pokazuje błąd łączenia z przyciskiem ponowienia", () => {
+  it("pokazuje błąd łączenia bez przycisku ponowienia", () => {
     expect(routeSyncNotice({ ...base, deviceState: "error", routeSync: "offline", deviceError: "Brak Web Bluetooth" })).toEqual({
       tone: "error",
       text: "Brak Web Bluetooth",
-      retry: true,
     });
   });
 
-  it("bez połączenia pokazuje podpowiedź offline z przyciskiem Połącz", () => {
-    expect(routeSyncNotice({ ...base, deviceState: "disconnected", routeSync: "offline" })).toEqual({
-      tone: "offline",
-      text: "Połącz, aby wysłać trasę na urządzenie",
-      retry: true,
-    });
+  it("bez połączenia nie pokazuje podpowiedzi offline ani przycisku Połącz", () => {
+    expect(routeSyncNotice({ ...base, deviceState: "disconnected", routeSync: "offline" })).toBeNull();
   });
 
   it("sukces i stan spoczynkowy nie renderują nic", () => {

@@ -980,6 +980,10 @@ function MapViewContent() {
     setDestination(snapped.coordinate);
     setRouteMode("idle");
     setRouteError(null);
+    // Po udanym wyznaczeniu trasy karta szczegółów i wyszukiwarka nie są już
+    // potrzebne — zostaje mapa z panelem wyniku trasy.
+    closeSelected();
+    setMenuOpen(false);
   }
 
   function clearRoute(): void {
@@ -1070,9 +1074,6 @@ function MapViewContent() {
           <button className="map-clear-route" type="button" onClick={clearRoute}>Wyczyść</button>
           <div className={`map-route-sync${syncNotice ? ` map-route-sync-${syncNotice.tone}` : ""}`} role="status">
             {syncNotice && <span>{syncNotice.text}</span>}
-            {syncNotice?.retry && (
-              <button className="map-route-connect" type="button" onClick={() => void device.connectAndCheck()}>Połącz</button>
-            )}
           </div>
         </section>
       )}

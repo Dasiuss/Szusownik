@@ -34,6 +34,31 @@ test("mapa renderuje się na lokalnym snapshocie tras", async ({ page }) => {
   await expect(page.locator('[aria-label="Mapa tras narciarskich Sölden"]')).toBeVisible({ timeout: 30_000 });
 });
 
+test("nawigacja z karty trasy zamyka kartę i panel wyszukiwania", async ({ page }) => {
+  await page.goto("./#/mapa");
+  await expect(page.locator('[aria-label="Mapa tras narciarskich Sölden"]')).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("button", { name: "Szukaj tras i wyciągów" }).click();
+  const searchPanel = page.locator(".map-search-panel");
+  await expect(searchPanel).toBeVisible();
+  const firstItem = searchPanel.locator(".map-search-item").first();
+  await expect(firstItem).toBeVisible({ timeout: 30_000 });
+  await firstItem.click();
+
+  const card = page.locator(".map-feature-card");
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Nawiguj", exact: true }).click();
+
+  // Karta i wyszukiwarka znikają, zostaje panel wyznaczonej trasy.
+  await expect(card).toHaveCount(0);
+  await expect(searchPanel).toHaveCount(0);
+  await expect(page.locator(".map-route-result")).toBeVisible({ timeout: 30_000 });
+
+  // Bez połączenia z urządzeniem nie ma już wiersza „Połącz, aby wysłać…”.
+  await expect(page.locator(".map-route-sync")).not.toContainText("Połącz");
+  await expect(page.getByRole("button", { name: "Połącz", exact: true })).toHaveCount(0);
+});
+
 test("szczegóły zjazdu: zmiana nazwy i usunięcie", async ({ page }) => {
   await page.goto("./");
   await expect(page.locator(".run-card").first()).toBeVisible();
