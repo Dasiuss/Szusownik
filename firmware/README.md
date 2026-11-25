@@ -98,10 +98,16 @@ flash_szusownik.cmd "Szusownik Red"            # port domyślny COM7
 flash_szusownik.cmd "Szusownik Blue" COM6      # druga sztuka, inny port
 ```
 
+Skrypt trzyma cache w katalogu głównym repo — `build\cache-red` / `build\cache-blue`
+(wspólny dla wszystkich worktree, więc nowy worktree nie płaci za zimny build),
+a równoległe buildy blokuje plikiem `build\szusownik-build.lock` (lock istnieje →
+exit 3 i wypisany `pid=`). Jak postąpić z lockiem: `AGENTS.md`.
+
 Ręcznie ta sama flaga — **z pliku `.cmd`**, bo PowerShell 5.1 gubi cudzysłowy
 w wartości `--build-property`; spacja jest zapisana jako `\040` (ósemkowo —
 `\x20B` skleiłoby się w jeden znak 0x20B), dzięki czemu w wartości flagi nie ma
-spacji:
+spacji. Ręczna kompilacja jest tylko diagnostyką: bez `--build-path` używa
+prywatnego, zimnego cache i nie respektuje locka:
 
 ```powershell
 arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Red\"" --output-dir build\szusownik firmware/Szusownik
@@ -136,7 +142,13 @@ Wymagane: `arduino-cli`, core `esp32:esp32 >= 3.3` oraz biblioteki
 "Adafruit GFX Library" "Adafruit SSD1306" "Adafruit BusIO" NimBLE-Arduino`).
 
 Waveshare S3-Zero nie ma osobnego wpisu w core — używamy generycznego
-`esp32s3` (potwierdzone na sprzęcie: flash 4 MB, PSRAM 2 MB Quad, USB-CDC na boot):
+`esp32s3` (potwierdzone na sprzęcie: flash 4 MB, PSRAM 2 MB Quad, USB-CDC na boot).
+
+Do codziennej pracy używaj `flash_szusownik.cmd` (patrz wyżej): kompiluje do
+wspólnego cache w katalogu głównym repo (`build\cache-red|blue`) i pilnuje locka
+`build\szusownik-build.lock`. Gołe `arduino-cli` bez `--build-path` używa
+prywatnego, zimnego cache (`%LOCALAPPDATA%\arduino\sketches`) i pomija lock —
+nadaje się tylko do diagnostyki:
 
 ```powershell
 arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc" --output-dir build/szusownik firmware/Szusownik

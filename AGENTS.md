@@ -88,31 +88,39 @@ Dwa urządzenia, dwie różne drogi:
 ### Szusownik (COM7/COM6, po kablu)
 
 FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
+
+Cache builda jest **wspólny dla wszystkich worktree** i leży w katalogu głównym
+repo, nie w worktree: `<main>\build\cache-red` i `<main>\build\cache-blue`.
+To celowe: domyślny cache arduino-cli jest kluczowany MD5 bezwzględnej ścieżki
+szkicu, więc każdy nowy worktree płaciłby ~4 min fazy „Detecting libraries
+used…” od zera. Cache jest osobny per sztuka, bo nazwa BLE idzie przez
+`--build-property`, a arduino-cli czyści cały build path, gdy zmienią się opcje
+builda (czyli przy przełączaniu Red ↔ Blue). Pierwszy build per sztuka jest
+zimny (~7 min), kolejne ~30–40 s.
+
+Jeden build Szusownika naraz pilnuje lock: `<main>\build\szusownik-build.lock`.
 Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 
-1. Zamknij monitor (jeśli działa — zajmuje port i upload się nie powiedzie):
-   `taskkill /F /IM arduino-cli.exe`.
-2. Skompiluj jawnie i wgraj ten build **z nazwą BLE tej sztuki** (z katalogu
-   repo; biblioteki: TinyGPSPlus, NimBLE, SSD1306, miniz vendored). Każda sztuka
-   ma własną nazwę w reklamie, więc build bez nazwy jest błędem:
+1. Uruchom z katalogu repo/worktree:
    ```powershell
    flash_szusownik.cmd "Szusownik Red"            # czerwona, COM7
    flash_szusownik.cmd "Szusownik Blue" COM6      # niebieska, COM6
    ```
-   Port zależy od sztuki (Windows nadaje COM per urządzenie, nie per projekt):
-   sprawdź `arduino-cli board list`. Domyślnie skrypt bierze COM7.
-   Skrypt robi krok 1–2; monitor uruchom osobno (krok 3). Ręcznie (komenda
-   **musi iść z pliku `.cmd`** — PowerShell 5.1 gubi cudzysłowy w wartości
-   `--build-property`; `\040` to spacja w literale C (ósemkowo, bo `\x20B`
-   skleiłoby się w jeden znak 0x20B), a surowa spacja rozcina argument):
-   ```bat
-   rem czerwona (COM7)
-   arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Red\"" --output-dir build/szusownik firmware/Szusownik
-   arduino-cli upload -p COM7 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
-   rem niebieska (COM6)
-   arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Blue\"" --output-dir build/szusownik firmware/Szusownik
-   arduino-cli upload -p COM6 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
-   ```
+   Skrypt sam: sprawdza lock (istnieje → **exit 3 od razu**, przed `taskkill`
+   i kompilacją, z wypisanym PID), tworzy lock z PID procesu prowadzącego
+   build, zamyka monitor (`taskkill /F /IM arduino-cli.exe`), kompiluje z
+   `--build-path <main>\build\cache-red|blue`, eksportuje binarki do
+   `build\szusownik` w bieżącym worktree, wgrywa je i usuwa lock (także przy
+   błędzie). Nazwa BLE musi być dokładnie `Szusownik Red` albo
+   `Szusownik Blue`; inna kończy się kodem 2. Port zależy od sztuki (Windows
+   nadaje COM per urządzenie, nie per projekt): sprawdź
+   `arduino-cli board list`. Domyślnie skrypt bierze COM7.
+2. Jeśli skrypt zwrócił **3**: odczytaj `pid=` z locka i sprawdź proces
+   (`Get-Process -Id <pid>` albo
+   `Get-CimInstance Win32_Process -Filter "ProcessId=<pid>"`). Żywy PID =
+   build trwa, **zaczekaj**. Martwy PID = build padł lub został przerwany;
+   wtedy usuń `build\szusownik-build.lock` i uruchom ponownie. Nigdy nie
+   usuwaj locka, gdy PID żyje — dwa buildy na wspólnym cache go psują.
 3. Od razu po wgraniu odpal monitor w osobnym oknie: czerwona →
    `monitor_COM7.cmd`, niebieska → `monitor_COM6.cmd` (z katalogu repo; nie
    blokuje wywołania):
@@ -126,6 +134,13 @@ Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 Uwagi: `arduino-cli upload` bez `--input-dir` potrafi użyć przeterminowanego
 cache build i wgrać starą binarkę, ignorując zmianę w nagłówku (`config.h`,
 `log.h`). Dlatego zawsze kompiluj jawnie do `--output-dir` i wgrywaj ten katalog.
+
+Ręczne (`arduino-cli compile`/`upload`) jest tylko awaryjną diagnostyką: bez
+`--build-path` używa prywatnego, zimnego cache w `%LOCALAPPDATA%\arduino\sketches`
+i **nie respektuje locka**. Komenda z `--build-property` **musi iść z pliku
+`.cmd`** — PowerShell 5.1 gubi cudzysłowy w wartości flagi, a `\040` to spacja
+w literale C (ósemkowo, bo `\x20B` skleiłoby się w jeden znak 0x20B).
+Do wgrywania używaj skryptu; ręczne komendy nie są objęte wspólnym cache.
 
 `arduino-cli monitor` odpalone przez agenta w tle (bez TTY) wychodzi
 natychmiast z pustym logiem — dlatego używamy `monitor_COM7.cmd`, który działa
