@@ -56,14 +56,16 @@ microSD i przesyła dane do PWA przez BLE. IMU należy do dalszej roadmapy.
 - **Pasywny buzzer piezo**, GPIO10, sterowanie LEDC 8-bit
   (kwadratowe mapowanie poziomu na duty, max 50%).
 - **Głośność adaptacyjna**: kotwice volLow @60 km/h i volHigh @120 km/h
-  (0..100, domyślnie 20/70), pomiędzy liniowo, powyżej 120 wartość ze 120.
+  (0..100, domyślnie 10/40), pomiędzy liniowo, powyżej 120 wartość ze 120.
 - Ustawiane z PWA (`SETVOL:LOW:` / `SETVOL:HIGH:`; odpowiedź
   STATUS `vol low=.. high=..`), trzymane w NVS (`szusownik/volLow/volHigh`).
   INFO niesie `volLow/volHigh` oraz `freqShort/freqLong` dla PWA. Każde SETVOL gra feedback
   (LOW → sygnał 60, HIGH → sygnał 120); każde SETFREQ gra podgląd
   (1 długi + 2 krótkie nowymi częstotliwościami, przy głośności HIGH).
 - Sygnał startowy (setup): identyczny do 120 (1 długi + 2 krótkie),
-  ale przy głośności 60.
+  ale przy głośności volLow (domyślnie 10), nie 60.
+- Alarm termiczny (`health`) i sygnał przed deep sleep grają ciągły ton na
+  maks. głośności (100%), niezależnie od volLow/volHigh.
 - Czasy wzoru są konfigurowalne z PWA przez `SETTIMING:SHORT/LONG/GAP/INTERVAL`,
   odpowiedź STATUS ma postać `timing short=.. long=.. gap=.. interval=..`.
   Wartości są trzymane w NVS (`beepShort/beepLong/beepGap/signalGap`):

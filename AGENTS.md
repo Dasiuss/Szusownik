@@ -80,29 +80,48 @@ najnowszej wersji firmware i PWA. Dlatego:
 
 Dwa urządzenia, dwie różne drogi:
 
-- **Szusownik (ESP32-S3)** — po kablu, port **`COM7`** (port szeregowy/Szusownik).
+- **Szusownik (ESP32-S3)** — po kablu, port `COMx` z `arduino-cli board list`
+  (Windows nadaje COM per urządzenie: u nas czerwona = **COM7**, niebieska =
+  **COM6**).
 - **HudRekaw (ESP8266 + ST7789)** — **tylko przez OTA** (WiFi, bez kabla).
 
-### Szusownik (COM7, po kablu)
+### Szusownik (COM7/COM6, po kablu)
 
 FQBN: `esp32:esp32:esp32s3:FlashSize=4M,PSRAM=enabled,USBMode=hwcdc,CDCOnBoot=cdc`.
 Monitor szeregowy blokuje port, więc kolejność jest sztywna:
 
-1. Zamknij monitor (jeśli działa — zajmuje `COM7` i upload się nie powiedzie):
+1. Zamknij monitor (jeśli działa — zajmuje port i upload się nie powiedzie):
    `taskkill /F /IM arduino-cli.exe`.
-2. Skompiluj jawnie i wgraj ten build (z katalogu repo; biblioteki: TinyGPSPlus,
-   NimBLE, SSD1306, miniz vendored):
+2. Skompiluj jawnie i wgraj ten build **z nazwą BLE tej sztuki** (z katalogu
+   repo; biblioteki: TinyGPSPlus, NimBLE, SSD1306, miniz vendored). Każda sztuka
+   ma własną nazwę w reklamie, więc build bez nazwy jest błędem:
    ```powershell
-   arduino-cli compile --fqbn "<FQBN>" --output-dir build/szusownik firmware/Szusownik
-   arduino-cli upload -p COM7 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
+   flash_szusownik.cmd "Szusownik Red"            # czerwona, COM7
+   flash_szusownik.cmd "Szusownik Blue" COM6      # niebieska, COM6
    ```
-3. Od razu po wgraniu odpal monitor w osobnym oknie przez `monitor_COM7.cmd`
-   z katalogu repo (nie blokuje wywołania):
-   `Start-Process -FilePath "<repo>\monitor_COM7.cmd"`
+   Port zależy od sztuki (Windows nadaje COM per urządzenie, nie per projekt):
+   sprawdź `arduino-cli board list`. Domyślnie skrypt bierze COM7.
+   Skrypt robi krok 1–2; monitor uruchom osobno (krok 3). Ręcznie (komenda
+   **musi iść z pliku `.cmd`** — PowerShell 5.1 gubi cudzysłowy w wartości
+   `--build-property`; `\040` to spacja w literale C (ósemkowo, bo `\x20B`
+   skleiłoby się w jeden znak 0x20B), a surowa spacja rozcina argument):
+   ```bat
+   rem czerwona (COM7)
+   arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Red\"" --output-dir build/szusownik firmware/Szusownik
+   arduino-cli upload -p COM7 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
+   rem niebieska (COM6)
+   arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Blue\"" --output-dir build/szusownik firmware/Szusownik
+   arduino-cli upload -p COM6 --fqbn "<FQBN>" --input-dir build/szusownik firmware/Szusownik
+   ```
+3. Od razu po wgraniu odpal monitor w osobnym oknie: czerwona →
+   `monitor_COM7.cmd`, niebieska → `monitor_COM6.cmd` (z katalogu repo; nie
+   blokuje wywołania):
+   `Start-Process -FilePath "<repo>\monitor_COM6.cmd"`
    żeby widać było logi od startu urządzenia. Skrypt pokazuje logi na konsoli
-   **i** zapisuje je do `monitor_COM7.log` w katalogu repo (UTF-8, plik jest
-   czyszczony przy każdym starcie) — agent może czytać ten plik, gdy nie widzi
-   okna konsoli.
+   **i** zapisuje je do `monitor_COM7.log` / `monitor_COM6.log` w katalogu repo
+   (UTF-8, plik jest czyszczony przy każdym starcie) — agent może czytać ten
+   plik, gdy nie widzi okna konsoli. Po wgraniu musi być w logu
+   `BLE start name=Szusownik <Red|Blue>`.
 
 Uwagi: `arduino-cli upload` bez `--input-dir` potrafi użyć przeterminowanego
 cache build i wgrać starą binarkę, ignorując zmianę w nagłówku (`config.h`,

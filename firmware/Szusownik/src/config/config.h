@@ -8,6 +8,21 @@
 #define SZ_FW_VERSION "1.9.0-hud-espnow"
 // SZ_WIRE_PROTO, SZ_CSV_HEADER i SZ_CSV_META_SUFFIX są w protocol.h.
 
+// Nazwa reklamowana po BLE — per sztuka, nadawana przy kompilacji przez
+// SZ_DEVICE_NAME (domyślnie nazwa z protokołu, SZ_BLE_NAME). Buduj skryptem:
+//   flash_szusownik.cmd "Szusownik Red"   /   "Szusownik Blue"
+// Ręcznie flaga musi mieć spację zapisaną jako \040 (ósemkowo — \x20B
+// skleiłoby się w jeden znak 0x20B, jak przy "Szusownik Blue"), bo arduino-cli
+// na Windows rozcina wartość --build-property ze spacją:
+//   -DSZ_DEVICE_NAME=\"Szusownik\040Red\"
+// Klasyczna reklama mieści nazwę do 29 B — dłuższa powoduje, że setName()
+// po cichu zawodzi (telefon pokazuje "unrecognized device").
+#ifndef SZ_DEVICE_NAME
+#define SZ_DEVICE_NAME SZ_BLE_NAME
+#endif
+static_assert(sizeof(SZ_DEVICE_NAME) - 1 > 0, "SZ_DEVICE_NAME nie moze byc puste");
+static_assert(sizeof(SZ_DEVICE_NAME) - 1 <= 29, "SZ_DEVICE_NAME max 29 B (legacy adv)");
+
 // Adaptacyjne próbkowanie (docs/koncepcja.md): <20:0.5Hz, 20-50:1Hz,
 // 50-70:3Hz, 70-80:6Hz, >=80:10Hz. Histereza +/-3 km/h.
 static const float SZ_HYST_KMH = 3.0f;

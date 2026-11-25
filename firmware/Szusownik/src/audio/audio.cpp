@@ -53,7 +53,7 @@ uint8_t Beeper::setVolLow(int v) {
   audioPrefs.begin("szusownik", false);
   audioPrefs.putUChar("volLow", volLow_);
   audioPrefs.end();
-  playShort();  // feedback: sygnał 60 przy głośności 60
+  playShort();  // feedback: wzór 60 przy głośności LOW
   return volLow_;
 }
 
@@ -62,7 +62,7 @@ uint8_t Beeper::setVolHigh(int v) {
   audioPrefs.begin("szusownik", false);
   audioPrefs.putUChar("volHigh", volHigh_);
   audioPrefs.end();
-  playLong2();  // feedback: sygnał 120 przy głośności 120
+  playLong2();  // feedback: wzór 120 przy głośności HIGH
   return volHigh_;
 }
 
@@ -219,7 +219,7 @@ void Beeper::playTimingPreview() {
 
 void Beeper::playBoot() {
   // Setup, blokująco: sygnał identyczny do 120 (1 długi + 2 krótkie,
-  // te same czasy/odstępy/częstotliwości), ale głośność z 60.
+  // te same czasy/odstępy/częstotliwości), ale przy głośności volLow.
   uint8_t d = dutyFromVol(volLow_);
   ledcWriteTone(PIN_BUZZER, freqLong_);
   ledcWrite(PIN_BUZZER, d);

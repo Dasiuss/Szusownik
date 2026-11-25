@@ -75,6 +75,41 @@ ESP32-S3-Zero (Waveshare). Uwagi do pinów: **GPIO21** = dioda RGB (nie używać
 |-------|-------|
 | SIG | GPIO10 |
 
+### Nazwa urządzenia po BLE (dwie sztuki)
+
+Dwie sztuki rozróżnia nazwa reklamowana po BLE, ustawiana przy kompilacji przez
+`SZ_DEVICE_NAME` (`src/config/config.h`). Bez flagi zostaje nazwa z protokołu
+(`SZ_BLE_NAME` = „Szusownik"). Limit nazwy w klasycznej reklamie to 29 B — pilnuje
+go `static_assert`.
+
+| Sztuka | Nazwa BLE | Port (u nas) |
+|--------|-----------|-------------|
+| czerwona | `Szusownik Red` | COM7 |
+| niebieska | `Szusownik Blue` | COM6 |
+
+Port zależy od sztuki — Windows nadaje COM per urządzenie, nie per projekt;
+sprawdź `arduino-cli board list`.
+
+Najprościej skryptem (kompiluje i wgrywa; logi osobno: `monitor_COM7.cmd` dla
+czerwonej, `monitor_COM6.cmd` dla niebieskiej):
+
+```powershell
+flash_szusownik.cmd "Szusownik Red"            # port domyślny COM7
+flash_szusownik.cmd "Szusownik Blue" COM6      # druga sztuka, inny port
+```
+
+Ręcznie ta sama flaga — **z pliku `.cmd`**, bo PowerShell 5.1 gubi cudzysłowy
+w wartości `--build-property`; spacja jest zapisana jako `\040` (ósemkowo —
+`\x20B` skleiłoby się w jeden znak 0x20B), dzięki czemu w wartości flagi nie ma
+spacji:
+
+```powershell
+arduino-cli compile --fqbn "<FQBN>" --build-property "compiler.cpp.extra_flags=-DSZ_DEVICE_NAME=\"Szusownik\040Red\"" --output-dir build\szusownik firmware/Szusownik
+```
+
+PWA łączy po UUID usługi, nie po nazwie, więc nazwa służy tylko do rozróżnienia
+urządzeń w wyborze BT i w logu (`BLE start name=`).
+
 ### Uwagi do firmware
 
 - Potwierdzone na sprzęcie: flash **4 MB**, PSRAM **2 MB Quad** (FQBN jw.).
