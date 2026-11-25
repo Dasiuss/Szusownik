@@ -150,7 +150,9 @@ dolna linia zastępuje część układu statystyk i wyświetla kolejne odcinki.
   (dekod bloba, indeks odcinka, dotarcie, linia kroków od bieżącego z urywaniem
   bez wiszącego `->`). Runner:
   `powershell -ExecutionPolicy Bypass -File firmware/test/host/run.ps1`.
-- Render OLED, realny GNSS, baro i odczyt kątem oka — **manualne** (`docs/testy.md`).
+- Render OLED, realny GNSS, baro i odczyt kątem oka — **manualne**; pełna karta
+  odbioru obu layoutów, w tym kontrola nakładania pól, jest w
+  [`docs/testy.md`](testy.md#reczny-odbior-sprzetowy-szusownika).
 - Testy akceptacyjne (manualne): brak fixa (`NO FIX` w slocie SPEED), czas
   `--:--` przed pierwszym fixem, hero zamrożony na wyciągu i live w zjeździe,
   dystans/wysokość po clampach, dolna linia trasy (kolejne odcinki od bieżącego,

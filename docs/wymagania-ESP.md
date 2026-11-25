@@ -238,9 +238,18 @@ microSD i przesyła dane do PWA przez BLE. IMU należy do dalszej roadmapy.
 
 ## 10. Otwarte punkty
 
-1. **Progi rolki na postoju** (`SZ_ROLL_STOP_BELOW_KMH` 0.3, `SZ_ROLL_REARM_ABOVE_KMH` 5, `SZ_ROLL_HOLD_MS` 3 s) — potwierdzone na danych testowych (bezruch 0.0–0.1 km/h), do obserwacji w terenie.
-2. **Współbieżność** — jednoczesny zapis na SD + transfer BLE + buzzer na ESP32 (wydajność, bufory) — do weryfikacji.
-3. **Rozmiar pliku na jeden zjazd** — zweryfikować w praktyce (szacunek ~0,06–0,11 MB, tj. ~1/5 z ~0,3–0,55 MB dla 5 zjazdów, patrz koncepcja).
+1. **Progi rolki na postoju** (`SZ_ROLL_STOP_BELOW_KMH` 0.3,
+   `SZ_ROLL_REARM_ABOVE_KMH` 5, `SZ_ROLL_HOLD_MS` 3 s) — logika hostowa ma
+   testy granic i liczników; zachowanie z rzeczywistym GNSS pozostaje do
+   obserwacji w terenie.
+2. **Współbieżność** — zapis na SD + transfer BLE + buzzer w czasie
+   kontrolowanej jazdy pozostaje do weryfikacji na ESP32.
+3. **Rozmiar pliku na jeden zjazd** — zmierzyć bajty i próbki w praktyce;
+   ~0,06–0,11 MB to szacunek, nie limit (patrz koncepcja).
+
+Procedura odbioru tych punktów oraz manualnej kontroli OLED:
+[`docs/testy.md`](testy.md#reczny-odbior-sprzetowy-szusownika). Wyniki
+pozostają niepotwierdzone sprzętowo do wykonania tej procedury.
 
 ## 11. Logowanie i diagnostyka
 

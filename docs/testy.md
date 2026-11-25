@@ -12,6 +12,9 @@ automatyczne; lista w `docs/mapy-routing.md` §11 rozróżnia pokryte scenariusz
 od pozostałych kontroli UI. Nie ma osobnego testu e2e wymuszającego tryb offline
 po zainstalowaniu cache mapy.
 
+Procedura terenowego odbioru OLED, rolki plików, rozmiaru CSV i pracy SD + BLE +
+buzzera znajduje się w [ręcznym odbiorze sprzętowym Szusownika](#reczny-odbior-sprzetowy-szusownika).
+
 ## Warstwy
 
 | Warstwa | Gdzie | Runner | Co pokrywa |
@@ -69,6 +72,93 @@ realne nagranie `test data/20260926_181420.csv` z goldenem z urządzenia
 
 Kompilacja firmware nadal przez `arduino-cli` (sketch `firmware/Szusownik`);
 `firmware/test/host/` nie jest częścią sketcha, więc nie trafia do builda.
+
+## Ręczny odbiór sprzętowy Szusownika
+
+Testy hostowe sprawdzają czyste algorytmy, ale nie render OLED, rzeczywisty
+pomiar GNSS, kartę SD ani radio/LEDC. Poniższa procedura służy do odbioru
+bieżącego firmware na urządzeniu. Nie zmienia progów rolki ani ustawień buzzera.
+
+### Przygotowanie
+
+1. Użyj urządzenia z aktualnym firmware, sprawnej karty SD i telefonu z PWA.
+   Test terenowy wykonuj w bezpiecznym, kontrolowanym miejscu; telefonu nie
+   obsługuj podczas zjazdu.
+2. Uruchom `monitor_COM7.cmd` i zachowaj `monitor_COM7.log` z całej próby.
+   Oczekiwane są poprawny start SD/OLED, GNSS z otwartym widokiem nieba oraz
+   ważny UTC (bez czasu nie powstanie plik).
+3. Z PWA odczytaj bieżący próg pikania. W teście buzzera wymagaj prędkości
+   powyżej tej nastawy (domyślnie 60 km/h); nie zmieniaj jej na potrzeby testu.
+   Przygotuj też co najmniej jeden wcześniejszy, zamknięty plik widoczny do
+   pobrania w PWA.
+
+### Kryteria zaliczenia
+
+- **OLED:** oba layouty (bez trasy i z trasą) są kompletne, bez obciętych,
+  zlewających się lub zasłoniętych pól; liczby i etykiety są czytelne na postoju
+  lub wyciągu w typowym świetle. Sprawdź czas `--:--`, `NO FIX`, prędkość,
+  maksimum, dystans, wysokość i — z trasą — dolną linię kolejnych odcinków.
+  Ekran nie jest kryterium odczytu podczas szybkiego ruchu.
+- **Rolka:** ruch `>5 km/h` z poprawnym fixem uzbraja zapis po 3 s (widoczny
+  skutek: plik dostaje `.meta`); postój `<0,3 km/h` z fixem przez 3 s domyka
+  plik dokładnie raz. Dalszy postój nie tworzy kolejnych rolek; następny ruch
+  `>5 km/h` przez 3 s pozwala na kolejną. Strefa 0,3–5 km/h i utrata fixa nie
+  powinny kończyć ani uzbrajać warunku.
+- **Rozmiar:** zapisz rozmiar CSV w bajtach, liczbę wierszy danych i czas jazdy
+  dla każdego pliku z jednego zjazdu. Szacunek **0,06–0,11 MB** jest punktem
+  odniesienia, nie limitem zaliczenia — zależy od długości i częstotliwości
+  próbkowania. Niezgodność wyjaśnij porównaniem bajtów na próbkę i tempa GNSS.
+- **BLE + SD + buzzer:** podczas aktywnego pobierania zamkniętych plików PWA
+  urządzenie nadal zapisuje bieżące próbki na SD. W trakcie tego transferu,
+  gdy prędkość przekracza próg buzzera, sygnał jest słyszalny, a zapis nie
+  zatrzymuje się. PWA kończy pobieranie z prawidłowym rozmiarem i CRC; `err`
+  zapisu SD pozostaje 0; log nie zawiera błędów odczytu SD, przerwanego
+  transferu ani niewyjaśnionego `SYS loop stall` (przerwa pętli ≥200 ms).
+
+### Przebieg
+
+1. **Ekran.** Na postoju sprawdź najpierw pełny ekran statystyk, a następnie
+   wgraj z PWA trasę i sprawdź widok trasy. Powtórz kontrolę z fixa i bez fixa;
+   brak czasu GNSS powinien pokazać `--:--`. Zwróć szczególną uwagę na parę
+   `MAX` i `SPD`: w kodzie para `60 / 80` zajmuje do 84 px fontem 2 od `x=1`,
+   podczas gdy `SPD` zaczyna się przy `x=76`. Zapisz, czy na fizycznym ekranie
+   cyfry lub etykiety nachodzą na siebie. W pełnym ekranie sprawdź też dystans
+   co najmniej 100,0 km, jeśli taki wynik jest dostępny: pięcioznakowa wartość
+   fontem 2 sięga do `x=61`, a `km` zaczyna się przy `x=49, y=56`, więc może
+   nachodzić na ostatnią cyfrę. To jawny punkt odbioru — procedura nie zakłada
+   naprawy layoutu; wartości, których nie udało się uzyskać, zapisz jako
+   niezweryfikowane wizualnie.
+2. **Rolka.** Po uzyskaniu fixa i UTC postój przez co najmniej 3 s nie powinien
+   sam zamknąć pliku (stan startowy jest rozbrojony). Następnie wykonaj ruch
+   powyżej 5 km/h przez co najmniej 3 s i zatrzymaj się stabilnie na ponad 3 s.
+   W logu powinny wystąpić `SD meta` po potwierdzonym ruchu i dokładnie jeden
+   `SD rolka (postoj) zamyka ...`; po postoju może zostać otwarty nowy plik.
+   Pozostań na postoju jeszcze 10 s i sprawdź, że nie pojawia się kolejna rolka.
+   Powtórz ruch i postój, aby sprawdzić ponowne uzbrojenie. Zanotuj prędkości
+   GNSS z linii `GNSS smpl`; naturalny test terenowy potwierdza zachowanie przy
+   realnych danych, ale nie kalibruje granicy co do 0,1 km/h.
+3. **Rozmiar.** Po zjeździe zsynchronizuj plik z PWA. Zapisz nazwę, `raw`/rozmiar
+   CSV, liczbę próbek/wierszy i czas; plik powinien być kompletnym CSV, a PWA
+   powinno go przyjąć bez błędu walidacji.
+4. **Współbieżność.** Przygotuj tyle niepobranych, wcześniejszych plików, aby
+   transfer trwał co najmniej 5 s. Na bezpiecznym postoju rozpocznij pobieranie
+   w PWA, zabezpiecz telefon i wykonaj kontrolowany zjazd bez obsługi telefonu.
+   W czasie, gdy monitor pokazuje transfer BLE, próbki GNSS powinny nadal
+   zwiększać `wr`/`smp`; po przekroczeniu odczytanego progu buzzera powinny być
+   słyszalne sygnały. Po zakończeniu sprawdź w PWA sukces pobrania i w logu
+   `BLE done ... raw=... crc=...`, brak `SD write error` oraz brak błędów/zwłok
+   pętli z kryteriów powyżej. Jeśli transfer skończy się przed aktywnym
+   buzzerem albo nie ma co najmniej 5 s wspólnego okna, test współbieżności jest
+   **nierozstrzygnięty** — przygotuj większą kolejkę plików i powtórz; nie
+   zaliczaj go na podstawie samego sukcesu BLE.
+
+### Co zapisać z próby
+
+Data i wersja firmware, warunki GNSS, layout/stan fixa, obserwowane nakładanie
+pól, nazwy plików i liczba rolek, bajty/wiersze/czas każdego CSV, prędkości
+GNSS przy uzbrojeniu i rolce, oraz fragment logu obejmujący jednoczesny zapis,
+transfer i buzzer. Wyników niepotwierdzonych na urządzeniu nie oznaczaj jako
+zaliczonych.
 
 ## Wspólny protokół
 

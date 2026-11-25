@@ -6,28 +6,35 @@ bool RotationState::update(float kmh, bool fixValid, unsigned long now, const Ro
   // Bez poprawnego fixa nie znamy prędkości (przy braku fixa kmh = 0), więc nie
   // rolujemy — inaczej zanik fixa w ruchu fałszywie ciąłby przejazd.
   if (!fixValid) {
-    stoppedSince = 0;
-    movingSince = 0;
+    stoppedTiming = false;
+    movingTiming = false;
     return false;
   }
   if (kmh < config.stopBelowKmh) {
-    movingSince = 0;
-    if (stoppedSince == 0) stoppedSince = now;
+    movingTiming = false;
+    if (!stoppedTiming) {
+      stoppedSince = now;
+      stoppedTiming = true;
+    }
     if (armed && now - stoppedSince >= config.holdMs) {
       armed = false;
+      stoppedTiming = false;
       return true;
     }
   } else if (kmh > config.rearmAboveKmh) {
-    stoppedSince = 0;
-    if (movingSince == 0) movingSince = now;
+    stoppedTiming = false;
+    if (!movingTiming) {
+      movingSince = now;
+      movingTiming = true;
+    }
     if (!armed && now - movingSince >= config.holdMs) {
       armed = true;
     }
   } else {
     // Strefa histerezy: ani bezruch, ani uzbrajający ruch — zeruj liczniki,
     // ale nie zmieniaj stanu uzbrojenia.
-    stoppedSince = 0;
-    movingSince = 0;
+    stoppedTiming = false;
+    movingTiming = false;
   }
   return false;
 }

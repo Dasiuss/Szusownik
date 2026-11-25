@@ -16,8 +16,10 @@ struct RotationConfig {
 
 struct RotationState {
   bool armed = false;             // false na starcie: pierwsza rolka po realnym ruchu
-  unsigned long stoppedSince = 0;  // 0 = brak warunku bezruchu
-  unsigned long movingSince = 0;   // 0 = brak warunku ruchu
+  bool stoppedTiming = false;     // osobne flagi, bo poprawny czas startu moze wynosic 0
+  bool movingTiming = false;
+  unsigned long stoppedSince = 0;
+  unsigned long movingSince = 0;
 
   // Zwraca true, gdy należy teraz domknąć bieżący plik.
   bool update(float kmh, bool fixValid, unsigned long now, const RotationConfig& config);
