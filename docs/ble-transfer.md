@@ -238,7 +238,8 @@ otrzymanych danych.
 GATT v1 (nowe UUID, nie mieszać z testowymi `7e6d…` / `5f8a…`):
 
 ```text
-Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: "Szusownik")
+Service: 3f9a0001-7c4e-4b2a-9e11-000000000001  (nazwa reklamowana: per sztuka,
+         np. "Szusownik Red" — patrz firmware/README.md)
 INFO:    3f9a0002-...  READ    — JSON {proto, fw, fileCount, routeCrc, routePoints, ...ustawienia}
 CTRL:    3f9a0003-...  WRITE   — komendy tekstowe (patrz niżej)
 DATA:    3f9a0004-...  NOTIFY  — ramki 244 B (seq LE32 + do 240 B payload)

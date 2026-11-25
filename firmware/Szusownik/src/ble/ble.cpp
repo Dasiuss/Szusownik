@@ -93,7 +93,7 @@ void BleFiles::begin(Storage* storage) {
   storage_ = storage;
   g_bleSelf = this;
   allocStreamMem();
-  NimBLEDevice::init(SZ_BLE_NAME);
+  NimBLEDevice::init(SZ_DEVICE_NAME);
   NimBLEDevice::setMTU(517);
   NimBLEServer* srv = NimBLEDevice::createServer();
   srv->setCallbacks(&szBleCallbacks, false);  // obiekt statyczny - nie kasuj
@@ -142,12 +142,12 @@ void BleFiles::begin(Storage* storage) {
   // Scan response daje osobny pakiet na nazwę.
   adv->enableScanResponse(true);
   adv->addServiceUUID(SZ_UUID_SVC);
-  adv->setName(SZ_BLE_NAME);
+  adv->setName(SZ_DEVICE_NAME);
   // Start szybko: przy boocie stoimy (albo nie mamy fixu) — to najczęstszy
   // moment łączenia z PWA. W ruchu `updateAdvForSpeed` przełączy na wolny.
   adv->setAdvertisingInterval(SZ_BLE_ADV_FAST_INTERVAL);
   adv->start();
-  SZ_LOGIF("BLE start name=%s mtu_req=517 adv_interval=%u", SZ_BLE_NAME,
+  SZ_LOGIF("BLE start name=%s mtu_req=517 adv_interval=%u", SZ_DEVICE_NAME,
            (unsigned)SZ_BLE_ADV_FAST_INTERVAL);
 }
 

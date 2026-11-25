@@ -21,8 +21,8 @@ class Beeper {
   void tick(float kmh, unsigned long nowMs);
   // Osobny sygnał prowizorycznego rekordu; zastępuje zwykły wzór prędkości.
   void playRecordSignal(float kmh);
-  void playBoot();  // blokujące, setup: sygnał 120 (1 długi + 2 krótkie)
-                    // przy głośności 60. Wywołać PO begin().
+  void playBoot();  // blokujące, setup: wzór 120 (1 długi + 2 krótkie)
+                    // przy głośności volLow. Wywołać PO begin().
   // Alarm termiczny (Health): nieblokujący, ciągły ton na maks. głośności
   // przez ms; ma priorytet nad wzorcem prędkości (patrz tick()).
   void alarm(uint16_t ms);
@@ -70,8 +70,8 @@ class Beeper {
   bool recordSignalPending_ = false;
   float recordSignalKmh_ = 50.0f;
   uint8_t patternsRemaining_ = 0;
-  uint8_t volLow_ = 20;
-  uint8_t volHigh_ = 70;
+  uint8_t volLow_ = SZ_VOL_LOW_DEFAULT;
+  uint8_t volHigh_ = SZ_VOL_HIGH_DEFAULT;
   uint16_t freqShort_ = 880;
   uint16_t freqLong_ = 1100;
   uint16_t beepShortMs_ = SZ_BEEP_SHORT_DEFAULT_MS;
@@ -79,7 +79,7 @@ class Beeper {
   uint16_t beepGapMs_ = SZ_BEEP_GAP_DEFAULT_MS;
   uint16_t signalGapMs_ = SZ_BEEP_INTERVAL_DEFAULT_MS;
   uint8_t minBeepKmh_ = SZ_BEEP_MIN_KMH_DEFAULT;
-  uint8_t playVol_ = 20;  // głośność bieżącej sekwencji
+  uint8_t playVol_ = SZ_VOL_LOW_DEFAULT;  // głośność bieżącej sekwencji
   void buildPattern(float kmh);
   void buildRecordPattern(float kmh);
   void build120Pattern();
